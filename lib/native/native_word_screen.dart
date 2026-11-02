@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
+import 'imported_filename.dart';
 import 'wordcraft_bridge.dart';
 
 /// Real DOCX read/append/save path, not a full Word layout renderer.
@@ -97,15 +98,16 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     final selected = await FlutterFileDialog.pickFile();
     if (selected == null) return;
     final file = File(selected);
-    final data = await file.readAsBytes();
-    if (data.length > 64 * 1024 * 1024) {
+    final length = await file.length();
+    if (length > 64 * 1024 * 1024) {
       throw const FormatException(
         'Максимальный размер DOCX для этой сборки — 64 МБ',
       );
     }
+    final data = await file.readAsBytes();
     updatePreview(data);
     setState(() {
-      filename = selected.split(Platform.pathSeparator).last;
+      filename = importedFilename(selected, 'docx');
       if (!filename.toLowerCase().endsWith('.docx')) {
         filename = 'Импортированный.docx';
       }

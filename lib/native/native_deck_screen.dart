@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
+import 'imported_filename.dart';
 import 'deckcraft_bridge.dart';
 
 class NativeDeckScreen extends StatefulWidget {
@@ -97,17 +98,11 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     if (!await discard()) return;
     final path = await FlutterFileDialog.pickFile();
     if (path == null) return;
-    if (!path.toLowerCase().endsWith('.pptx')) {
-      throw const FormatException('Нужен PPTX');
-    }
     final file = File(path);
     if (await file.length() > 64 * 1024 * 1024) {
       throw const FormatException('Файл больше 64 МБ');
     }
-    load(
-      await file.readAsBytes(),
-      name: path.split(Platform.pathSeparator).last,
-    );
+    load(await file.readAsBytes(), name: importedFilename(path, 'pptx'));
     message('PPTX открыт через DeckCraft');
   });
   Future<void> save() => action(() async {

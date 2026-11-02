@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
+import 'imported_filename.dart';
 import 'gridcraft_bridge.dart';
 
 class NativeGridScreen extends StatefulWidget {
@@ -111,10 +112,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (await file.length() > 64 * 1024 * 1024) {
       throw const FormatException('Размер файла более 64 МБ');
     }
-    final name = path.split(Platform.pathSeparator).last;
-    if (!name.toLowerCase().endsWith('.xlsx')) {
-      throw const FormatException('Этот редактор принимает только XLSX');
-    }
+    final name = importedFilename(path, 'xlsx');
     setBook(await file.readAsBytes(), name: name);
     tip('XLSX прочитан GridCraft');
   });

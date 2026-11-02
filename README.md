@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.7.0 — not a finished office suite.**
+**Status: alpha 0.7.1 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
@@ -72,6 +72,17 @@ animations, effects and complex groups are still unsupported.
 
 0.7.0 has been compiled for ARM64 and x86_64. Full GUI validation on a
 running emulator or physical ARM64 hardware is still pending.
+
+### Android file picker compatibility (0.7.1)
+
+The Android system file picker may supply a private temporary path without
+the original extension. The previous XLSX, PPTX and PDF screens erroneously
+rejected those paths before their document parsers could inspect file bytes.
+The editor now validates file contents through its corresponding Rust engine
+rather than the cache filename, with a neutral Save As filename fallback
+for DOCX, XLSX, PPTX and PDF. Originals are still not overwritten.
+The end-to-end open/edit/save workflow for 0.7.1 is pending Android UI
+verification; Flutter regression tests pass.
 
 ### Limitations and safe handling
 

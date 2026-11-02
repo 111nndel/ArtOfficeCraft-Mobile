@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
+import 'imported_filename.dart';
 import 'pdfcraft_bridge.dart';
 import 'pdf_page_renderer.dart';
 
@@ -126,13 +127,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     if (await f.length() > 64 * 1024 * 1024) {
       throw const FormatException('Слишком большой PDF (>64 МБ)');
     }
-    if (!path.toLowerCase().endsWith('.pdf')) {
-      throw const FormatException('Ожидается PDF');
-    }
-    await load(
-      await f.readAsBytes(),
-      name: path.split(Platform.pathSeparator).last,
-    );
+    await load(await f.readAsBytes(), name: importedFilename(path, 'pdf'));
     tip('Структура PDF прочитана');
   });
   Future<void> save() => execute(() async {

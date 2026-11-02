@@ -156,6 +156,26 @@ The actual App UI 0.7.0 remains untested on emulator because ToTstore
 is using the only available instance. A separate headless Android PdfRenderer
 test has previously passed, but does not test the new MethodChannel path.
 
+## Android SAF import extension fix (0.7.1)
+
+A real Android 15 x86_64 emulator test exposed a previously missed bug:
+FlutterFileDialog.pickFile returns a private temporary copy path without
+the original filename suffix. XLSX, PPTX and PDF editor screens incorrectly
+rejected valid file contents by calling endsWith on that temporary path.
+The WordCraft screen already used its Rust parser and only supplied a
+fallback filename. The other three screens now do the same: bound input size,
+pass the actual data to Rust for validation, and derive a neutral Save As
+filename when original extension metadata is unavailable. WordCraft now
+checks the size BEFORE allocating the entire document byte buffer.
+Three explicit filename-helper regression tests have been added.
+
+On a dedicated ArtOfficeCraft-only Android 15 AVD, 0.7.0 did launch and
+display the PDF import screen, but rejected a valid 616-byte PDF by its
+temporary cache path. 0.7.1 was compiled, installed and launched, and the
+file picker displayed the test PDF; its final file-open operation was not
+confirmed because the separate emulator process later exited. Thus UI
+import remains a remaining end-to-end test, not a claimed pass.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.
