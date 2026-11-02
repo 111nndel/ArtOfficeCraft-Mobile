@@ -2,45 +2,76 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-/// Draws a PDF page locally using Android's built-in PdfRenderer (API 21+).
-/// PDFCraft Rust stays responsible for document edits and saving new copies.
+/// Android first-party PdfRenderer with one open, app-private document session.
+/// PDFCraft Rust continues to own document editing and Save As.
 final class PdfPageRenderer {
   PdfPageRenderer({
     MethodChannel? channel,
-    this._allowNonAndroidForTesting = false,
+    this.allowNonAndroidForTesting = false,
   }) : _channel = channel ?? const MethodChannel('artofficecraft/pdf_renderer');
 
   final MethodChannel _channel;
-  final bool _allowNonAndroidForTesting;
+  final bool allowNonAndroidForTesting;
 
-  Future<Uint8List> render(Uint8List pdf, int page, {int width = 1000}) async {
-    if (!Platform.isAndroid && !_allowNonAndroidForTesting) {
-      throw UnsupportedError('PDF page rendering requires Android.');
+  void _platformCheck() {
+    if (!Platform.isAndroid && !allowNonAndroidForTesting) {
+      throw UnsupportedError('PDF rendering requires Android');
     }
-    if (pdf.isEmpty || pdf.length > 64 * 1024 * 1024) {
-      throw const FormatException('Invalid PDF input size');
+  }
+
+  Future<int> open(Uint8List pdf) async {
+    _platformCheck();
+    if (pdf.length < 5 ||
+        pdf.length > 64 * 1024 * 1024 ||
+        pdf[0] != 37 ||
+        pdf[1] != 80 ||
+        pdf[2] != 68 ||
+        pdf[3] != 70 ||
+        pdf[4] != 45) {
+      throw const FormatException('Invalid PDF bytes');
     }
-    if (page < 0 || width < 96 || width > 1600) {
-      throw RangeError('Invalid PDF page or render width');
+    final info = await _channel.invokeMapMethod<String, dynamic>(
+      'openDocument',
+      <String, Object>{'pdf': pdf},
+    );
+    final session = info?['session'];
+    final pageCount = info?['pageCount'];
+    if (session is! int ||
+        session <= 0 ||
+        pageCount is! int ||
+        pageCount < 1 ||
+        pageCount > 10000) {
+      throw const FormatException('Invalid Android PDF session response');
     }
-    final result = await _channel.invokeMethod<Uint8List>('renderPage', {
-      'pdf': pdf,
-      'page': page,
-      'width': width,
-    });
-    if (result == null || result.isEmpty) {
-      throw const FormatException('Android renderer returned no page image');
+    return session;
+  }
+
+  Future<Uint8List> render(int session, int page, {int width = 1000}) async {
+    _platformCheck();
+    if (session <= 0 || page < 0 || width < 96 || width > 1600) {
+      throw RangeError('Invalid PDF session/page/width');
     }
-    // The platform channel explicitly returns PNG bytes.
-    const pngHeader = <int>[137, 80, 78, 71, 13, 10, 26, 10];
-    if (result.length < pngHeader.length) {
-      throw const FormatException('Invalid rendered image');
+    final data = await _channel.invokeMethod<Uint8List>(
+      'renderPage',
+      <String, Object>{'session': session, 'page': page, 'width': width},
+    );
+    const header = <int>[137, 80, 78, 71, 13, 10, 26, 10];
+    if (data == null || data.length < header.length) {
+      throw const FormatException('Android renderer returned no PNG');
     }
-    for (var i = 0; i < pngHeader.length; i++) {
-      if (result[i] != pngHeader[i]) {
+    for (var i = 0; i < header.length; i++) {
+      if (data[i] != header[i]) {
         throw const FormatException('Android renderer returned non-PNG data');
       }
     }
-    return result;
+    return data;
+  }
+
+  Future<void> close(int session) async {
+    _platformCheck();
+    if (session <= 0) return;
+    await _channel.invokeMethod<void>('closeDocument', <String, Object>{
+      'session': session,
+    });
   }
 }

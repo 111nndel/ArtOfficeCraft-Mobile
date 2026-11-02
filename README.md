@@ -2,13 +2,13 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.6.0 — not a finished office suite.**
+**Status: alpha 0.7.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
 | DOCX / WordCraft | Rust FFI: create, parse text, append paragraph and save a new copy. No complete layout or formatting editing. |
 | XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Limited preview; no full charts/styles. |
-| PPTX / DeckCraft | Rust FFI: create/import PPTX, add/delete slides, add/edit text shapes and Save As. Simplified preview; no full visuals. |
+| PPTX / DeckCraft | Create/import PPTX, add/delete slides, add/edit text, Save As. Approximate position/shape geometry with direct RGB fills/strokes; no full media/theme/chart rendering. |
 | PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model basic page organization and Save As. Complex editing/forms/signing not complete. |
 
 ### Independence and license
@@ -56,6 +56,22 @@ Consequently Flutter network debugging/hot reload may be unavailable.
 Verified APKs must pass an aapt dump permissions check before release.
 Android PdfRenderer uses a temporary app-private copy of the document
 and removes it after the page has been rendered.
+
+### PDF session lifecycle (0.7.0)
+
+The Android platform renderer opens one PDF in an app-private temporary file
+and reuses that PdfRenderer for successive page and thumbnail requests.
+Flutter passes only a session token/page/width after opening; the worker
+serializes rendering and closes/deletes the document on replace or dispose.
+Network and Wi-Fi permissions remain absent from the APKs.
+
+DeckCraft's simplified slide preview now paints rectangles and oval-like
+shapes with explicit RGB fills and outlines. This does not render a PPTX
+with full PowerPoint fidelity: theme inheritance, embedded images,
+animations, effects and complex groups are still unsupported.
+
+0.7.0 has been compiled for ARM64 and x86_64. Full GUI validation on a
+running emulator or physical ARM64 hardware is still pending.
 
 ### Limitations and safe handling
 

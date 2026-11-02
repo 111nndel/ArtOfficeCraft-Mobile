@@ -128,6 +128,34 @@ NOT confirmed: visual interaction with this new 0.6.0 PDF editor UI
 inside an Android emulator or on physical ARM64 hardware. Complex forms,
 annotations, signing, rich editing and fidelity still need work.
 
+## PDF session reuse and PPTX basic graphics (0.7.0)
+
+Android Kotlin MainActivity offers three on-device MethodChannel actions:
+openDocument accepts bounded PDF bytes ONCE and stores an active PdfRenderer
+with an app-private, temporary PDF file. renderPage accepts a session token,
+page index and render width (without re-transferring document bytes).
+closeDocument closes the matching session and deletes the temp file.
+All operations run sequentially on a single background executor. Invalidated
+session tokens are rejected, and a new document replaces the previous one
+only after successful opening. Flutter closes its session when the PDF
+screen is disposed. Only one PDF document is open per Activity.
+
+DeckCraft PPTX inspect now includes direct RGB fill and outline data plus
+serialized geometry for text/graphics objects. Flutter draws approximate
+rectangles, round corners and ellipse-like shapes with positions and RGB
+colors. This preview is not pixel-perfect: inherited theme fills, picture
+data, gradient and group composition, charts, animations and complex
+geometry paths are not rendered. Original PPTX files are not rewritten
+by displaying previews.
+
+Validation: 10 Rust engine unit tests passed, including a DeckCraft RGB
+shape fill + geometry round-trip. Flutter analyzer clean and 9 widget
+tests passed, including session open/render/close contract tests.
+Kotlin Android compilation and APK packaging passed for x86_64 and ARM64.
+The actual App UI 0.7.0 remains untested on emulator because ToTstore
+is using the only available instance. A separate headless Android PdfRenderer
+test has previously passed, but does not test the new MethodChannel path.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.

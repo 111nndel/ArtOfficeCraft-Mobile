@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -22,13 +23,14 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   bool busy = false, changed = false;
   final PdfPageRenderer _pageRenderer = PdfPageRenderer();
   Future<Uint8List>? _pageImage;
+  int? _session;
   final Map<int, Future<Uint8List>> _thumbnailImages = {};
 
   void selectPage(int page) {
     if (contents == null || page < 0 || page >= pages.length) return;
     setState(() {
       selected = page;
-      _pageImage = _pageRenderer.render(contents!, page);
+      _pageImage = _pageRenderer.render(_session!, page);
     });
   }
 
@@ -52,21 +54,41 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     }
   }
 
-  void load(Uint8List data, {String? name, bool edited = false, int page = 0}) {
+  Future<void> load(
+    Uint8List data, {
+    String? name,
+    bool edited = false,
+    int page = 0,
+  }) async {
     final summary = engine!.inspect(data);
     final raw = summary['pages'];
     if (raw is! List || raw.isEmpty) {
       throw const FormatException('Страницы PDF не найдены');
     }
+    final newSession = await _pageRenderer.open(data);
+    if (!mounted) {
+      await _pageRenderer.close(newSession);
+      return;
+    }
     setState(() {
+      _session = newSession;
       contents = data;
       pages = raw.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       selected = page.clamp(0, pages.length - 1);
       changed = edited;
       _thumbnailImages.clear();
-      _pageImage = _pageRenderer.render(data, selected);
+      _pageImage = _pageRenderer.render(newSession, selected);
       if (name != null) filename = name;
     });
+  }
+
+  @override
+  void dispose() {
+    final previous = _session;
+    if (previous != null) {
+      unawaited(_pageRenderer.close(previous));
+    }
+    super.dispose();
   }
 
   Future<bool> discard() async {
@@ -93,7 +115,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
 
   Future<void> create() => execute(() async {
     if (!await discard()) return;
-    load(engine!.create(), name: 'Новый документ.pdf', edited: true);
+    await load(engine!.create(), name: 'Новый документ.pdf', edited: true);
     tip('Создан PDF с одной страницей');
   });
   Future<void> open() => execute(() async {
@@ -107,7 +129,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     if (!path.toLowerCase().endsWith('.pdf')) {
       throw const FormatException('Ожидается PDF');
     }
-    load(await f.readAsBytes(), name: path.split(Platform.pathSeparator).last);
+    await load(
+      await f.readAsBytes(),
+      name: path.split(Platform.pathSeparator).last,
+    );
     tip('Структура PDF прочитана');
   });
   Future<void> save() => execute(() async {
@@ -165,7 +190,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
           action == 'insert_blank') {
         next++;
       }
-      load(updated, page: next, edited: true);
+      await load(updated, page: next, edited: true);
       tip('Структура PDF изменена');
     });
   }
@@ -174,7 +199,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     final old = _thumbnailImages[index];
     if (old != null) return old;
     if (_thumbnailImages.length >= 24) _thumbnailImages.clear();
-    final future = _pageRenderer.render(contents!, index, width: 160);
+    final future = _pageRenderer.render(_session!, index, width: 160);
     _thumbnailImages[index] = future;
     return future;
   }

@@ -244,9 +244,11 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
             clipBehavior: Clip.hardEdge,
             children: [
               for (final shape in shapes)
-                if ((shape['text']?.toString() ?? '').isNotEmpty &&
-                    shape['rect'] is Map)
-                  _textShape(shape, size.maxWidth, size.maxHeight),
+                if (shape['rect'] is Map &&
+                    ((shape['text']?.toString() ?? '').isNotEmpty ||
+                        shape['fillRgb'] != null ||
+                        shape['strokeRgb'] != null))
+                  _paintShape(shape, size.maxWidth, size.maxHeight),
             ],
           ),
         ),
@@ -254,30 +256,75 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     );
   }
 
-  Widget _textShape(Map<String, dynamic> shape, double width, double height) {
+  /// Only explicitly resolved RGB colors are rendered. Theme-inherited,
+  /// gradient, image, SmartArt and complex geometries are not guessed.
+  Color? _rgb(Object? color) {
+    if (color is! String || !RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(color)) {
+      return null;
+    }
+    return Color(0xff000000 | int.parse(color.substring(1), radix: 16));
+  }
+
+  Widget _paintShape(Map<String, dynamic> shape, double width, double height) {
     final r = shape['rect'] as Map;
     double read(String key) => ((r[key] as num?)?.toDouble() ?? 0);
-    final x = read('x') * width / pageW, y = read('y') * height / pageH;
-    final w = read('w') * width / pageW, h = read('h') * height / pageH;
-    if (w <= 0 || h <= 0) return const SizedBox.shrink();
+    final x = read('x') * width / pageW;
+    final y = read('y') * height / pageH;
+    final w = read('w') * width / pageW;
+    final h = read('h') * height / pageH;
+    if (!x.isFinite ||
+        !y.isFinite ||
+        !w.isFinite ||
+        !h.isFinite ||
+        w <= 0 ||
+        h <= 0) {
+      return const SizedBox.shrink();
+    }
+    final fill = _rgb(shape['fillRgb']);
+    final stroke = _rgb(shape['strokeRgb']);
+    final text = (shape['text'] ?? '').toString();
+    final editable = shape['editableText'] == true;
+    final geometry = (shape['geometry'] ?? '').toString().toLowerCase();
+    final isOval = geometry.contains('ellipse') || geometry.contains('oval');
+    final radius = isOval
+        ? BorderRadius.circular(999)
+        : geometry.contains('round')
+        ? BorderRadius.circular(12)
+        : null;
+    final ink = fill != null && fill.computeLuminance() < 0.23
+        ? Colors.white
+        : const Color(0xff273341);
     return Positioned(
       left: x,
       top: y,
       width: w,
       height: h,
       child: GestureDetector(
-        onTap: () => changeText(shape),
+        onTap: editable ? () => changeText(shape) : null,
         child: Container(
-          padding: const EdgeInsets.all(5),
+          clipBehavior: Clip.hardEdge,
+          padding: EdgeInsets.all(text.isEmpty ? 0 : 4),
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xffe0e4eb)),
+            color: fill,
+            borderRadius: radius,
+            border: Border.all(
+              color:
+                  stroke ??
+                  (editable ? const Color(0xffd4dce5) : Colors.transparent),
+              width: stroke == null ? 0.7 : 1.5,
+            ),
           ),
-          child: Text(
-            shape['text'].toString(),
-            maxLines: 6,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xff26394a), fontSize: 19),
-          ),
+          child: text.isEmpty
+              ? null
+              : Text(
+                  text,
+                  maxLines: 8,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: ink,
+                    fontSize: (width / 960 * 19).clamp(8.0, 24.0),
+                  ),
+                ),
         ),
       ),
     );

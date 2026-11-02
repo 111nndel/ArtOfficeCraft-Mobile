@@ -57,10 +57,30 @@ pub extern "C" fn ac_pptx_inspect(data:*const u8,n:usize)->AcResult {
                 let rect=shape.xfrm.as_ref().map(|r|json!({
                     "x":r.x,"y":r.y,"w":r.w,"h":r.h,
                 }));
+                let fill_rgb=shape.fill.as_ref().and_then(|f|match f {
+                    deckcraft_model::style::Fill::Solid{color}=>match &color.base {
+                        deckcraft_model::style::ColorBase::Rgb{rgb}=>Some(format!("#{}",rgb.hex())),
+                        deckcraft_model::style::ColorBase::System{last,..}=>Some(format!("#{}",last.hex())),
+                        _=>None,
+                    },
+                    _=>None,
+                });
+                let stroke_rgb=shape.line.as_ref().and_then(|line|line.fill.as_ref())
+                    .and_then(|f|match f {
+                        deckcraft_model::style::Fill::Solid{color}=>match &color.base {
+                            deckcraft_model::style::ColorBase::Rgb{rgb}=>Some(format!("#{}",rgb.hex())),
+                            _=>None,
+                        },
+                        _=>None,
+                    });
+                let geometry=serde_json::to_value(&shape.geom).unwrap_or(J::Null);
                 json!({
                     "id":shape.id.0,
                     "name":shape.name,
                     "kind":shape.kind_name(),
+                    "geometry":geometry,
+                    "fillRgb":fill_rgb,
+                    "strokeRgb":stroke_rgb,
                     "text":shape.text.as_ref().map(|t|t.text()).unwrap_or_default(),
                     "rect":rect,
                     "editableText":shape.text.is_some() && !shape.locked,
@@ -77,7 +97,7 @@ pub extern "C" fn ac_pptx_inspect(data:*const u8,n:usize)->AcResult {
             "type":"pptx","engine":"deckcraft",
             "width":presentation.slide_size.width,"height":presentation.slide_size.height,
             "slides":slides,
-            "warnings":["Simplified text-and-position preview only. Imported images, groups, charts, SmartArt, fonts, animations and exact PowerPoint layout are not rendered. DOCX-like round-trip fidelity not guaranteed for complex PPTX files."]
+            "warnings":["Simplified text, rectangular graphics, direct RGB fills/strokes and position preview only. Imported images, groups, charts, SmartArt, fonts, animations and exact PowerPoint layout are not rendered. DOCX-like round-trip fidelity not guaranteed for complex PPTX files."]
         })).map_err(|e|e.to_string())
     })
 }
@@ -167,6 +187,26 @@ mod tests {
         let deleted=edit(&changed,json!({"action":"delete_slide","slide":1}));
         assert_eq!(load(&deleted).unwrap().slides.len(),1);
     }
+    #[test]
+    fn exports_actual_rgb_fill_for_slide_graphics(){
+        let mut deck=Presentation::default();
+        let id=add_text(&mut deck,0,"Colored shape",true).unwrap();
+        let shape=Arc::make_mut(&mut deck.slides[0])
+            .shape_mut(ShapeId(id)).unwrap();
+        shape.fill=Some(serde_json::from_value(json!({
+            "kind":"solid",
+            "color":{"base":{"kind":"rgb",
+                "rgb":{"r":21,"g":48,"b":90,"a":255}}}
+        })).unwrap());
+        let data=save(&deck).unwrap();
+        let info=bytes(ac_pptx_inspect(data.as_ptr(),data.len()));
+        let parsed:J=serde_json::from_slice(&info).unwrap();
+        let shapes=parsed["slides"][0]["shapes"].as_array().unwrap();
+        let colored=shapes.iter().find(|v|v["text"]=="Colored shape").unwrap();
+        assert_eq!(colored["fillRgb"],"#15305A");
+        assert!(!colored["geometry"].is_null());
+    }
+
     #[test]
     fn errors_reject_invalid_input(){
         let r=ac_pptx_inspect(b"not-pptx".as_ptr(),8);
