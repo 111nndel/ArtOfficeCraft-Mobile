@@ -211,6 +211,31 @@ PowerPoint elements. Gradients, images, theme rendering, charts,
 group transformations, fonts and full editing remain incomplete.
 No physical ARM64 hardware test has been performed.
 
+## Embedded PPTX media preview (0.8.0)
+
+DeckCraft's ac_pptx_inspect reports imageId for embedded PNG/JPEG/WebP
+picture shapes and fills. ac_pptx_image uses the existing FFI buffer
+contract, validates an image is referenced by the requested slide,
+refuses external links and unsupported formats, and bounds images to
+8 MiB. No network access or broad storage permission is required.
+
+Flutter loads images on background Dart isolates (not the UI isolate),
+retains at most 12 image futures per document, and draws pictures at
+approximate slide positions. The same preview canvas is used for
+graphical thumbnails. Thumbnail Container clipping was corrected to
+use BoxDecoration after an Android assertion was found during QA.
+
+Windows Dart FFI smoke test validated a PNG extracted from a generated
+two-slide PPTX, rejection of access from an unrelated slide, and
+byte-for-byte image preservation across a DeckCraft text edit. DeckCraft
+renumbered the media identifier on export; this was not image loss.
+The dedicated Android 15 x86_64 emulator displayed the PNG on slide 2.
+Android thumbnail QA passed on the dedicated x86_64 AVD: the second slide showed the original colored PNG in both the main canvas and thumbnail; tapping slides worked with no framework assertion. A physical ARM64 phone remains untested.
+
+Limitations: only direct embedded raster graphics. Cropping, masks,
+complex groups, inherited themes, external image links, effects,
+charts, animations, and image editing are not fully supported.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.

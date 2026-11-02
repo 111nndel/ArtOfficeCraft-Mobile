@@ -47,6 +47,7 @@ final class DeckCraftBridge {
         'ac_pptx_inspect',
       ),
       _edit = library.lookupFunction<_NativeEdit, _DartEdit>('ac_pptx_edit'),
+      _image = library.lookupFunction<_NativeEdit, _DartEdit>('ac_pptx_image'),
       _free = library.lookupFunction<_NativeFree, _DartFree>('ac_result_free'),
       _version = library.lookupFunction<_NativeVersion, _DartVersion>(
         'ac_engine_abi_version',
@@ -56,6 +57,7 @@ final class DeckCraftBridge {
   final _DartSingle _create;
   final _DartSingle _inspect;
   final _DartEdit _edit;
+  final _DartEdit _image;
   final _DartFree _free;
   final _DartVersion _version;
 
@@ -116,6 +118,25 @@ final class DeckCraftBridge {
       }
       return value;
     } finally {
+      calloc.free(p);
+    }
+  }
+
+  /// Returns original embedded PNG/JPEG/WebP bytes (up to 8 MiB).
+  /// The Rust side refuses unreferenced media IDs and external image links.
+  Uint8List image(Uint8List bytes, int slide, int mediaId) {
+    if (slide < 0 || mediaId < 0) {
+      throw RangeError('Invalid picture reference');
+    }
+    final p = _allocate(bytes);
+    final payload = Uint8List.fromList(
+      utf8.encode(jsonEncode(<String, int>{'slide': slide, 'media': mediaId})),
+    );
+    final q = _allocate(payload);
+    try {
+      return _collect(_image(p, bytes.length, q, payload.length));
+    } finally {
+      calloc.free(q);
       calloc.free(p);
     }
   }

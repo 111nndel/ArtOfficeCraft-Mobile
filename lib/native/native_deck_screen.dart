@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   int index = 0;
   double pageW = 960, pageH = 540;
   bool busy = false, modified = false;
+  // Bounded per-document Future cache. Parsing and extracting image bytes
+  // runs off the Flutter UI isolate, and never performs network requests.
+  final Map<String, Future<Uint8List?>> _pictures = {};
   bool get loaded => data != null;
   void message(String value) {
     if (mounted) {
@@ -57,6 +61,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final next = raw.map((s) => Map<String, dynamic>.from(s as Map)).toList();
     setState(() {
       data = bytes;
+      _pictures.clear();
       slides = next;
       pageW = (report['width'] as num?)?.toDouble() ?? 960;
       pageH = (report['height'] as num?)?.toDouble() ?? 540;
@@ -198,8 +203,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     );
     message('Слайд удалён');
   });
-  Widget slideCanvas() {
-    final current = slides[index];
+  Widget slideCanvas({int? slideIndex}) {
+    final slideNumber = slideIndex ?? index;
+    final current = slides[slideNumber];
     final raw = current['shapes'];
     final shapes = raw is List
         ? raw.whereType<Map>().map((x) => Map<String, dynamic>.from(x)).toList()
@@ -216,13 +222,43 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                 if (shape['rect'] is Map &&
                     ((shape['text']?.toString() ?? '').isNotEmpty ||
                         shape['fillRgb'] != null ||
-                        shape['strokeRgb'] != null))
-                  _paintShape(shape, size.maxWidth, size.maxHeight),
+                        shape['strokeRgb'] != null ||
+                        shape['imageId'] is int))
+                  _paintShape(
+                    shape,
+                    size.maxWidth,
+                    size.maxHeight,
+                    slide: slideNumber,
+                    interactive: slideIndex == null,
+                  ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Future<Uint8List?> _picture(int slide, int mediaId) {
+    final key = '$slide:$mediaId';
+    final old = _pictures[key];
+    if (old != null) return old;
+    // Bounded pending/completed cache; avoid decoding a large media catalogue.
+    if (_pictures.length >= 12 || data == null) {
+      return Future<Uint8List?>.value(null);
+    }
+    final document = data!;
+    final future = Isolate.run<Uint8List?>(() {
+      final bridge = DeckCraftBridge.tryOpen();
+      if (bridge == null) return null;
+      try {
+        return bridge.image(document, slide, mediaId);
+      } catch (_) {
+        // Unsupported picture: show a placeholder instead of crashing.
+        return null;
+      }
+    });
+    _pictures[key] = future;
+    return future;
   }
 
   /// Only explicitly resolved RGB colors are rendered. Theme-inherited,
@@ -234,7 +270,13 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     return Color(0xff000000 | int.parse(color.substring(1), radix: 16));
   }
 
-  Widget _paintShape(Map<String, dynamic> shape, double width, double height) {
+  Widget _paintShape(
+    Map<String, dynamic> shape,
+    double width,
+    double height, {
+    required int slide,
+    required bool interactive,
+  }) {
     final r = shape['rect'] as Map;
     double read(String key) => ((r[key] as num?)?.toDouble() ?? 0);
     final x = read('x') * width / pageW;
@@ -269,7 +311,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       width: w,
       height: h,
       child: GestureDetector(
-        onTap: editable ? () => changeText(shape) : null,
+        onTap: interactive && editable ? () => changeText(shape) : null,
         child: Container(
           clipBehavior: Clip.hardEdge,
           padding: EdgeInsets.all(text.isEmpty ? 0 : 4),
@@ -283,17 +325,52 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
               width: stroke == null ? 0.7 : 1.5,
             ),
           ),
-          child: text.isEmpty
-              ? null
-              : Text(
-                  text,
-                  maxLines: 8,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: ink,
-                    fontSize: (width / 960 * 19).clamp(8.0, 24.0),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (shape['imageId'] case final int id)
+                FutureBuilder<Uint8List?>(
+                  future: _picture(slide, id),
+                  builder: (context, snapshot) {
+                    final pixels = snapshot.data;
+                    if (pixels == null) {
+                      return const Center(
+                        child: Icon(
+                          Icons.image_outlined,
+                          color: Colors.black26,
+                          size: 18,
+                        ),
+                      );
+                    }
+                    return Image.memory(
+                      pixels,
+                      fit: BoxFit.cover,
+                      cacheWidth: 1200,
+                      gaplessPlayback: false,
+                      errorBuilder: (_, _, _) => const Center(
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.black26,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              if (text.isNotEmpty)
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(
+                    text,
+                    maxLines: 8,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: ink,
+                      fontSize: (width / 960 * 19).clamp(8.0, 24.0),
+                    ),
                   ),
                 ),
+            ],
+          ),
         ),
       ),
     );
@@ -372,8 +449,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                 Padding(
                   padding: const EdgeInsets.all(7),
                   child: Text(
-                    'Упрощённый предпросмотр слайдов: изображения, сложные фигуры и анимации '
-                    'здесь не отображаются. Нажми текст, чтобы изменить.',
+                    'Предпросмотр: встроенные PNG/JPEG/WebP и простые фигуры; '
+                    'темы, сложные эффекты, группы и анимации пока неполны. '
+                    'Нажми текст для редактирования.',
                     style: TextStyle(
                       fontSize: 10,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -404,16 +482,6 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                     itemCount: slides.length,
                     itemBuilder: (c, i) {
                       final selected = i == index;
-                      final title = (slides[i]['title'] ?? '').toString();
-                      final first = slides[i]['shapes'] is List
-                          ? (slides[i]['shapes'] as List)
-                                .whereType<Map>()
-                                .map((s) => (s['text'] ?? '').toString())
-                                .firstWhere(
-                                  (t) => t.isNotEmpty,
-                                  orElse: () => '',
-                                )
-                          : '';
                       return GestureDetector(
                         onTap: () => setState(() => index = i),
                         child: Container(
@@ -431,20 +499,13 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                             children: [
                               Expanded(
                                 child: Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                  ),
                                   alignment: Alignment.center,
-                                  color: Colors.white,
-                                  child: Text(
-                                    title.isNotEmpty
-                                        ? title
-                                        : first.isNotEmpty
-                                        ? first
-                                        : 'Слайд ${i + 1}',
-                                    style: const TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 10,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
+                                  clipBehavior: Clip.hardEdge,
+                                  child: IgnorePointer(
+                                    child: slideCanvas(slideIndex: i),
                                   ),
                                 ),
                               ),

@@ -2,13 +2,13 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.7.2 — not a finished office suite.**
+**Status: alpha 0.8.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
 | DOCX / WordCraft | Rust FFI: create, parse text, append paragraph and save a new copy. No complete layout or formatting editing. |
 | XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Limited preview; no full charts/styles. |
-| PPTX / DeckCraft | Create/import PPTX, add/delete slides, add/edit text, Save As. Approximate position/shape geometry with direct RGB fills/strokes; no full media/theme/chart rendering. |
+| PPTX / DeckCraft | Create/import PPTX, add/delete slides, add/edit text, Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
 | PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model basic page organization and Save As. Complex editing/forms/signing not complete. |
 
 ### Independence and license
@@ -67,7 +67,7 @@ Network and Wi-Fi permissions remain absent from the APKs.
 
 DeckCraft's simplified slide preview now paints rectangles and oval-like
 shapes with explicit RGB fills and outlines. This does not render a PPTX
-with full PowerPoint fidelity: theme inheritance, embedded images,
+with full PowerPoint fidelity: theme inheritance, external-linked images,
 animations, effects and complex groups are still unsupported.
 
 0.7.0 has been compiled for ARM64 and x86_64. Full GUI validation on a
@@ -101,6 +101,23 @@ PDF opening and page display were also confirmed on this emulator with a
 real text PDF. These targeted GUI checks do not establish full document
 round-trip fidelity, exact PowerPoint rendering, complex PDF editing, or
 behavior on a physical ARM64 phone.
+
+### Embedded PPTX graphics (0.8.0)
+
+DeckCraft can now read embedded PNG/JPEG/WebP from actual PPTX slides
+via a slide-authorized, offline, bounded Rust FFI call. Flutter paints
+pictures in approximate slide positions and renders real slide
+thumbnails. Image extraction runs in background isolates. A generated
+original colored PNG was visible in the Android 15 emulator, and
+Windows Dart FFI tests established byte-identical preservation after
+a DeckCraft text edit, despite media ID renumbering on export.
+
+Create a test picture PPTX with the standard-library-only script
+tools/make_pptx_image_fixture.py (input two-slide PPTX, output PPTX).
+Then test with tools/smoke_deck_images_ffi.dart and the Windows Rust DLL.
+Neither external media links nor hidden online requests are used.
+Full crop, effects, themes, grouping and animation fidelity remain
+future work. A physical ARM64 phone has not been tested.
 
 ### Limitations and safe handling
 
