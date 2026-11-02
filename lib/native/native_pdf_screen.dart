@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'pdfcraft_bridge.dart';
+import 'pdf_page_renderer.dart';
 
 class NativePdfScreen extends StatefulWidget {
   const NativePdfScreen({super.key});
@@ -19,6 +20,17 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   String filename = 'Новый документ.pdf';
   int selected = 0;
   bool busy = false, changed = false;
+  final PdfPageRenderer _pageRenderer = PdfPageRenderer();
+  Future<Uint8List>? _pageImage;
+  final Map<int, Future<Uint8List>> _thumbnailImages = {};
+
+  void selectPage(int page) {
+    if (contents == null || page < 0 || page >= pages.length) return;
+    setState(() {
+      selected = page;
+      _pageImage = _pageRenderer.render(contents!, page);
+    });
+  }
 
   void tip(String msg) {
     if (mounted) {
@@ -51,6 +63,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       pages = raw.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       selected = page.clamp(0, pages.length - 1);
       changed = edited;
+      _thumbnailImages.clear();
+      _pageImage = _pageRenderer.render(data, selected);
       if (name != null) filename = name;
     });
   }
@@ -156,10 +170,19 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     });
   }
 
+  Future<Uint8List> thumbnailFor(int index) {
+    final old = _thumbnailImages[index];
+    if (old != null) return old;
+    if (_thumbnailImages.length >= 24) _thumbnailImages.clear();
+    final future = _pageRenderer.render(contents!, index, width: 160);
+    _thumbnailImages[index] = future;
+    return future;
+  }
+
   Widget pageThumb(int i) {
     final p = pages[i];
     return GestureDetector(
-      onTap: () => setState(() => selected = i),
+      onTap: () => selectPage(i),
       child: Container(
         width: 110,
         margin: const EdgeInsets.all(5),
@@ -177,9 +200,28 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
               child: Container(
                 color: Colors.white,
                 alignment: Alignment.center,
-                child: Text(
-                  (i + 1).toString(),
-                  style: const TextStyle(fontSize: 24, color: Colors.black54),
+                child: FutureBuilder<Uint8List>(
+                  future: thumbnailFor(i),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.done &&
+                        snapshot.hasData) {
+                      return Image.memory(snapshot.data!, fit: BoxFit.contain);
+                    }
+                    if (snapshot.hasError) {
+                      return Text(
+                        (i + 1).toString(),
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontSize: 24,
+                        ),
+                      );
+                    }
+                    return const SizedBox(
+                      height: 15,
+                      width: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    );
+                  },
                 ),
               ),
             ),
@@ -209,7 +251,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
             ),
             Text(
-              available ? 'PDFCraft Rust · PDF' : 'Rust недоступен',
+              available ? 'PDFCraft Rust + Android PDF' : 'Rust недоступен',
               style: const TextStyle(fontSize: 10, color: Colors.grey),
             ),
           ],
@@ -258,8 +300,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                   child: const Padding(
                     padding: EdgeInsets.all(8),
                     child: Text(
-                      'Управление страницами PDF. Содержимое пока не отображается. '
-                      'Сложные файлы и цифровые подписи требуют дополнительной проверки.',
+                      'PDFCraft изменяет страницы; Android отображает содержимое. '
+                      'Формы, сложные ссылки и цифровые подписи требуют отдельной проверки.',
                       style: TextStyle(fontSize: 10),
                     ),
                   ),
@@ -267,11 +309,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                 Expanded(
                   child: Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(12),
                       child: AspectRatio(
-                        aspectRatio: .707,
-                        child: Container(
-                          alignment: Alignment.center,
+                        aspectRatio:
+                            (pages[selected]['width'] as num).toDouble() /
+                            (pages[selected]['height'] as num).toDouble(),
+                        child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: Colors.white,
                             border: Border.all(color: Colors.black12),
@@ -279,38 +322,41 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                               BoxShadow(color: Colors.black26, blurRadius: 8),
                             ],
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.description_outlined,
-                                size: 60,
-                                color: Colors.black26,
-                              ),
-                              Text(
-                                'Страница ${selected + 1} из ${pages.length}',
-                                style: const TextStyle(
-                                  color: Colors.black87,
-                                  fontWeight: FontWeight.bold,
+                          child: FutureBuilder<Uint8List>(
+                            future: _pageImage,
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState ==
+                                      ConnectionState.done &&
+                                  snapshot.hasError) {
+                                return const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: Text(
+                                      'Android не смог показать страницу. '
+                                      'PDF может быть зашифрован или поврежден.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(color: Colors.black54),
+                                    ),
+                                  ),
+                                );
+                              }
+                              if (snapshot.connectionState !=
+                                      ConnectionState.done ||
+                                  !snapshot.hasData) {
+                                return const Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                              }
+                              return InteractiveViewer(
+                                minScale: 0.75,
+                                maxScale: 4.0,
+                                child: Image.memory(
+                                  snapshot.data!,
+                                  fit: BoxFit.contain,
+                                  gaplessPlayback: false,
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              const Text(
-                                'Просмотр содержимого ещё не реализован',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                              Text(
-                                'Поворот: ${pages[selected]['rotation']}°',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                            ],
+                              );
+                            },
                           ),
                         ),
                       ),

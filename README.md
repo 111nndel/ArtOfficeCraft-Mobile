@@ -2,14 +2,14 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.5.0 — not a finished office suite.**
+**Status: alpha 0.6.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
 | DOCX / WordCraft | Rust FFI: create, parse text, append paragraph and save a new copy. No complete layout or formatting editing. |
 | XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Limited preview; no full charts/styles. |
 | PPTX / DeckCraft | Rust FFI: create/import PPTX, add/delete slides, add/edit text shapes and Save As. Simplified preview; no full visuals. |
-| PDF / PDFCraft | Rust COS/model: open PDF, create empty PDF, rotate, move, duplicate/delete simple pages and Save As. No page-content rendering. |
+| PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model basic page organization and Save As. Complex editing/forms/signing not complete. |
 
 ### Independence and license
 
@@ -47,11 +47,21 @@ For one-command Windows debug build: run build_native_preview.ps1. Debug APK is 
 
 Automated GitHub Actions checks are not yet enabled in this public repository. Local scripts can check and stage upstream releases without publishing executable binaries.
 
+### Offline permission policy
+
+No Android INTERNET or Wi-Fi access permission is requested by this app.
+Even Flutter debug and profile manifests deliberately remove the default
+INTERNET permission added for VM-service debugging and hot reload.
+Consequently Flutter network debugging/hot reload may be unavailable.
+Verified APKs must pass an aapt dump permissions check before release.
+Android PdfRenderer uses a temporary app-private copy of the document
+and removes it after the page has been rendered.
+
 ### Limitations and safe handling
 
 The WordCraft mobile UI is currently only a text preview of the document body. Existing rich text, images, tables and page layout are not rendered faithfully. Round-trip behavior for complex DOCX has not been established. Keep originals and save edited files as new copies.
 
-XLSX now uses native GridCraft for actual file operations, but has a limited 55-row, 12-column preview. PPTX uses real DeckCraft operations with limited preview; PDF is still a demonstration. No format is yet fully featured.
+XLSX now uses native GridCraft for actual file operations, but has a limited 55-row, 12-column preview. PPTX uses real DeckCraft operations with limited preview; PDF now displays real page contents with Android PdfRenderer, but advanced PDF editing is unfinished. No format is yet fully featured.
 
 Never publish personal documents in issues, secret keys, signing files, source caches, third-party branding or third-party installers. Read NATIVE_INTEGRATION_STATUS.md for the exact integration status.
 

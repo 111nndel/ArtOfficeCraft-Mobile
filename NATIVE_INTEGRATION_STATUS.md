@@ -97,16 +97,47 @@ Tests: nine combined Rust tests passed. Windows Dart FFI smoke test
 created a PDF, duplicated and rotated a page, saved and re-read it.
 Physical Android / emulator PDF 0.5.0 testing is pending.
 
+## PDF rendering on Android (0.6.0)
+
+The PDF screen now displays actual page contents using the first-party Android
+PdfRenderer (API 21+). PDFCraft COS/model Rust continues to edit page
+structure and export new copies. The native Kotlin MethodChannel named
+artofficecraft/pdf_renderer accepts bounded PDF bytes, a page and width,
+renders on a dedicated single background worker, returns PNG, closes all
+file descriptors/bitmaps and deletes its app-private temporary PDF file.
+Default Flutter debug/profile INTERNET permissions were explicitly removed
+from the Android manifests for offline builds. Flutter network debugging/hot
+reload may be unavailable. The Android PdfRenderer requires no network or
+external-storage permissions.
+
+Flutter displays page PNGs, lazy page thumbnails, and interactive zoom with
+explicit errors for encrypted or unsupported PDFs. Rendering is Android
+platform PDF rasterization, NOT the separate pdfcraft-render crate.
+Requests are capped at 1600 px wide, 2880 px tall, 4.2 million pixels.
+Each page currently sends the PDF again; persistent document sessions
+are future optimization work.
+
+Confirmed: Flutter analyzer clean; 8 Flutter/widget tests passed (including
+three MethodChannel request/validation tests), and Android Kotlin compiled
+inside debug APK. Headless Android 15 x86_64 emulator native PdfRenderer
+tests passed against a real text PDF (576 sampled nonwhite pixels) and
+a 2-page PDF exported by PDFCraft (successful page decoding). ToTstore
+was left foreground throughout these native tests.
+
+NOT confirmed: visual interaction with this new 0.6.0 PDF editor UI
+inside an Android emulator or on physical ARM64 hardware. Complex forms,
+annotations, signing, rich editing and fidelity still need work.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.
 - Full DeckCraft PPTX visual rendering, editing and fidelity testing.
-- Full PDFCraft rendering, annotations, forms, page-safe editing for complex files, and signing.
+- Full PDF annotations, forms, editing, complex round trips, OCR and signing.
 - Pixel-perfect WordCraft layout renderer and full Word formatting.
 - Comprehensive document fidelity tests on complex real files.
 - Signature/release packaging, real-device test, performance benchmarks, crash recovery.
 
-All four formats have partial Rust operations; PDF is limited to page organization without content rendering.
+All four formats have partial Rust operations; PDF now displays pages via Android platform renderer, while complex editing is still incomplete.
 
 ## Upstream updates integration
 
