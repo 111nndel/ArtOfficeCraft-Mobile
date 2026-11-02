@@ -159,7 +159,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     input.text = currentInput;
   });
   Widget header(String text) => Container(
-    height: 30,
+    height: 48,
     alignment: Alignment.center,
     color: const Color(0xff223039),
     child: Text(
@@ -173,7 +173,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return InkWell(
       onTap: () => selectCell(address),
       child: Container(
-        height: 30,
+        height: 48,
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 5),
         decoration: BoxDecoration(
@@ -184,7 +184,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         ),
         child: Text(
           value,
-          style: const TextStyle(color: Color(0xff172634), fontSize: 11),
+          style: const TextStyle(color: Color(0xff172634), fontSize: 13),
           maxLines: 1,
           overflow: TextOverflow.clip,
         ),
@@ -299,9 +299,12 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 Expanded(child: grid()),
                 Row(
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Text('ƒₓ', style: TextStyle(fontSize: 20)),
+                    const Tooltip(
+                      message: 'Число, текст или формула со знака =',
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('ƒₓ', style: TextStyle(fontSize: 20)),
+                      ),
                     ),
                     Text(
                       selected,
@@ -313,7 +316,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                         controller: input,
                         decoration: const InputDecoration(
                           border: InputBorder.none,
-                          hintText: 'Значение или =формула',
+                          hintText: 'Введите…',
                         ),
                         onSubmitted: (_) => commit(),
                       ),
@@ -334,7 +337,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 ),
                 if (showTabs)
                   SizedBox(
-                    height: 40,
+                    height: 48,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       children: [
@@ -355,25 +358,45 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   ),
                 SafeArea(
                   top: false,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () => setState(() => showTabs = !showTabs),
-                        icon: const Icon(Icons.view_carousel_outlined),
-                        label: const Text('Листы'),
+                  child: SizedBox(
+                    height: 60,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
                       ),
-                      TextButton.icon(
-                        onPressed: busy ? null : create,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Новая'),
-                      ),
-                      TextButton.icon(
-                        onPressed: busy ? null : save,
-                        icon: const Icon(Icons.save_outlined),
-                        label: const Text('Сохранить'),
-                      ),
-                    ],
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () => setState(() => showTabs = !showTabs),
+                          icon: const Icon(Icons.view_carousel_outlined),
+                          label: Text(
+                            showTabs ? 'Скрыть листы' : 'Показать листы',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: busy ? null : create,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Новая книга'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          onPressed: busy ? null : save,
+                          icon: const Icon(Icons.save_outlined),
+                          label: const Text('Сохранить копию'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 if (busy) const LinearProgressIndicator(),

@@ -253,6 +253,31 @@ linguist-documentation using .gitattributes; it remains in source
 control but should no longer count as an implementation language.
 Detailed ongoing criteria are in MOBILE_USABILITY.md.
 
+## Mobile editor ergonomics pass (0.8.2)
+
+The DOCX editor now arranges the Append paragraph / Save copy actions
+vertically when available width is under 440 dp; otherwise they share
+the footer. Both controls maintain a >=48 dp touch target.
+
+The XLSX table cell/heading height was raised from 30 dp to 48 dp,
+and cell text from 11 sp to 13 sp. The footer is horizontally
+scrollable and distinguishes "New workbook" from creating a new
+worksheet, while the formula input hint has been abbreviated for
+narrow phones and an explicit tooltip documents formula syntax.
+
+The PPTX bottom toolbar now uses labelled actions for New slide,
+Add text and Save copy, each >=48 dp, with horizontal scrolling.
+
+Android 15 x86_64 QA emulator at a 320 dp-equivalent simulated viewport:
+created an XLSX workbook and confirmed the touch-friendly rows and
+scrollable footer appear without visible overflow; created a DOCX
+and confirmed full-width stacked actions appear. During a subsequent
+DOCX keyboard test, the QA emulator exited; no causality to the
+application has been established. PPTX controls on that new build
+have not yet been inspected in Android UI. Existing Flutter tests
+passed; arm64 on real hardware remains untested. No native Rust
+engines or upstream vendor sources were changed.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.

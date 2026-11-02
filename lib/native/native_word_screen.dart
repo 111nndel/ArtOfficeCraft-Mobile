@@ -298,22 +298,41 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                       ),
                     ),
                     const SizedBox(height: 7),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: !busy ? appendParagraph : null,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Добавить абзац'),
+                    LayoutBuilder(
+                      builder: (context, size) {
+                        final add = FilledButton.icon(
+                          onPressed: !busy ? appendParagraph : null,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Добавить абзац'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
+                        );
+                        final save = OutlinedButton.icon(
                           onPressed: !busy ? saveAs : null,
                           icon: const Icon(Icons.save_outlined),
                           label: const Text('Сохранить копию'),
-                        ),
-                      ],
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
+                        );
+                        if (size.maxWidth < 440) {
+                          return Column(
+                            children: [
+                              SizedBox(width: double.infinity, child: add),
+                              const SizedBox(height: 6),
+                              SizedBox(width: double.infinity, child: save),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: add),
+                            const SizedBox(width: 8),
+                            Expanded(child: save),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),

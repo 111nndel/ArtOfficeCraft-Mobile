@@ -522,29 +522,40 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                 ),
                 SafeArea(
                   top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(7),
-                    child: Row(
+                  child: SizedBox(
+                    height: 60,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
                       children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: busy ? null : newSlide,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Слайд'),
+                        FilledButton.icon(
+                          onPressed: busy ? null : newSlide,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Новый слайд'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: busy ? null : insertText,
-                            icon: const Icon(Icons.text_fields),
-                            label: const Text('Текст'),
+                        OutlinedButton.icon(
+                          onPressed: busy ? null : insertText,
+                          icon: const Icon(Icons.text_fields),
+                          label: const Text('Добавить текст'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Сохранить',
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
                           onPressed: busy ? null : save,
                           icon: const Icon(Icons.save_outlined),
+                          label: const Text('Сохранить копию'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                          ),
                         ),
                       ],
                     ),

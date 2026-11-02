@@ -36,3 +36,27 @@ For every UX adjustment: run Flutter analyze and automated widget tests; review
 a narrow phone layout, and where practical run the new flow on Android before
 claiming it has passed. Prefer measured task completion and readable controls
 over decorative layout changes.
+
+
+## 0.8.2 editor audit (320 dp QA emulator)
+
+- DOCX: two bottom controls now stack full-width when the available
+  width is below 440 dp, each at least 48 dp high. The editor's preview
+  was opened with a newly created document in Android 15 QA. The
+  keyboard-open workflow remains unverified because the QA emulator
+  exited during the follow-up input test.
+- XLSX: spreadsheet cells and row/column headers are 48 dp tall;
+  values use 13 sp text. Sheets controls are 48 dp tall, with a
+  horizontal action strip and unambiguous New workbook / Save copy.
+  The formula bar now has a short input hint with an accessible tooltip
+  describing the "=" syntax. A new workbook was opened on a 320 dp
+  simulated Android 15 screen and the resulting layout examined.
+- PPTX: the bottom actions are 48 dp high, labelled New slide, Add text,
+  Save copy, and horizontally scroll. A new Android GUI test of these
+  controls is still outstanding after the QA emulator exited.
+- PDF: the labelled 48 dp scrolling bottom bar from 0.8.1 is retained.
+
+The separate ToTstore emulator was not modified. The QA emulator had
+its screen resolution temporarily overridden for narrow-screen tests;
+it exited unexpectedly during DOCX keyboard testing. Do not infer the
+physical-phone result from these emulator tests.

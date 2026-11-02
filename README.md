@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.8.1 — not a finished office suite.**
+**Status: alpha 0.8.2 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
@@ -133,6 +133,24 @@ explicitly excluded from GitHub Linguist language percentages via
 .gitattributes. This does not change the actual language mix of the
 running Flutter/Rust Android application. See MOBILE_USABILITY.md for
 mobile interaction guidelines and outstanding real-device UX checks.
+
+### Editor action ergonomics (0.8.2)
+
+Native DOCX, XLSX and PPTX screen controls have been adjusted for
+one-handed use on smaller devices. DOCX Append paragraph / Save copy
+buttons are vertically stacked below 440 dp, XLSX table cells and
+headers now measure 48 dp in height, and XLSX/PPTX action labels are
+visible in a horizontally scrollable 48 dp touch toolbar. The XLSX
+New workbook action is explicitly labelled so it is not mistaken
+for adding a sheet. The formula input hint fits narrow screens.
+
+The QA Android 15 emulator at 320 dp equivalent successfully showed
+DOCX and XLSX editor layouts using newly created documents. The QA
+emulator then exited during a keyboard test, so PPTX toolbar
+verification and the keyboard flow remain pending. See
+MOBILE_USABILITY.md for unfinished validation. This release does not
+claim new file-format capabilities, full layout fidelity, or a
+physical ARM64 hardware test.
 
 ### Limitations and safe handling
 
