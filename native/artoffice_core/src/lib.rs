@@ -6,6 +6,7 @@ use std::{panic::{catch_unwind, AssertUnwindSafe}, sync::Arc};
 use std::ptr;
 use serde_json::json;
 mod grid;
+mod deck;
 use wordcraft_doc::{Block, CharProps, Document, Paragraph};
 const MAX_INPUT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;

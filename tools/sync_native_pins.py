@@ -52,8 +52,18 @@ def main():
         )
         if count != 1:
             raise RuntimeError('GridCraft Cargo dependency missing: '+crate)
+    deck=pins['deckcraft']
+    deckbase='../../upstream/staged/deckcraft/'+deck['tag']+'-'+deck['commit'][:12]+'/crates/'
+    for name in ('model','pptx'):
+        crate='deckcraft-'+name
+        cargo,count=re.subn(
+            r'('+re.escape(crate)+r'\s*=\s*\{\s*path\s*=\s*")[^"]+',
+            lambda m:m.group(1)+deckbase+name, cargo,
+        )
+        if count != 1:
+            raise RuntimeError('DeckCraft Cargo dependency missing: '+crate)
     CARGO.write_text(cargo,encoding='utf-8')
-    print('Native WordCraft and GridCraft Cargo paths synchronized to approved pins')
+    print('Native WordCraft, GridCraft and DeckCraft Cargo paths synchronized to approved pins')
     return 0
 
 if __name__=='__main__':

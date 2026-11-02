@@ -1,6 +1,6 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Date: 2026-11-02. Android UI preview with real WordCraft DOCX and GridCraft XLSX operations.
+Date: 2026-11-02. Android UI preview with WordCraft DOCX, GridCraft XLSX and DeckCraft PPTX Rust operations.
 
 ## Source and provenance
 
@@ -47,20 +47,40 @@ FFI smoke tested on Windows: A1=12, B1=8, C1=SUM(A1:B1)
 then reopened as XLSX; displayed result 20. Physical Android device
 testing is still pending.
 
+## DeckCraft PPTX (0.4.0)
+
+DeckCraft 0.14.1 model and pptx crates are linked into the real Rust dynamic
+library. FFI ac_pptx_create, ac_pptx_inspect and ac_pptx_edit create and parse
+PPTX, add/delete slides, add/change text objects and export changed PPTX bytes.
+Flutter native_deck_screen.dart uses native DeckCraft to create/open PPTX,
+edit shapes and Save As via Android document picker. Source originals are not
+silently overwritten.
+
+Tests: 7 Rust tests passed across all three connected engines, and Windows
+Dart FFI smoke test passed for PPTX creation, slide/text insertion, editing
+and reopening. Android ARM64 shared library and debug APK 0.4.0 built.
+A separate running emulator was occupied by ToTstore, so PPTX 0.4.0 mobile
+UI remains untested in Android Emulator. DOCX/XLSX 0.3.0 have previously
+passed emulator create/edit/save/reopen workflows.
+
+This is NOT a full presentation renderer. Images, SmartArt, groups, charts,
+animations and exact complex PowerPoint formatting are not rendered. Complex
+file round-trip compatibility is not yet validated.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.
-- DeckCraft PPTX FFI, slides editing/rendering and file I/O.
+- Full DeckCraft PPTX visual rendering, editing and fidelity testing.
 - PDFCraft PDF FFI, rendering/annotations and file I/O.
 - Pixel-perfect WordCraft layout renderer and full Word formatting.
 - Comprehensive document fidelity tests on complex real files.
 - Signature/release packaging, real-device test, performance benchmarks, crash recovery.
 
-The slides and PDF screens remain demonstration UIs; Excel now uses GridCraft.
+PDF screen remains a demonstration; DOCX, XLSX, PPTX use Rust engines.
 
 ## Upstream updates integration
 
-Run `python tools/sync_native_pins.py` before native compile. It checks pinned repositories, exact Git commits and dirty files, then rewrites WordCraft and GridCraft path dependencies in `native/artoffice_core/Cargo.toml` to match `upstream/engines.lock.json`. If a pin changes, `stage-rust-engines.ps1` must download the approved version first.
+Run `python tools/sync_native_pins.py` before native compile. It checks pinned repositories, exact Git commits and dirty files, then rewrites WordCraft, GridCraft and DeckCraft path dependencies in `native/artoffice_core/Cargo.toml` to match `upstream/engines.lock.json`. If a pin changes, `stage-rust-engines.ps1` must download the approved version first.
 
 `native/build_android_arm64.ps1` now verifies pins, builds the Android library with the NDK ARM64 linker, and copies it to `android/app/src/main/jniLibs/arm64-v8a/libartoffice_core.so`.
 
@@ -73,6 +93,7 @@ cargo test --manifest-path native/artoffice_core/Cargo.toml --lib
 cargo build --manifest-path native/artoffice_core/Cargo.toml --release
 dart run tools/smoke_word_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
 dart run tools/smoke_grid_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
+dart run tools/smoke_deck_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
 flutter analyze
 flutter test
 powershell -ExecutionPolicy Bypass -File native/build_android_arm64.ps1
@@ -83,4 +104,4 @@ Testing with an actual Android phone via ADB remains outstanding.
 
 ## Constraints
 
-APK is debug and currently ARM64 only. It must not be represented as a finished office suite. Full features require significant engineering and tests, not just exposing existing Rust source trees.
+APK is debug; Android ARM64 target verified by build. It must not be represented as a finished office suite. Full features require significant engineering and tests, not just exposing existing Rust source trees.

@@ -1,5 +1,6 @@
 import 'native/native_word_screen.dart';
 import 'native/native_grid_screen.dart';
+import 'native/native_deck_screen.dart';
 
 import 'package:flutter/material.dart';
 
@@ -90,6 +91,8 @@ class HomeScreen extends StatelessWidget {
             ? const NativeWordScreen()
             : kind == EditorKind.excel
             ? const NativeGridScreen()
+            : kind == EditorKind.slides
+            ? const NativeDeckScreen()
             : EditorScreen(kind: kind),
       ),
     );
