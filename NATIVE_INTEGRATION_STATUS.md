@@ -1,6 +1,6 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Date: 2026-11-02. Android UI preview with WordCraft DOCX, GridCraft XLSX and DeckCraft PPTX Rust operations.
+Date: 2026-11-02. Android UI preview with WordCraft DOCX, GridCraft XLSX, DeckCraft PPTX and PDFCraft COS/model operations.
 
 ## Source and provenance
 
@@ -67,20 +67,50 @@ This is NOT a full presentation renderer. Images, SmartArt, groups, charts,
 animations and exact complex PowerPoint formatting are not rendered. Complex
 file round-trip compatibility is not yet validated.
 
+## PDFCraft PDF page-organizing integration (0.5.0)
+
+Pinned PDFCraft 0.17.0 COS and model crates are integrated into the
+native Rust dynamic library. Exports:
+- ac_pdf_create: blank, valid A4 PDF.
+- ac_pdf_inspect: page count, dimensions and rotation; NO page rendering.
+- ac_pdf_edit: rotate 90 degrees clockwise/counterclockwise,
+  insert a blank page, duplicate a simple page, delete a simple page
+  (not the last), or move a page one position up/down.
+Only a new PDF copy is saved by the Android system file picker.
+The operations use the ORIGINAL PDFCraft COS and model APIs, plus our
+explicitly limited page-tree editing bridge.
+
+Upstream pdfcraft-organize 0.17.0 could NOT be compiled with pinned
+hayro-syntax 0.7.2: pdfcraft-content calls TypedIter.committed(),
+which that dependency does not implement (Rust error E0599).
+The upstream checkout and Git SHA remain untouched. Consequently
+pdfcraft-organize is NOT linked and its advanced safety semantics
+are NOT claimed. Our restricted implementation refuses some complex
+page edits and does not repair all cross-references, annotations,
+forms, structure trees or signatures after rearrangement.
+
+The PDF screen is a page organizer, not a content renderer. Images,
+text, stamps, annotations, forms, signing, OCR and page thumbnails
+are not implemented. Signed PDFs will lose valid signatures after
+editing and full-saving. Preserve the original for recovery.
+Tests: nine combined Rust tests passed. Windows Dart FFI smoke test
+created a PDF, duplicated and rotated a page, saved and re-read it.
+Physical Android / emulator PDF 0.5.0 testing is pending.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.
 - Full DeckCraft PPTX visual rendering, editing and fidelity testing.
-- PDFCraft PDF FFI, rendering/annotations and file I/O.
+- Full PDFCraft rendering, annotations, forms, page-safe editing for complex files, and signing.
 - Pixel-perfect WordCraft layout renderer and full Word formatting.
 - Comprehensive document fidelity tests on complex real files.
 - Signature/release packaging, real-device test, performance benchmarks, crash recovery.
 
-PDF screen remains a demonstration; DOCX, XLSX, PPTX use Rust engines.
+All four formats have partial Rust operations; PDF is limited to page organization without content rendering.
 
 ## Upstream updates integration
 
-Run `python tools/sync_native_pins.py` before native compile. It checks pinned repositories, exact Git commits and dirty files, then rewrites WordCraft, GridCraft and DeckCraft path dependencies in `native/artoffice_core/Cargo.toml` to match `upstream/engines.lock.json`. If a pin changes, `stage-rust-engines.ps1` must download the approved version first.
+Run `python tools/sync_native_pins.py` before native compile. It checks pinned repositories, exact Git commits and dirty files, then rewrites WordCraft, GridCraft, DeckCraft and PDFCraft COS/model path dependencies in `native/artoffice_core/Cargo.toml` to match `upstream/engines.lock.json`. If a pin changes, `stage-rust-engines.ps1` must download the approved version first.
 
 `native/build_android_arm64.ps1` now verifies pins, builds the Android library with the NDK ARM64 linker, and copies it to `android/app/src/main/jniLibs/arm64-v8a/libartoffice_core.so`.
 
@@ -94,6 +124,7 @@ cargo build --manifest-path native/artoffice_core/Cargo.toml --release
 dart run tools/smoke_word_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
 dart run tools/smoke_grid_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
 dart run tools/smoke_deck_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
+dart run tools/smoke_pdf_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
 flutter analyze
 flutter test
 powershell -ExecutionPolicy Bypass -File native/build_android_arm64.ps1

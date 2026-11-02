@@ -2,14 +2,14 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.4.0 — not a finished office suite.**
+**Status: alpha 0.5.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
 | DOCX / WordCraft | Rust FFI: create, parse text, append paragraph and save a new copy. No complete layout or formatting editing. |
 | XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Limited preview; no full charts/styles. |
 | PPTX / DeckCraft | Rust FFI: create/import PPTX, add/delete slides, add/edit text shapes and Save As. Simplified preview; no full visuals. |
-| PDF / PDFCraft | Demonstration UI; engine not yet integrated. |
+| PDF / PDFCraft | Rust COS/model: open PDF, create empty PDF, rotate, move, duplicate/delete simple pages and Save As. No page-content rendering. |
 
 ### Independence and license
 
