@@ -236,6 +236,23 @@ Limitations: only direct embedded raster graphics. Cropping, masks,
 complex groups, inherited themes, external image links, effects,
 charts, animations, and image editing are not fully supported.
 
+## Usability and GitHub language classification (0.8.1)
+
+A compact usability pass changed only Flutter UI, with no Rust engine
+or upstream changes. The home screen now says Open editor rather than
+Create, removes the redundant workspace list, eliminates the false
+claim that genuine files cannot be opened, and uses one column under
+330 dp usable width. The PDF page action bar now provides labelled
+48 dp high controls in a horizontally scrollable strip, avoiding
+wrapping and ambiguous icons. Existing delete confirmation remains.
+
+Tests include a 320 dp Flutter home layout, a 320 dp PDF control bar,
+scroll-to-control interaction, and disabled controls while busy.
+The approved design/ArtOfficeCraft_Mobile_Editors_v0.2.html is marked
+linguist-documentation using .gitattributes; it remains in source
+control but should no longer count as an implementation language.
+Detailed ongoing criteria are in MOBILE_USABILITY.md.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.

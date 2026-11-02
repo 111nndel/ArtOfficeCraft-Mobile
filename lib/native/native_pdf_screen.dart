@@ -8,6 +8,7 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import 'imported_filename.dart';
 import 'pdfcraft_bridge.dart';
 import 'pdf_page_renderer.dart';
+import 'pdf_page_action_bar.dart';
 
 class NativePdfScreen extends StatefulWidget {
   const NativePdfScreen({super.key});
@@ -391,56 +392,11 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                     itemBuilder: (c, i) => pageThumb(i),
                   ),
                 ),
-                SafeArea(
-                  top: false,
-                  child: Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 3,
-                    runSpacing: 1,
-                    children: [
-                      IconButton(
-                        tooltip: 'Переместить назад',
-                        onPressed: busy || selected == 0
-                            ? null
-                            : () => edit('move_up'),
-                        icon: const Icon(Icons.arrow_back),
-                      ),
-                      IconButton(
-                        tooltip: 'Переместить вперёд',
-                        onPressed: busy || selected == pages.length - 1
-                            ? null
-                            : () => edit('move_down'),
-                        icon: const Icon(Icons.arrow_forward),
-                      ),
-                      IconButton(
-                        tooltip: 'Повернуть влево',
-                        onPressed: busy ? null : () => edit('rotate_ccw'),
-                        icon: const Icon(Icons.rotate_left),
-                      ),
-                      IconButton(
-                        tooltip: 'Повернуть вправо',
-                        onPressed: busy ? null : () => edit('rotate_cw'),
-                        icon: const Icon(Icons.rotate_right),
-                      ),
-                      IconButton(
-                        tooltip: 'Дублировать страницу',
-                        onPressed: busy ? null : () => edit('duplicate'),
-                        icon: const Icon(Icons.copy),
-                      ),
-                      IconButton(
-                        tooltip: 'Вставить пустую страницу',
-                        onPressed: busy ? null : () => edit('insert_blank'),
-                        icon: const Icon(Icons.note_add_outlined),
-                      ),
-                      IconButton(
-                        tooltip: 'Удалить страницу',
-                        onPressed: busy || pages.length <= 1
-                            ? null
-                            : () => edit('delete'),
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                    ],
-                  ),
+                PdfPageActionBar(
+                  selected: selected,
+                  pageCount: pages.length,
+                  busy: busy,
+                  onAction: edit,
                 ),
                 if (busy) const LinearProgressIndicator(),
               ],

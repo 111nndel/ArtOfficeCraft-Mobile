@@ -3,3 +3,6 @@
 *.dart text eol=lf
 *.rs text eol=lf
 *.md text eol=lf
+
+# Approved HTML UI design is documentation, not app runtime code.
+design/*.html linguist-documentation

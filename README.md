@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.8.0 — not a finished office suite.**
+**Status: alpha 0.8.1 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
@@ -118,6 +118,21 @@ Then test with tools/smoke_deck_images_ffi.dart and the Windows Rust DLL.
 Neither external media links nor hidden online requests are used.
 Full crop, effects, themes, grouping and animation fidelity remain
 future work. A physical ARM64 phone has not been tested.
+
+### Small-screen usability (0.8.1)
+
+The four document cards now open editors under a truthful heading,
+without duplicate navigation or outdated no-real-file claims. For
+narrow (under 330 dp usable width) phones, the grid becomes a single
+column to avoid text overflow. The PDF page actions are labelled and
+use 48 dp minimum-height buttons in a horizontally scrollable strip.
+Tests cover small-width layouts, disabled operations and scrolling.
+
+The agreed original HTML mockup remains in design/ as documentation,
+explicitly excluded from GitHub Linguist language percentages via
+.gitattributes. This does not change the actual language mix of the
+running Flutter/Rust Android application. See MOBILE_USABILITY.md for
+mobile interaction guidelines and outstanding real-device UX checks.
 
 ### Limitations and safe handling
 

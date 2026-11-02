@@ -160,7 +160,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 SizedBox(height: 6),
                 Text(
-                  'Интерактивный Flutter-прототип интерфейса',
+                  'Открывайте документы локально. Возможности редактирования пока ограничены.',
                   style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
@@ -168,98 +168,90 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 22),
           const Text(
-            'Создать',
+            'Открыть редактор',
             style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
           ),
           const SizedBox(height: 12),
-          GridView.count(
-            physics: const NeverScrollableScrollPhysics(),
-            shrinkWrap: true,
-            crossAxisCount: 2,
-            mainAxisSpacing: 11,
-            crossAxisSpacing: 11,
-            childAspectRatio: 1.9,
-            children: EditorKind.values
-                .map(
-                  (kind) => Material(
-                    color: Theme.of(context).colorScheme.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () => open(context, kind),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: kind.tint,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                kind.glyph,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    kind.label,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 330;
+              return GridView.count(
+                physics: const NeverScrollableScrollPhysics(),
+                shrinkWrap: true,
+                crossAxisCount: narrow ? 1 : 2,
+                mainAxisSpacing: 11,
+                crossAxisSpacing: 11,
+                childAspectRatio: narrow ? 3.7 : 1.9,
+                children: EditorKind.values
+                    .map(
+                      (kind) => Material(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => open(context, kind),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: kind.tint,
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
-                                  Text(
-                                    kind.format,
-                                    style: TextStyle(
-                                      color: dark
-                                          ? Colors.white54
-                                          : Colors.black54,
-                                      fontSize: 10,
-                                    ),
+                                  child: Icon(
+                                    kind.glyph,
+                                    color: Colors.white,
+                                    size: 24,
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        kind.label,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        kind.format,
+                                        style: TextStyle(
+                                          color: dark
+                                              ? Colors.white54
+                                              : Colors.black54,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                )
-                .toList(),
+                    )
+                    .toList(),
+              );
+            },
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'Рабочие пространства',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-          ),
-          const SizedBox(height: 8),
-          ...EditorKind.values.map(
-            (kind) => ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-              leading: Icon(kind.glyph, color: kind.tint),
-              title: Text(kind.title, style: const TextStyle(fontSize: 14)),
-              subtitle: Text(
-                'Демонстрационный документ · ${kind.format}',
-                style: const TextStyle(fontSize: 11),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => open(context, kind),
+          const SizedBox(height: 20),
+          Text(
+            'Выберите формат. В редакторе нажмите «Открыть», чтобы выбрать '
+            'файл, или «Создать», чтобы начать новый документ. '
+            'Форматирование и сложные элементы пока поддерживаются не полностью.',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
-          ),
-          const SizedBox(height: 22),
-          const Text(
-            'Предпросмотр интерфейса. Настоящие файлы Office ещё не импортируются '
-            'и не сохраняются: интеграция нативных движков выполняется отдельно.',
-            style: TextStyle(fontSize: 11, color: Colors.grey),
           ),
         ],
       ),
