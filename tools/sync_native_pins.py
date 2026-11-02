@@ -1,8 +1,8 @@
 """Resolve approved git commits to Cargo path dependencies.
 
 This script does not fetch or execute downloaded source code.
-It refuses a dirty or mismatched checkout. Only WordCraft is in the native
-bridge today; Grid/Deck/PDF will use the same lock after porting.
+It refuses dirty or mismatched upstream checkouts. WordCraft and GridCraft
+are integrated; DeckCraft and PDFCraft will use the same pins after porting.
 """
 import json
 import re
@@ -42,8 +42,18 @@ def main():
                          lambda m:m.group(1)+wbase+'docx',cargo)
     if (count1,count2)!=(1,1):
         raise RuntimeError('Could not locate expected WordCraft Cargo path fields')
+    grid=pins['gridcraft']
+    base='../../upstream/staged/gridcraft/'+grid['tag']+'-'+grid['commit'][:12]+'/crates/'
+    for name in ('core','model','xlsx','calc'):
+        crate='gridcraft-'+name
+        cargo,count=re.subn(
+            r'('+re.escape(crate)+r'\s*=\s*\{\s*path\s*=\s*")[^"]+',
+            lambda m:m.group(1)+base+name, cargo,
+        )
+        if count != 1:
+            raise RuntimeError('GridCraft Cargo dependency missing: '+crate)
     CARGO.write_text(cargo,encoding='utf-8')
-    print('Native WordCraft Cargo paths synchronized to approved pins')
+    print('Native WordCraft and GridCraft Cargo paths synchronized to approved pins')
     return 0
 
 if __name__=='__main__':

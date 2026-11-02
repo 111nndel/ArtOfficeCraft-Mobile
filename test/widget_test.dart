@@ -9,6 +9,7 @@ void main() {
     await tester.tap(find.text('Таблица'));
     await tester.pumpAndSettle();
     expect(find.text('Книга.xlsx'), findsOneWidget);
-    expect(find.byTooltip('Применить'), findsOneWidget);
+    expect(find.text('Rust недоступен'), findsOneWidget);
+    expect(find.byTooltip('Открыть XLSX'), findsOneWidget);
   });
 }

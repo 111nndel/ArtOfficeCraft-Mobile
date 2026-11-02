@@ -1,4 +1,5 @@
 import 'native/native_word_screen.dart';
+import 'native/native_grid_screen.dart';
 
 import 'package:flutter/material.dart';
 
@@ -87,6 +88,8 @@ class HomeScreen extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => kind == EditorKind.word
             ? const NativeWordScreen()
+            : kind == EditorKind.excel
+            ? const NativeGridScreen()
             : EditorScreen(kind: kind),
       ),
     );

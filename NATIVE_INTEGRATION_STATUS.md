@@ -1,6 +1,6 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Date: 2026-11-02. Android UI preview + first real native engine operation.
+Date: 2026-11-02. Android UI preview with real WordCraft DOCX and GridCraft XLSX operations.
 
 ## Source and provenance
 
@@ -29,20 +29,38 @@ Flutter screen `lib/native/native_word_screen.dart` uses system Android file dia
 
 **Do not misrepresent this as a complete DOCX editor.** Original formatting, page layout, tables and images are not rendered on the mobile screen. They are read/written by the WordCraft document model where supported, but round-trip fidelity for complex files remains unverified. Existing paragraphs are not yet editable on this screen.
 
+## GridCraft XLSX (0.3.0)
+
+Pinned GridCraft 0.15.0 crates gridcraft-core, gridcraft-model,
+gridcraft-xlsx and gridcraft-calc are linked in native Android Rust.
+The new FFI exports ac_xlsx_create, ac_xlsx_inspect, ac_xlsx_set_cell.
+GridCraft reads and writes actual XLSX bytes; a JSON request updates A1
+cell input in a specified sheet and recalculates formulas before saving.
+
+Flutter has a native_grid_screen with open/create/edit/Save As and sheet
+switching. Only 55 rows and 12 columns are visible; JSON inspection is
+limited to 1600 stored cells per sheet. No chart/style image fidelity has
+been established. Protected sheets refuse editing. Originals remain
+untouched through the Android save-as dialog.
+
+FFI smoke tested on Windows: A1=12, B1=8, C1=SUM(A1:B1)
+then reopened as XLSX; displayed result 20. Physical Android device
+testing is still pending.
+
 ## Not implemented yet
 
-- GridCraft XLSX FFI, formula calculations and real file I/O.
+- Full GridCraft XLSX formatting/rendering and compatibility regression testing.
 - DeckCraft PPTX FFI, slides editing/rendering and file I/O.
 - PDFCraft PDF FFI, rendering/annotations and file I/O.
 - Pixel-perfect WordCraft layout renderer and full Word formatting.
 - Comprehensive document fidelity tests on complex real files.
 - Signature/release packaging, real-device test, performance benchmarks, crash recovery.
 
-The previous Dart spreadsheet, slides, and PDF screens remain explicit UI demonstrations and do not open actual files.
+The slides and PDF screens remain demonstration UIs; Excel now uses GridCraft.
 
 ## Upstream updates integration
 
-Run `python tools/sync_native_pins.py` before native compile. It checks pinned repositories, exact Git commits and dirty files, then rewrites WordCraft path dependencies in `native/artoffice_core/Cargo.toml` to match `upstream/engines.lock.json`. If a pin changes, `stage-rust-engines.ps1` must download the approved version first.
+Run `python tools/sync_native_pins.py` before native compile. It checks pinned repositories, exact Git commits and dirty files, then rewrites WordCraft and GridCraft path dependencies in `native/artoffice_core/Cargo.toml` to match `upstream/engines.lock.json`. If a pin changes, `stage-rust-engines.ps1` must download the approved version first.
 
 `native/build_android_arm64.ps1` now verifies pins, builds the Android library with the NDK ARM64 linker, and copies it to `android/app/src/main/jniLibs/arm64-v8a/libartoffice_core.so`.
 
@@ -54,6 +72,7 @@ Run `python tools/sync_native_pins.py` before native compile. It checks pinned r
 cargo test --manifest-path native/artoffice_core/Cargo.toml --lib
 cargo build --manifest-path native/artoffice_core/Cargo.toml --release
 dart run tools/smoke_word_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
+dart run tools/smoke_grid_ffi.dart native/artoffice_core/target/release/artoffice_core.dll
 flutter analyze
 flutter test
 powershell -ExecutionPolicy Bypass -File native/build_android_arm64.ps1
