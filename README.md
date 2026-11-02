@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.7.1 — not a finished office suite.**
+**Status: alpha 0.7.2 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
@@ -83,6 +83,24 @@ rather than the cache filename, with a neutral Save As filename fallback
 for DOCX, XLSX, PPTX and PDF. Originals are still not overwritten.
 The end-to-end open/edit/save workflow for 0.7.1 is pending Android UI
 verification; Flutter regression tests pass.
+
+### PPTX text dialog lifecycle and tested Save As (0.7.2)
+
+An Android GUI test revealed a Flutter framework assertion caused by
+prematurely disposing the edit dialog's TextEditingController.
+The dialog uses a self-owned TextFormField now, with two widget regression
+tests for applying and cancelling changes.
+
+In a dedicated Android 15 x86_64 QA emulator, the real application:
+opened an existing 2-slide PPTX through Android SAF; displayed slide 2;
+edited a text shape; saved a new PPTX copy via Android Save As.
+The copied PPTX was pulled back and its ZIP integrity and actual edited
+slide XML were verified. The original file was not overwritten.
+
+PDF opening and page display were also confirmed on this emulator with a
+real text PDF. These targeted GUI checks do not establish full document
+round-trip fidelity, exact PowerPoint rendering, complex PDF editing, or
+behavior on a physical ARM64 phone.
 
 ### Limitations and safe handling
 

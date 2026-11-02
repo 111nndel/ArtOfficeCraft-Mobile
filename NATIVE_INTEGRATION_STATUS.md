@@ -176,6 +176,41 @@ file picker displayed the test PDF; its final file-open operation was not
 confirmed because the separate emulator process later exited. Thus UI
 import remains a remaining end-to-end test, not a claimed pass.
 
+## Android GUI regression and DeckCraft dialog fix (0.7.2)
+
+On a dedicated Android 15 x86_64 ArtOfficeCraft QA emulator, the actual
+App 0.7.1 imported and displayed a real text PDF with both page raster
+and thumbnail; its new persistent Android PdfRenderer session works for
+the tested one-page file. A valid, 2-slide DeckCraft test PPTX also
+imported through the Android system picker and the second slide's text
+and positions were visible. A spurious initial ZIP error arose when the
+wrong file was selected during automated picking, not from the PPTX.
+
+A second actual device UI problem emerged: applying a shape text change
+triggered a Flutter framework assertion about a disposed
+TextEditingController. The dialog's controller was disposed as soon as
+showDialog resolved, before its reverse route animation had fully
+unmounted the TextField. 0.7.2 replaces this implementation with a
+self-owned TextFormField, and includes two widget regression tests for
+the Apply and Cancel flows. 14 Flutter tests and 10 Rust tests passed.
+
+ACTUAL Android 15 QA confirmation for version 0.7.2:
+- App launched and test PPTX was imported through Android SAF picker.
+- 2 slides and the text boxes on slide 2 were visible.
+- Selected the first text box, appended "_FIX", tapped Apply, and
+  confirmed "Sprint presentation_FIX" on both slide and thumbnail,
+  with no red Flutter assertion screen.
+- Saved a new copy through the Android system Save As picker, at
+  Downloads/aoc-test-ArtOfficeCraft.pptx (original left unchanged).
+- Pulled copy back from the emulator: valid PPTX ZIP with no corrupt
+  members; ppt/slides/slide2.xml contains the edited text.
+- Android Internet and Wi-Fi permissions absent from both APK builds.
+
+This is a demonstrated small text-edit round-trip, not a test of all
+PowerPoint elements. Gradients, images, theme rendering, charts,
+group transformations, fonts and full editing remain incomplete.
+No physical ARM64 hardware test has been performed.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.

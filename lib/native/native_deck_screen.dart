@@ -6,6 +6,7 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'deckcraft_bridge.dart';
+import 'deck_text_dialog.dart';
 
 class NativeDeckScreen extends StatefulWidget {
   const NativeDeckScreen({super.key});
@@ -122,35 +123,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     setState(() => modified = false);
     message('Копия PPTX сохранена. Исходник не изменён.');
   });
-  Future<String?> ask(String heading, {String initial = ''}) async {
-    final ctrl = TextEditingController(text: initial);
-    try {
-      return await showDialog<String>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: Text(heading),
-          content: TextField(
-            controller: ctrl,
-            maxLines: 3,
-            autofocus: true,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, ctrl.text),
-              child: const Text('Применить'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      ctrl.dispose();
-    }
-  }
+  Future<String?> ask(String heading, {String initial = ''}) =>
+      showDeckTextDialog(context, heading, initial: initial);
 
   Future<void> newSlide() => action(() async {
     final title = await ask('Заголовок нового слайда');
