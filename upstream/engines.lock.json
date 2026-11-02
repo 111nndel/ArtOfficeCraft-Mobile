@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "policy": "Reviewed source updates only; Android Rust FFI not yet integrated",
+  "engines": {
+    "wordcraft": {
+      "repo": "https://github.com/storytold/wordcraft.git",
+      "tag": "v0.14.0",
+      "commit": "5cd53f184aab11def13b7fced18727159b9bc96a"
+    },
+    "gridcraft": {
+      "repo": "https://github.com/storytold/gridcraft.git",
+      "tag": "v0.15.0",
+      "commit": "30b210b4ef03b30616923465efa70766cefba379"
+    },
+    "deckcraft": {
+      "repo": "https://github.com/storytold/deckcraft.git",
+      "tag": "v0.14.1",
+      "commit": "ee39ff67816d0039143ec7c98ea604cefe0cd2e5"
+    },
+    "pdfcraft": {
+      "repo": "https://github.com/storytold/pdfcraft.git",
+      "tag": "v0.17.0",
+      "commit": "7d78f3e14474b978be014715e0cc64895d77025a"
+    }
+  }
+}
