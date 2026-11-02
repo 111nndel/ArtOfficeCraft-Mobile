@@ -104,6 +104,10 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // Keep the document choices above the fold for large accessibility text.
+    final compactIntro =
+        MediaQuery.textScalerOf(context).scale(1) > 1.25 ||
+        MediaQuery.sizeOf(context).width < 330;
     return Scaffold(
       appBar: AppBar(
         title: const Column(
@@ -135,36 +139,55 @@ class HomeScreen extends StatelessWidget {
         padding: const EdgeInsets.all(17),
         children: [
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(compactIntro ? 14 : 24),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(19),
               gradient: const LinearGradient(
                 colors: [Color(0xff19335e), Color(0xff315c99)],
               ),
             ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'ARTOFFICECRAFT MOBILE',
-                  style: TextStyle(fontSize: 11, color: Colors.white70),
-                ),
-                SizedBox(height: 9),
-                Text(
-                  'Четыре редактора.\nОдно приложение.',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+            child: compactIntro
+                ? const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Документы на устройстве',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'DOCX · XLSX · PPTX · PDF. Функции редактирования пока ограничены.',
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
+                  )
+                : const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ARTOFFICECRAFT MOBILE',
+                        style: TextStyle(fontSize: 11, color: Colors.white70),
+                      ),
+                      SizedBox(height: 9),
+                      Text(
+                        'Четыре редактора.\nОдно приложение.',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'Открывайте документы локально. Возможности редактирования пока ограничены.',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
                   ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'Открывайте документы локально. Возможности редактирования пока ограничены.',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
           ),
           const SizedBox(height: 22),
           const Text(
@@ -175,13 +198,17 @@ class HomeScreen extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final narrow = constraints.maxWidth < 330;
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final largeText = textScale > 1.2;
               return GridView.count(
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
                 crossAxisCount: narrow ? 1 : 2,
                 mainAxisSpacing: 11,
                 crossAxisSpacing: 11,
-                childAspectRatio: narrow ? 3.7 : 1.9,
+                childAspectRatio: narrow
+                    ? (textScale >= 1.9 ? 1.9 : (largeText ? 2.5 : 3.7))
+                    : (largeText ? 1.25 : 1.9),
                 children: EditorKind.values
                     .map(
                       (kind) => Material(

@@ -60,3 +60,21 @@ The separate ToTstore emulator was not modified. The QA emulator had
 its screen resolution temporarily overridden for narrow-screen tests;
 it exited unexpectedly during DOCX keyboard testing. Do not infer the
 physical-phone result from these emulator tests.
+
+## 0.8.3 large text and keyboard acceptance
+
+- Main editor cards: 320 dp, Flutter text scaling 160% and 200%.
+  Cards increase in height; the intro becomes shorter. No overflow.
+- DOCX: Android 15, 150% text scaling, new document, keyboard entry,
+  actual paragraph append, and confirmation that the keyboard hides
+  and the paragraph becomes visible.
+- Unsaved changes: automated navigation tests cover Cancel/Stay
+  and explicitly discarding when leaving the editor.
+- All four editor warnings: collapsed by default; tap opens
+  a scrollable and bounded modal with a clear close control.
+  Android PPTX sheet opening, scrolling and closing were verified
+  after an inline ExpansionTile caused a genuine 24 px overflow.
+- Maintain >=48 dp primary touch targets and avoid using warnings
+  or marketing banners that push the editing canvas below the fold.
+- Physical ARM64 smartphone, landscape and other text scaling/device
+  combinations still require additional testing.

@@ -278,6 +278,37 @@ have not yet been inspected in Android UI. Existing Flutter tests
 passed; arm64 on real hardware remains untested. No native Rust
 engines or upstream vendor sources were changed.
 
+## Accessibility and keyboard QA (0.8.3)
+
+At 320 dp width, Flutter widget tests now cover 160% and 200% text
+scaling and verify Home editor cards do not overflow. At high text
+scale Home uses a shorter introductory banner and taller single-column
+editor cards so the real editor actions are easier to reach.
+
+UnsavedChangesGuard is explicitly tested for both staying in an
+editor and confirming an exit without saving a copy.
+
+On the dedicated Android 15 x86_64 ArtOfficeCraft QA emulator with
+a 320 dp simulated width and 150% Android system font scale:
+- DOCX: entered text with the on-screen keyboard, appended a paragraph,
+  and confirmed it appeared in the document.
+- The first pass exposed that the keyboard remained visible after
+  committing a paragraph, covering the document. The final build
+  unfocuses the text field after success and this was confirmed on
+  the emulator: keyboard hid and the new paragraph was readable.
+- PPTX: the editor's horizontal action strip remained accessible.
+  An initially expanded inline warning caused a 24-pixel vertical
+  overflow. The format information has since been moved into a
+  bounded, scrollable modal bottom sheet, and the Android test
+  confirmed opening, scrolling and closing without Flutter errors.
+- The shared FormatLimitsNotice also reduces permanent banner space
+  in DOCX, XLSX, and PDF. A Flutter test covers the modal at 200%.
+
+The underlying Rust engines and upstream pins are unchanged. Android
+network and Wi-Fi permission declarations remain absent. This targeted
+test does NOT establish full DOCX/XLSX/PPTX/PDF feature coverage,
+pixel-perfect PowerPoint rendering, or physical ARM64 device success.
+
 ## Not implemented yet
 
 - Full GridCraft XLSX formatting/rendering and compatibility regression testing.

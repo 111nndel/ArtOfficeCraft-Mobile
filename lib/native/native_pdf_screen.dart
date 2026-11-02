@@ -1,3 +1,5 @@
+import 'format_limits_notice.dart';
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -6,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
+import 'unsaved_changes_guard.dart';
 import 'pdfcraft_bridge.dart';
 import 'pdf_page_renderer.dart';
 import 'pdf_page_action_bar.dart';
@@ -260,147 +263,150 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   @override
   Widget build(BuildContext context) {
     final available = engine != null;
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              filename,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+    return UnsavedChangesGuard(
+      dirty: changed,
+      busy: busy,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                filename,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                available ? 'PDFCraft Rust + Android PDF' : 'Rust недоступен',
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Открыть PDF',
+              onPressed: available && !busy ? open : null,
+              icon: const Icon(Icons.folder_open_outlined),
             ),
-            Text(
-              available ? 'PDFCraft Rust + Android PDF' : 'Rust недоступен',
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            IconButton(
+              tooltip: 'Сохранить PDF',
+              onPressed: contents != null && !busy ? save : null,
+              icon: const Icon(Icons.save_outlined),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Открыть PDF',
-            onPressed: available && !busy ? open : null,
-            icon: const Icon(Icons.folder_open_outlined),
-          ),
-          IconButton(
-            tooltip: 'Сохранить PDF',
-            onPressed: contents != null && !busy ? save : null,
-            icon: const Icon(Icons.save_outlined),
-          ),
-        ],
-      ),
-      body: !available
-          ? const Center(child: Text('PDFCraft Rust недоступен'))
-          : contents == null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.picture_as_pdf_outlined, size: 50),
-                  const SizedBox(height: 12),
-                  const Text('PDFCraft — работа со страницами'),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: open,
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Открыть PDF'),
-                  ),
-                  TextButton.icon(
-                    onPressed: create,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Новый PDF'),
-                  ),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                Material(
-                  color: Theme.of(context).colorScheme.surfaceContainer,
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Text(
-                      'PDFCraft изменяет страницы; Android отображает содержимое. '
-                      'Формы, сложные ссылки и цифровые подписи требуют отдельной проверки.',
-                      style: TextStyle(fontSize: 10),
+        body: !available
+            ? const Center(child: Text('PDFCraft Rust недоступен'))
+            : contents == null
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.picture_as_pdf_outlined, size: 50),
+                    const SizedBox(height: 12),
+                    const Text('PDFCraft — работа со страницами'),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: open,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Открыть PDF'),
                     ),
-                  ),
+                    TextButton.icon(
+                      onPressed: create,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Новый PDF'),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: AspectRatio(
-                        aspectRatio:
-                            (pages[selected]['width'] as num).toDouble() /
-                            (pages[selected]['height'] as num).toDouble(),
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.black12),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black26, blurRadius: 8),
-                            ],
-                          ),
-                          child: FutureBuilder<Uint8List>(
-                            future: _pageImage,
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                      ConnectionState.done &&
-                                  snapshot.hasError) {
-                                return const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: Text(
-                                      'Android не смог показать страницу. '
-                                      'PDF может быть зашифрован или поврежден.',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: Colors.black54),
+              )
+            : Column(
+                children: [
+                  const FormatLimitsNotice(
+                    summary: 'PDF · возможности редактора',
+                    details:
+                        'PDFCraft изменяет структуру страниц; '
+                        'Android отображает содержимое. Формы, сложные '
+                        'ссылки и цифровые подписи требуют отдельной проверки.',
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: AspectRatio(
+                          aspectRatio:
+                              (pages[selected]['width'] as num).toDouble() /
+                              (pages[selected]['height'] as num).toDouble(),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.black12),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 8),
+                              ],
+                            ),
+                            child: FutureBuilder<Uint8List>(
+                              future: _pageImage,
+                              builder: (context, snapshot) {
+                                if (snapshot.connectionState ==
+                                        ConnectionState.done &&
+                                    snapshot.hasError) {
+                                  return const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: Text(
+                                        'Android не смог показать страницу. '
+                                        'PDF может быть зашифрован или поврежден.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: Colors.black54),
+                                      ),
                                     ),
+                                  );
+                                }
+                                if (snapshot.connectionState !=
+                                        ConnectionState.done ||
+                                    !snapshot.hasData) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+                                return InteractiveViewer(
+                                  minScale: 0.75,
+                                  maxScale: 4.0,
+                                  child: Image.memory(
+                                    snapshot.data!,
+                                    fit: BoxFit.contain,
+                                    gaplessPlayback: false,
                                   ),
                                 );
-                              }
-                              if (snapshot.connectionState !=
-                                      ConnectionState.done ||
-                                  !snapshot.hasData) {
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              }
-                              return InteractiveViewer(
-                                minScale: 0.75,
-                                maxScale: 4.0,
-                                child: Image.memory(
-                                  snapshot.data!,
-                                  fit: BoxFit.contain,
-                                  gaplessPlayback: false,
-                                ),
-                              );
-                            },
+                              },
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                SizedBox(
-                  height: 114,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: pages.length,
-                    itemBuilder: (c, i) => pageThumb(i),
+                  SizedBox(
+                    height: 114,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: pages.length,
+                      itemBuilder: (c, i) => pageThumb(i),
+                    ),
                   ),
-                ),
-                PdfPageActionBar(
-                  selected: selected,
-                  pageCount: pages.length,
-                  busy: busy,
-                  onAction: edit,
-                ),
-                if (busy) const LinearProgressIndicator(),
-              ],
-            ),
+                  PdfPageActionBar(
+                    selected: selected,
+                    pageCount: pages.length,
+                    busy: busy,
+                    onAction: edit,
+                  ),
+                  if (busy) const LinearProgressIndicator(),
+                ],
+              ),
+      ),
     );
   }
 }

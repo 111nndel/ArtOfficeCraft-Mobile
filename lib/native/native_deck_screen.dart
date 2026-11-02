@@ -1,3 +1,5 @@
+import 'format_limits_notice.dart';
+
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
@@ -6,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
+import 'unsaved_changes_guard.dart';
 import 'deckcraft_bridge.dart';
 import 'deck_text_dialog.dart';
 
@@ -379,191 +382,196 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   @override
   Widget build(BuildContext context) {
     final enabled = engine != null;
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              filename,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+    return UnsavedChangesGuard(
+      dirty: modified,
+      busy: busy,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                filename,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                enabled ? 'DeckCraft Rust · PPTX' : 'Rust недоступен',
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Открыть PPTX',
+              onPressed: enabled && !busy ? open : null,
+              icon: const Icon(Icons.folder_open_outlined),
             ),
-            Text(
-              enabled ? 'DeckCraft Rust · PPTX' : 'Rust недоступен',
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            IconButton(
+              tooltip: 'Сохранить копию PPTX',
+              onPressed: loaded && !busy ? save : null,
+              icon: const Icon(Icons.save_outlined),
+            ),
+            PopupMenuButton<String>(
+              enabled: loaded && !busy,
+              onSelected: (v) {
+                if (v == 'delete') removeSlide();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'delete', child: Text('Удалить слайд')),
+              ],
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Открыть PPTX',
-            onPressed: enabled && !busy ? open : null,
-            icon: const Icon(Icons.folder_open_outlined),
-          ),
-          IconButton(
-            tooltip: 'Сохранить копию PPTX',
-            onPressed: loaded && !busy ? save : null,
-            icon: const Icon(Icons.save_outlined),
-          ),
-          PopupMenuButton<String>(
-            enabled: loaded && !busy,
-            onSelected: (v) {
-              if (v == 'delete') removeSlide();
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'delete', child: Text('Удалить слайд')),
-            ],
-          ),
-        ],
-      ),
-      body: !enabled
-          ? const Center(
-              child: Text('DeckCraft Rust недоступен на этом устройстве'),
-            )
-          : !loaded
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        body: !enabled
+            ? const Center(
+                child: Text('DeckCraft Rust недоступен на этом устройстве'),
+              )
+            : !loaded
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.slideshow_outlined, size: 46),
+                    const SizedBox(height: 16),
+                    const Text('Редактор PPTX на DeckCraft'),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: open,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Открыть PPTX'),
+                    ),
+                    TextButton.icon(
+                      onPressed: create,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Создать PPTX'),
+                    ),
+                  ],
+                ),
+              )
+            : Column(
                 children: [
-                  const Icon(Icons.slideshow_outlined, size: 46),
-                  const SizedBox(height: 16),
-                  const Text('Редактор PPTX на DeckCraft'),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: open,
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Открыть PPTX'),
+                  const FormatLimitsNotice(
+                    summary: 'PPTX · упрощённый предпросмотр',
+                    details:
+                        'Встроенные PNG/JPEG/WebP и простые фигуры '
+                        'отображаются; темы, сложные эффекты, группы и '
+                        'анимации пока поддерживаются не полностью. '
+                        'Нажмите текст на слайде для редактирования.',
                   ),
-                  TextButton.icon(
-                    onPressed: create,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Создать PPTX'),
-                  ),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(7),
-                  child: Text(
-                    'Предпросмотр: встроенные PNG/JPEG/WebP и простые фигуры; '
-                    'темы, сложные эффекты, группы и анимации пока неполны. '
-                    'Нажми текст для редактирования.',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(12),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.black12),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 8),
-                          ],
-                        ),
-                        child: slideCanvas(),
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  height: 90,
-                  color: Theme.of(context).colorScheme.surfaceContainer,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: slides.length,
-                    itemBuilder: (c, i) {
-                      final selected = i == index;
-                      return GestureDetector(
-                        onTap: () => setState(() => index = i),
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(12),
                         child: Container(
-                          width: 138,
-                          margin: const EdgeInsets.all(5),
-                          padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
-                            border: Border.all(
-                              color: selected ? Colors.deepOrange : Colors.grey,
-                              width: selected ? 2 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
-                                  ),
-                                  alignment: Alignment.center,
-                                  clipBehavior: Clip.hardEdge,
-                                  child: IgnorePointer(
-                                    child: slideCanvas(slideIndex: i),
-                                  ),
-                                ),
-                              ),
-                              Text(
-                                (i + 1).toString(),
-                                style: const TextStyle(fontSize: 10),
-                              ),
+                            border: Border.all(color: Colors.black12),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black26, blurRadius: 8),
                             ],
                           ),
+                          child: slideCanvas(),
                         ),
-                      );
-                    },
-                  ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: SizedBox(
-                    height: 60,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
                       ),
-                      children: [
-                        FilledButton.icon(
-                          onPressed: busy ? null : newSlide,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Новый слайд'),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: busy ? null : insertText,
-                          icon: const Icon(Icons.text_fields),
-                          label: const Text('Добавить текст'),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: busy ? null : save,
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Сохранить копию'),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
-                ),
-                if (busy) const LinearProgressIndicator(),
-              ],
-            ),
+                  Container(
+                    height: 90,
+                    color: Theme.of(context).colorScheme.surfaceContainer,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: slides.length,
+                      itemBuilder: (c, i) {
+                        final selected = i == index;
+                        return GestureDetector(
+                          onTap: () => setState(() => index = i),
+                          child: Container(
+                            width: 138,
+                            margin: const EdgeInsets.all(5),
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: selected
+                                    ? Colors.deepOrange
+                                    : Colors.grey,
+                                width: selected ? 2 : 1,
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Column(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                    ),
+                                    alignment: Alignment.center,
+                                    clipBehavior: Clip.hardEdge,
+                                    child: IgnorePointer(
+                                      child: slideCanvas(slideIndex: i),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  (i + 1).toString(),
+                                  style: const TextStyle(fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  SafeArea(
+                    top: false,
+                    child: SizedBox(
+                      height: 60,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        children: [
+                          FilledButton.icon(
+                            onPressed: busy ? null : newSlide,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Новый слайд'),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: busy ? null : insertText,
+                            icon: const Icon(Icons.text_fields),
+                            label: const Text('Добавить текст'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton.icon(
+                            onPressed: busy ? null : save,
+                            icon: const Icon(Icons.save_outlined),
+                            label: const Text('Сохранить копию'),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 48),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (busy) const LinearProgressIndicator(),
+                ],
+              ),
+      ),
     );
   }
 }

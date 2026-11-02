@@ -1,3 +1,5 @@
+import 'format_limits_notice.dart';
+
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -5,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
+import 'unsaved_changes_guard.dart';
 import 'gridcraft_bridge.dart';
 
 class NativeGridScreen extends StatefulWidget {
@@ -224,184 +227,194 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   @override
   Widget build(BuildContext context) {
     final online = bridge != null;
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              filename,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    return UnsavedChangesGuard(
+      dirty: modified,
+      busy: busy,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                filename,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                online ? 'GridCraft Rust · XLSX' : 'Rust недоступен',
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Открыть XLSX',
+              onPressed: online && !busy ? open : null,
+              icon: const Icon(Icons.folder_open_outlined),
             ),
-            Text(
-              online ? 'GridCraft Rust · XLSX' : 'Rust недоступен',
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            IconButton(
+              tooltip: 'Сохранить копию',
+              onPressed: book != null && !busy ? save : null,
+              icon: const Icon(Icons.save_outlined),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Открыть XLSX',
-            onPressed: online && !busy ? open : null,
-            icon: const Icon(Icons.folder_open_outlined),
-          ),
-          IconButton(
-            tooltip: 'Сохранить копию',
-            onPressed: book != null && !busy ? save : null,
-            icon: const Icon(Icons.save_outlined),
-          ),
-        ],
-      ),
-      body: !online
-          ? const Center(
-              child: Text(
-                'Нет нативной GridCraft-библиотеки для Android ARM64',
-              ),
-            )
-          : book == null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.grid_on_outlined, size: 46),
-                  const SizedBox(height: 12),
-                  const Text('GridCraft — редактор XLSX'),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: open,
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Открыть XLSX'),
-                  ),
-                  TextButton.icon(
-                    onPressed: create,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Создать XLSX'),
-                  ),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                Material(
-                  color: Theme.of(context).colorScheme.surfaceContainer,
-                  child: const Padding(
-                    padding: EdgeInsets.all(6),
-                    child: Text(
-                      'Редактирование XLSX. Превью ограничено 55 строками и 12 столбцами; '
-                      'сложное оформление и диаграммы пока не отображаются.',
-                      style: TextStyle(fontSize: 10),
-                    ),
-                  ),
+        body: !online
+            ? const Center(
+                child: Text(
+                  'Нет нативной GridCraft-библиотеки для Android ARM64',
                 ),
-                Expanded(child: grid()),
-                Row(
+              )
+            : book == null
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Tooltip(
-                      message: 'Число, текст или формула со знака =',
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 8),
-                        child: Text('ƒₓ', style: TextStyle(fontSize: 20)),
-                      ),
+                    const Icon(Icons.grid_on_outlined, size: 46),
+                    const SizedBox(height: 12),
+                    const Text('GridCraft — редактор XLSX'),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: open,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Открыть XLSX'),
                     ),
-                    Text(
-                      selected,
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: input,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          hintText: 'Введите…',
-                        ),
-                        onSubmitted: (_) => commit(),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Отменить ввод',
-                      onPressed: busy
-                          ? null
-                          : () => setState(() => input.text = currentInput),
-                      icon: const Icon(Icons.close),
-                    ),
-                    IconButton(
-                      tooltip: 'Применить',
-                      onPressed: busy ? null : commit,
-                      icon: const Icon(Icons.check, color: Colors.green),
+                    TextButton.icon(
+                      onPressed: create,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Создать XLSX'),
                     ),
                   ],
                 ),
-                if (showTabs)
-                  SizedBox(
-                    height: 48,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        for (int i = 0; i < sheets.length; i++)
-                          TextButton(
-                            onPressed: () => chooseSheet(i),
-                            child: Text(
-                              sheets[i]['name']?.toString() ?? 'Лист',
-                              style: TextStyle(
-                                fontWeight: i == sheetIndex
-                                    ? FontWeight.bold
-                                    : null,
+              )
+            : Column(
+                children: [
+                  if (!keyboardOpen)
+                    const FormatLimitsNotice(
+                      summary: 'XLSX · ограничения просмотра',
+                      details:
+                          'Показаны 55 строк и 12 столбцов. Сложное '
+                          'оформление и диаграммы пока не отображаются.',
+                    ),
+                  Expanded(child: grid()),
+                  Row(
+                    children: [
+                      const Tooltip(
+                        message: 'Число, текст или формула со знака =',
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
+                          child: Text('ƒₓ', style: TextStyle(fontSize: 20)),
+                        ),
+                      ),
+                      Text(
+                        selected,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: input,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            hintText: 'Введите…',
+                          ),
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => commit(),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Отменить ввод',
+                        onPressed: busy
+                            ? null
+                            : () => setState(() => input.text = currentInput),
+                        icon: const Icon(Icons.close),
+                      ),
+                      IconButton(
+                        tooltip: 'Применить',
+                        onPressed: busy ? null : commit,
+                        icon: const Icon(Icons.check, color: Colors.green),
+                      ),
+                    ],
+                  ),
+                  if (showTabs && !keyboardOpen)
+                    SizedBox(
+                      height: 48,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          for (int i = 0; i < sheets.length; i++)
+                            TextButton(
+                              onPressed: () => chooseSheet(i),
+                              child: Text(
+                                sheets[i]['name']?.toString() ?? 'Лист',
+                                style: TextStyle(
+                                  fontWeight: i == sheetIndex
+                                      ? FontWeight.bold
+                                      : null,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                SafeArea(
-                  top: false,
-                  child: SizedBox(
-                    height: 60,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
+                        ],
                       ),
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => setState(() => showTabs = !showTabs),
-                          icon: const Icon(Icons.view_carousel_outlined),
-                          label: Text(
-                            showTabs ? 'Скрыть листы' : 'Показать листы',
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: busy ? null : create,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Новая книга'),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton.icon(
-                          onPressed: busy ? null : save,
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Сохранить копию'),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 48),
-                          ),
-                        ),
-                      ],
                     ),
-                  ),
-                ),
-                if (busy) const LinearProgressIndicator(),
-              ],
-            ),
+                  if (!keyboardOpen)
+                    SafeArea(
+                      top: false,
+                      child: SizedBox(
+                        height: 60,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () =>
+                                  setState(() => showTabs = !showTabs),
+                              icon: const Icon(Icons.view_carousel_outlined),
+                              label: Text(
+                                showTabs ? 'Скрыть листы' : 'Показать листы',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: busy ? null : create,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Новая книга'),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton.icon(
+                              onPressed: busy ? null : save,
+                              icon: const Icon(Icons.save_outlined),
+                              label: const Text('Сохранить копию'),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 48),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (busy) const LinearProgressIndicator(),
+                ],
+              ),
+      ),
     );
   }
 }

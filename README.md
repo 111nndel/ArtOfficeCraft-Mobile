@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.8.2 — not a finished office suite.**
+**Status: alpha 0.8.3 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
@@ -151,6 +151,28 @@ verification and the keyboard flow remain pending. See
 MOBILE_USABILITY.md for unfinished validation. This release does not
 claim new file-format capabilities, full layout fidelity, or a
 physical ARM64 hardware test.
+
+### Large-text accessibility and editor help (0.8.3)
+
+The home editor cards now handle 320 dp layouts at Flutter text scale
+160% and 200% without widget overflow. For a larger accessibility
+font, the landing banner becomes compact so document choices remain
+reachable. The DOCX text field now releases keyboard focus after
+successfully adding a paragraph, revealing its result.
+
+Long format limitations in DOCX, XLSX, PPTX and PDF are still
+clearly available, but now open in a bounded scrollable bottom sheet
+instead of permanently occupying the editing canvas. This avoids
+the 24 px vertical overflow discovered on Android when expanding
+a long PPTX warning at 150% system font scale. The final bottom
+sheet was tested on the Android 15 QA emulator for scrolling and
+closing; no Flutter error was observed.
+
+Four widget tests verify the 160%/200% Home layout and both outcomes
+of the unsaved changes dialog. Another widget test checks the
+format-limits sheet at 200%. Native engine behavior is unchanged.
+Full accessibility auditing and testing on physical ARM64 hardware
+are outstanding.
 
 ### Limitations and safe handling
 
