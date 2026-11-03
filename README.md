@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.13.0 — not a finished office suite.**
+**Status: alpha 0.14.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
@@ -23,8 +23,11 @@ paragraph, Done, formatting and Save As flush it through the native adapter.
 Failed commits keep the visible draft and block export of stale bytes.
 Grid similarly flushes pending input before Save As or changing cells/sheets,
 and preserves styles on value/formula replacement. Applied Grid edits update
-the app-private working copy. See docs/validation-0.13.0.md for current checks
-and limits. The shared panel navigation follows design/INTERACTION_SPEC.md.
+the app-private working copy. Locally written recovery checkpoints retain pending
+Word/Grid/Deck input and modified PDF bytes after process termination; Home offers
+to resume them. Only the last completed checkpoint is recoverable, and undo history
+is session-local. See docs/validation-0.14.0.md for current checks and limits.
+The shared panel navigation follows design/INTERACTION_SPEC.md.
 
 The mobile app integrates four independent upstream projects. It is an independent
 Android port, rather than a GitHub fork with a single upstream parent:

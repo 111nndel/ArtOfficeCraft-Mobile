@@ -13,7 +13,7 @@ class EditorLaunch {
   final String? name;
   final bool create;
   final bool template;
-  final Map<String,dynamic>? recovery;
+  final Map<String, dynamic>? recovery;
 }
 
 typedef RememberFile = Future<void> Function(Uint8List bytes, String filename);

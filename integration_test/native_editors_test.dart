@@ -1,3 +1,5 @@
+import 'package:artofficecraft_mobile/workspace/draft_store.dart';
+import 'package:artofficecraft_mobile/workspace/editor_kind.dart';
 import 'package:artofficecraft_mobile/main.dart' show ArtOfficeCraftApp;
 
 import 'dart:io';
@@ -354,6 +356,143 @@ void main() {
         }
       } finally {
         await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  testWidgets(
+    'Actual Android: raw editor journals survive fresh stores and editor instances',
+    (tester) async {
+      for (final kind in EditorKind.values) {
+        final root = await Directory.systemTemp.createTemp(
+          'aoc-native-recovery-',
+        );
+        final nativeKind = switch (kind) {
+          EditorKind.word => NativeDocumentKind.word,
+          EditorKind.excel => NativeDocumentKind.grid,
+          EditorKind.slides => NativeDocumentKind.deck,
+          EditorKind.pdf => NativeDocumentKind.pdf,
+        };
+        final backend = NativeDocumentBackend.tryOpen(nativeKind)!;
+        final base = await backend.create(
+          kind == EditorKind.word ? 'Сохранённая основа' : '',
+        );
+        final drafts = DraftStore(directory: root);
+        final session = DraftSession(drafts, kind);
+        Widget screen(EditorLaunch launch, DraftSession draft) =>
+            switch (kind) {
+              EditorKind.word => NativeWordScreen(
+                backend: backend,
+                launch: launch,
+                draft: draft,
+              ),
+              EditorKind.excel => NativeGridScreen(
+                backend: backend,
+                launch: launch,
+                draft: draft,
+              ),
+              EditorKind.slides => NativeDeckScreen(
+                backend: backend,
+                launch: launch,
+                draft: draft,
+              ),
+              EditorKind.pdf => NativePdfScreen(
+                backend: backend,
+                launch: launch,
+                draft: draft,
+              ),
+            };
+        Future<void> mount(EditorLaunch launch, DraftSession draft) async {
+          await tester.pumpWidget(
+            MaterialApp(
+              key: UniqueKey(),
+              theme: OfficeTheme.build(Brightness.light),
+              home: screen(launch, draft),
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        DraftSession? resumed;
+        try {
+          await mount(
+            EditorLaunch(bytes: base, name: 'Recovery.${kind.extension}'),
+            session,
+          );
+          const raw = 'RAW_RECOVERY_014 😀';
+          if (kind == EditorKind.word) {
+            await tester.tap(find.text('Сохранённая основа'));
+            await tester.pumpAndSettle();
+          } else if (kind == EditorKind.excel) {
+            await tester.tap(find.byKey(const ValueKey('grid-cell-B1')));
+            await tester.pumpAndSettle();
+          } else if (kind == EditorKind.slides) {
+            await tester.tap(find.text('Главная'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Вставка'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Текстовый блок'));
+            await tester.pumpAndSettle();
+          } else {
+            await tester.tap(find.text('Чтение'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Страницы'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.text('Дублировать'));
+            await tester.pumpAndSettle();
+          }
+          final input = kind == EditorKind.word
+              ? find.byKey(const Key('word-inline-input'))
+              : kind == EditorKind.slides
+              ? find.byKey(const Key('deck-text-input'))
+              : find.byType(TextField);
+          if (kind != EditorKind.pdf) {
+            await tester.tap(input);
+            await tester.pumpAndSettle();
+            await tester.enterText(input, raw);
+            await tester.pump();
+          }
+          await session.flush();
+          await tester.pumpWidget(const SizedBox.shrink());
+          await session.close();
+          final reopened = DraftStore(directory: root);
+          await reopened.load();
+          expect(reopened.items, hasLength(1));
+          final saved = await reopened.read(reopened.items.single.id);
+          final report = await backend.inspect(saved.bytes);
+          if (kind == EditorKind.word) {
+            expect(report['paragraphs'], contains('Сохранённая основа'));
+          }
+          if (kind == EditorKind.excel) {
+            expect(
+              (report['sheets'][0]['cells'] as Map).containsKey('B1'),
+              isFalse,
+            );
+          }
+          resumed = DraftSession(reopened, kind, id: saved.info.id);
+          await mount(
+            EditorLaunch(
+              bytes: saved.bytes,
+              name: saved.info.name,
+              recovery: saved.editor,
+            ),
+            resumed,
+          );
+          if (kind == EditorKind.pdf) {
+            expect(find.text('Страница 2 из 2'), findsOneWidget);
+          } else {
+            expect(tester.widget<TextField>(input).controller!.text, raw);
+          }
+          await resumed.discard();
+          await tester.pumpWidget(const SizedBox.shrink());
+          await resumed.close();
+          expect(tester.takeException(), isNull);
+        } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await session.close();
+          await resumed?.close();
+          await root.delete(recursive: true);
+        }
       }
     },
   );

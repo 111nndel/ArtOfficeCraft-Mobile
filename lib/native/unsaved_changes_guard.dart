@@ -63,12 +63,21 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
         ),
       );
       if (discard != true || !mounted) return;
-      try {await widget.onDiscard?.call();}
-      catch(_) {
-        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Не удалось удалить черновик. Работа оставлена открытой.')));
+      try {
+        await widget.onDiscard?.call();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Не удалось удалить черновик. Работа оставлена открытой.',
+              ),
+            ),
+          );
+        }
         return;
       }
-      if(!mounted) return;
+      if (!mounted) return;
       setState(() => _allowExit = true);
       // Wait until PopScope registers canPop=true before navigating.
       WidgetsBinding.instance.addPostFrameCallback((_) {

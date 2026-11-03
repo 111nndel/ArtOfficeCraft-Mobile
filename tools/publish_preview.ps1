@@ -26,8 +26,17 @@ try {
     if (($permissions -join "`n") -match 'android.permission.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)') {
         throw 'Offline policy violated: network permission in final APK'
     }
-    & (Join-Path $buildTools 'apksigner.bat') verify $apk
-    if ($LASTEXITCODE -ne 0) {throw 'APK signature verification failed'}
+    # Java warnings are stderr diagnostics, not signature failure. Windows
+    # PowerShell can turn redirected native stderr into a terminating error.
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & (Join-Path $buildTools 'apksigner.bat') verify $apk
+        $signatureExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    if ($signatureExit -ne 0) {throw 'APK signature verification failed'}
     & (Join-Path $buildTools 'zipalign.exe') -c -P 16 4 $apk
     if ($LASTEXITCODE -ne 0) {throw 'APK ZIP alignment failed'}
     $folder = Join-Path $root "build\publish-$Tag"

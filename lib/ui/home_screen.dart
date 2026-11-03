@@ -35,7 +35,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final WorkspaceStore store = widget.workspace ?? WorkspaceStore();
-  late final recoveryStore=widget.drafts ?? DraftStore();
+  late final recoveryStore = widget.drafts ?? DraftStore();
   final search = TextEditingController();
   int section = 0;
   EditorKind? filter;
@@ -45,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     store.addListener(refresh);
     recoveryStore.addListener(refresh);
-    if(!recoveryStore.loaded) recoveryStore.load();
+    if (!recoveryStore.loaded) recoveryStore.load();
     if (!store.loaded) store.load();
   }
 
@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     store.removeListener(refresh);
     recoveryStore.removeListener(refresh);
-    if(widget.drafts==null) recoveryStore.dispose();
+    if (widget.drafts == null) recoveryStore.dispose();
     if (widget.workspace == null) store.dispose();
     search.dispose();
     super.dispose();
@@ -79,40 +79,55 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => opening = true);
     DraftSession? session;
     try {
-      if(recovered!=null) {
-        final saved=await recoveryStore.read(recovered.id);
-        launch=EditorLaunch(bytes:saved.bytes,name:saved.info.name,recovery:saved.editor);
+      if (recovered != null) {
+        final saved = await recoveryStore.read(recovered.id);
+        launch = EditorLaunch(
+          bytes: saved.bytes,
+          name: saved.info.name,
+          recovery: saved.editor,
+        );
       }
       if (entry != null) {
         launch = EditorLaunch(bytes: await store.read(entry), name: entry.name);
       }
       if (!mounted) return;
       String? id = recovered?.workspaceId ?? entry?.id;
-      session=DraftSession(recoveryStore,kind,id:recovered?.id,workspaceId:id,
-        onError:()=>message('Не удалось записать локальный черновик. Сохраните копию через меню файла.'));
+      session = DraftSession(
+        recoveryStore,
+        kind,
+        id: recovered?.id,
+        workspaceId: id,
+        onError: () => message(
+          'Не удалось записать локальный черновик. Сохраните копию через меню файла.',
+        ),
+      );
       Future<void> remember(Uint8List bytes, String name) async {
         final saved = await store.remember(kind, bytes, name, id: id);
         id = saved.id;
-        session?.workspaceId=id;
+        session?.workspaceId = id;
       }
 
       final screen = switch (kind) {
         EditorKind.word => NativeWordScreen(
           launch: launch,
           onRemember: remember,
-          draft:session,
+          draft: session,
         ),
         EditorKind.excel => NativeGridScreen(
           launch: launch,
           onRemember: remember,
-          draft:session,
+          draft: session,
         ),
         EditorKind.slides => NativeDeckScreen(
           launch: launch,
           onRemember: remember,
-          draft:session,
+          draft: session,
         ),
-        EditorKind.pdf => NativePdfScreen(launch: launch, onRemember: remember,draft:session),
+        EditorKind.pdf => NativePdfScreen(
+          launch: launch,
+          onRemember: remember,
+          draft: session,
+        ),
       };
       await Navigator.of(context)
           .push(MaterialPageRoute<void>(builder: (_) => screen));
@@ -127,28 +142,76 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Widget> recoveryWidgets() => [
-    if(recoveryStore.error!=null) Padding(padding:const EdgeInsets.only(top:12),child:Text(recoveryStore.error!)),
-    if(recoveryStore.items.isNotEmpty) ...[
-      const SizedBox(height:20),
-      const Text('Восстановить работу',style:TextStyle(fontSize:20,fontWeight:FontWeight.w600)),
-      const SizedBox(height:12),
-      for(final item in recoveryStore.items) Card(elevation:0,child:ListTile(
-        key:ValueKey('recovery-${item.id}'),minTileHeight:76,leading:FormatIcon(kind:item.kind),
-        title:Text(item.name,maxLines:2,overflow:TextOverflow.ellipsis),
-        subtitle:const Text('Локальный черновик · коснитесь, чтобы продолжить'),
-        onTap:opening ? null : ()=>open(item.kind,recovered:item),
-        trailing:PopupMenuButton<String>(tooltip:'Действия с черновиком',enabled:!opening,
-          itemBuilder:(_)=>[const PopupMenuItem(value:'delete',child:Text('Удалить черновик'))],
-          onSelected:(_)=>deleteDraft(item)),
-      )),
+    if (recoveryStore.error != null)
+      Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text(recoveryStore.error!),
+      ),
+    if (recoveryStore.items.isNotEmpty) ...[
+      const SizedBox(height: 20),
+      const Text(
+        'Восстановить работу',
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 12),
+      for (final item in recoveryStore.items)
+        Card(
+          elevation: 0,
+          child: ListTile(
+            key: ValueKey('recovery-${item.id}'),
+            minTileHeight: 76,
+            leading: FormatIcon(kind: item.kind),
+            title: Text(
+              item.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: const Text(
+              'Локальный черновик · коснитесь, чтобы продолжить',
+            ),
+            onTap: opening ? null : () => open(item.kind, recovered: item),
+            trailing: PopupMenuButton<String>(
+              tooltip: 'Действия с черновиком',
+              enabled: !opening,
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Удалить черновик'),
+                ),
+              ],
+              onSelected: (_) => deleteDraft(item),
+            ),
+          ),
+        ),
     ],
   ];
   Future<void> deleteDraft(DraftInfo info) async {
-    final yes=await showDialog<bool>(context:context,builder:(context)=>AlertDialog(
-      title:const Text('Удалить черновик?'),content:Text('Несохранённый ввод «${info.name}» будет удалён. Исходный файл останется на месте.'),
-      actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('Отмена')),
-        FilledButton(onPressed:()=>Navigator.pop(context,true),child:const Text('Удалить'))]));
-    if(yes==true) {try {await recoveryStore.remove(info.id);} catch(_) {message('Не удалось удалить черновик.');}}
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить черновик?'),
+        content: Text(
+          'Несохранённый ввод «${info.name}» будет удалён. Исходный файл останется на месте.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (yes == true) {
+      try {
+        await recoveryStore.remove(info.id);
+      } catch (_) {
+        message('Не удалось удалить черновик.');
+      }
+    }
   }
 
   Future<void> chooseKind({bool create = false}) async {
@@ -369,7 +432,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    if(section==0 && !searching) ...recoveryWidgets(),
+                    if (section == 0 && !searching) ...recoveryWidgets(),
                     if (!searching) ...[
                       const SizedBox(height: 28),
                       Text(
