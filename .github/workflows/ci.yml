@@ -76,7 +76,7 @@ jobs:
           path: build/native-candidate/
       - name: Install Android components and native core
         run: |
-          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
           mkdir -p android/app/src/main/jniLibs/arm64-v8a
           cp build/native-candidate/libartoffice_core.so android/app/src/main/jniLibs/arm64-v8a/
           cp build/native-candidate/rust-licenses.json assets/legal/rust-licenses.json
@@ -115,7 +115,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install signing tools
-        run: sdkmanager --install 'build-tools;36.0.0'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0"'
       - name: Sign with the existing preview certificate
         env:
           PREVIEW_KEYSTORE: ${{ secrets.AOC_PREVIEW_KEYSTORE_BASE64 }}
