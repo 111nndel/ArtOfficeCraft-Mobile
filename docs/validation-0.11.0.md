@@ -31,6 +31,15 @@ It does not display a second text editor.
 - That export check substitutes the platform Save As channel with a test file
   writer on Android. It verifies native bytes and disk readback, not the interactive
   Android SAF dialog itself. Original documents are never replaced by the test.
+- A separate ordinary UI run of the optimized x86_64 APK on Android 16 created
+  a DOCX, typed `Android16_inline_SAF_011` with the keyboard open, saved through
+  the real Android SAF dialog to Downloads before pressing Done, reopened the
+  saved copy through the system picker and displayed the exact text. The exported
+  DOCX was also pulled back: ZIP integrity and `word/document.xml` text passed.
+- Final ARM64 profile APK: 37,596,830 bytes; SHA-256
+  `71409860b49c6078559f9305f3744e2dabc6116aadb9ca8d5b8139777fc618d7`.
+  ELF/ZIP 16-KiB alignment passes. Publishing also gates offline permissions
+  and Android APK signature verification.
 
 The upstream Rust commits, native ABI and core version remain unchanged from
 0.10.0. Only the Flutter app version advances to 0.11.0+16. Downloadable builds
