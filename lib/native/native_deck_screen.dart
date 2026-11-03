@@ -10,7 +10,6 @@ import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -18,7 +17,6 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
-import 'deckcraft_bridge.dart';
 
 class NativeDeckScreen extends StatefulWidget {
   const NativeDeckScreen({
@@ -107,8 +105,10 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     String? name,
     bool changed = false,
     int selected = 0,
+    Map<String, dynamic>? preview,
   }) async {
-    final report = await engine!.inspect(bytes);
+    bytes = immutableDocumentBytes(bytes);
+    final report = preview ?? await engine!.inspect(bytes);
     if (!mounted) return;
     final raw = report['slides'];
     if (raw is! List || raw.isEmpty) {
@@ -261,8 +261,13 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final selected = request['action'] == 'add_slide'
         ? slides.length
         : (request['slide'] as int? ?? index);
+    final update = await engine!.editAndInspect(data!, {
+      ...request,
+      'text': text,
+    });
     await load(
-      await engine!.edit(data!, {...request, 'text': text}),
+      update.bytes,
+      preview: update.preview,
       selected: selected,
       changed: true,
     );
@@ -277,6 +282,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     widget.draft?.removeListener(draftStatusChanged);
     if (widget.draft != null) unawaited(widget.draft!.close());
     deckText.dispose();
+    if (widget.backend == null) unawaited(closeDocumentBackend(engine));
     super.dispose();
   }
 
@@ -311,8 +317,13 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       ),
     );
     if (yes != true) return;
+    final update = await engine!.editAndInspect(data!, {
+      'action': 'delete_slide',
+      'slide': index,
+    });
     await load(
-      await engine!.edit(data!, {'action': 'delete_slide', 'slide': index}),
+      update.bytes,
+      preview: update.preview,
       selected: index == 0 ? 0 : index - 1,
       changed: true,
     );
@@ -362,16 +373,12 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       return Future<Uint8List?>.value(null);
     }
     final document = data!;
-    final future = Isolate.run<Uint8List?>(() {
-      final bridge = DeckCraftBridge.tryOpen();
-      if (bridge == null) return null;
-      try {
-        return bridge.image(document, slide, mediaId);
-      } catch (_) {
-        // Unsupported picture: show a placeholder instead of crashing.
-        return null;
-      }
-    });
+    final backend = engine;
+    final future = backend is DocumentImages
+        ? (backend as DocumentImages)
+              .image(document, slide, mediaId)
+              .then<Uint8List?>((bytes) => bytes, onError: (Object _) => null)
+        : Future<Uint8List?>.value(null);
     _pictures[key] = future;
     return future;
   }

@@ -1,6 +1,9 @@
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:isolate';
+
+import 'document_worker.dart';
+
 import 'dart:typed_data';
 
 import 'wordcraft_bridge.dart';
@@ -17,15 +20,102 @@ abstract interface class DocumentBackend {
   Future<Uint8List> edit(Uint8List bytes, Map<String, dynamic> request);
 }
 
-final class NativeDocumentBackend implements DocumentBackend {
-  const NativeDocumentBackend(this.kind, {this.libraryPath});
+final _ownedBytes = Expando<bool>('immutable document snapshot');
+Uint8List immutableDocumentBytes(Uint8List bytes) {
+  if (_ownedBytes[bytes] == true) return bytes;
+  final owned = Uint8List.fromList(bytes).asUnmodifiableView();
+  _ownedBytes[owned] = true;
+  return owned;
+}
+
+/// An edit is published only after its resulting document can be inspected.
+class DocumentSnapshot {
+  DocumentSnapshot(Uint8List bytes, Map<String, dynamic> preview)
+    : bytes = immutableDocumentBytes(bytes),
+      preview = _freeze(preview) as Map<String, dynamic>;
+  final Uint8List bytes;
+  final Map<String, dynamic> preview;
+}
+
+Object? _freeze(Object? value, [int depth = 0]) {
+  if (depth > 64) throw ArgumentError('Document data is nested too deeply');
+  if (value is Map) {
+    return Map<String, dynamic>.unmodifiable(
+      value.map((k, v) => MapEntry(k as String, _freeze(v, depth + 1))),
+    );
+  }
+  if (value is List) {
+    return List<dynamic>.unmodifiable(value.map((v) => _freeze(v, depth + 1)));
+  }
+  if (value == null ||
+      value is String ||
+      value is bool ||
+      value is num && value.isFinite) {
+    return value;
+  }
+  throw ArgumentError('Document data must contain JSON values');
+}
+
+abstract interface class InspectedDocumentBackend {
+  Future<DocumentSnapshot> editInspected(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  );
+}
+
+abstract interface class DocumentBackendLifetime {
+  Future<void> close();
+}
+
+abstract interface class DocumentImages {
+  Future<Uint8List> image(Uint8List bytes, int slide, int media);
+}
+
+extension DocumentTransactions on DocumentBackend {
+  Future<DocumentSnapshot> editAndInspect(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  ) async {
+    final backend = this;
+    if (backend is InspectedDocumentBackend) {
+      return (backend as InspectedDocumentBackend).editInspected(
+        bytes,
+        request,
+      );
+    }
+    final next = await edit(bytes, request);
+    return DocumentSnapshot(next, await inspect(next));
+  }
+}
+
+Future<void> closeDocumentBackend(DocumentBackend? backend) async {
+  if (backend is DocumentBackendLifetime) {
+    await (backend as DocumentBackendLifetime).close();
+  }
+}
+
+final class NativeDocumentBackend
+    implements
+        DocumentBackend,
+        InspectedDocumentBackend,
+        DocumentBackendLifetime,
+        DocumentImages {
+  NativeDocumentBackend(this.kind, {this.libraryPath});
   final NativeDocumentKind kind;
   final String? libraryPath;
+  late final DocumentWorker _worker = DocumentWorker(
+    _documentWorkerMain,
+    configuration: {'kind': kind.name, 'library': libraryPath},
+  );
+  bool _started = false, _closed = false;
+  Uint8List? _sentBytes;
+  int _documentToken = 0;
+  int inputTransfers = 0;
+  int get workerStarts => _started ? _worker.starts : 0;
 
   static DocumentBackend? tryOpen(NativeDocumentKind kind) {
     if (!Platform.isAndroid) return null;
     try {
-      // Loading symbols is cheap; parsing, formatting and serialization run below.
       ffi.DynamicLibrary.open('libartoffice_core.so');
       return NativeDocumentBackend(kind);
     } catch (_) {
@@ -33,80 +123,168 @@ final class NativeDocumentBackend implements DocumentBackend {
     }
   }
 
-  Future<Object> _call(
+  Future<Object?> _call(
     String operation,
     Uint8List? bytes,
     Map<String, dynamic> request,
   ) {
-    // Capture transferable values, never a DynamicLibrary or a widget State.
-    final kind = this.kind;
-    final path = libraryPath;
-    return Isolate.run(
-      () => _nativeCall(kind, path, operation, bytes, request),
-    );
+    if (_closed) return Future.error(StateError('Document backend is closed'));
+    // Snapshot mutable buffers and containers before the startup await. Strings
+    // remain immutable; UTF-8/JSON encoding and all Rust calls stay in the worker.
+    final frozenRequest = _freeze(request);
+    TransferableTypedData? transfer;
+    if (bytes != null &&
+        (!identical(bytes, _sentBytes) || _ownedBytes[bytes] != true)) {
+      transfer = TransferableTypedData.fromList([bytes]);
+      _sentBytes = bytes;
+      _documentToken++;
+      inputTransfers++;
+    }
+    final payload = {
+      'bytes': transfer,
+      'document': bytes == null ? null : _documentToken,
+      'request': frozenRequest,
+    };
+    _started = true;
+    return _worker.request(operation, payload);
+  }
+
+  Uint8List _bytes(Object? value) {
+    final bytes = (value as TransferableTypedData)
+        .materialize()
+        .asUint8List()
+        .asUnmodifiableView();
+    _ownedBytes[bytes] = true;
+    return bytes;
   }
 
   @override
   Future<Uint8List> create([String text = '']) async =>
-      await _call('create', null, {'text': text}) as Uint8List;
+      _bytes(await _call('create', null, {'text': text}));
   @override
   Future<Map<String, dynamic>> inspect(Uint8List bytes) async =>
-      Map<String, dynamic>.from(await _call('inspect', bytes, {}) as Map);
+      _freeze(await _call('inspect', bytes, {})) as Map<String, dynamic>;
   @override
   Future<Uint8List> edit(Uint8List bytes, Map<String, dynamic> request) async =>
-      await _call('edit', bytes, request) as Uint8List;
+      _bytes(await _call('edit', bytes, request));
+  @override
+  Future<DocumentSnapshot> editInspected(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  ) async {
+    final result = await _call('editInspect', bytes, request) as Map;
+    return DocumentSnapshot(
+      _bytes(result['bytes']),
+      Map<String, dynamic>.from(result['preview'] as Map),
+    );
+  }
+
+  @override
+  Future<Uint8List> image(Uint8List bytes, int slide, int media) async =>
+      _bytes(await _call('image', bytes, {'slide': slide, 'media': media}));
+  @override
+  Future<void> close() async {
+    _closed = true;
+    if (_started) await _worker.close();
+    _sentBytes = null;
+  }
 }
 
-Object _nativeCall(
-  NativeDocumentKind kind,
-  String? library,
-  String operation,
-  Uint8List? bytes,
-  Map<String, dynamic> request,
-) {
-  switch (kind) {
-    case NativeDocumentKind.word:
-      final engine = library == null
-          ? WordCraftBridge.tryOpen()
-          : WordCraftBridge.openLibraryForTesting(library);
-      if (engine == null) {
-        throw StateError('WordCraft недоступен в этой сборке');
-      }
-      if (operation == 'create') {
-        return engine.create(request['text'] as String? ?? '');
-      }
-      if (operation == 'inspect') return engine.inspect(bytes!);
-      if (request['action'] == 'append') {
-        return engine.appendParagraph(bytes!, request['text'] as String);
-      }
-      return engine.edit(bytes!, request);
-    case NativeDocumentKind.grid:
-      final engine = library == null
-          ? GridCraftBridge.tryOpen()
-          : GridCraftBridge.openLibraryForTesting(library);
-      if (engine == null) {
-        throw StateError('GridCraft недоступен в этой сборке');
-      }
-      if (operation == 'create') return engine.create();
-      if (operation == 'inspect') return engine.inspect(bytes!);
-      return engine.edit(bytes!, request);
-    case NativeDocumentKind.deck:
-      final engine = library == null
-          ? DeckCraftBridge.tryOpen()
-          : DeckCraftBridge.openLibraryForTesting(library);
-      if (engine == null) {
-        throw StateError('DeckCraft недоступен в этой сборке');
-      }
-      if (operation == 'create') return engine.create();
-      if (operation == 'inspect') return engine.inspect(bytes!);
-      return engine.edit(bytes!, request);
-    case NativeDocumentKind.pdf:
-      final engine = library == null
-          ? PdfCraftBridge.tryOpen()
-          : PdfCraftBridge.openLibraryForTesting(library);
-      if (engine == null) throw StateError('PdfCraft недоступен в этой сборке');
-      if (operation == 'create') return engine.create();
-      if (operation == 'inspect') return engine.inspect(bytes!);
-      return engine.edit(bytes!, request);
+void _documentWorkerMain((SendPort, Map<String, Object?>) bootstrap) {
+  final kind = NativeDocumentKind.values.byName(bootstrap.$2['kind'] as String);
+  final engine = _NativeEngine(kind, bootstrap.$2['library'] as String?);
+  Uint8List? currentBytes;
+  int? currentToken;
+  serveDocumentWorker(bootstrap.$1, (operation, raw) {
+    final payload = raw as Map;
+    final transfer = payload['bytes'] as TransferableTypedData?;
+    final token = payload['document'] as int?;
+    if (transfer != null) {
+      currentBytes = transfer.materialize().asUint8List();
+      currentToken = token;
+    }
+    if (token != null && (token != currentToken || currentBytes == null)) {
+      throw StateError('Missing worker input snapshot');
+    }
+    final bytes = token == null ? null : currentBytes;
+    final request = Map<String, dynamic>.from(payload['request'] as Map);
+    if (operation == 'editInspect') {
+      final next = engine.call('edit', bytes, request) as Uint8List;
+      final preview = engine.call('inspect', next, const {});
+      return {
+        'bytes': TransferableTypedData.fromList([next]),
+        'preview': preview,
+      };
+    }
+    final result = engine.call(operation, bytes, request);
+    return result is Uint8List
+        ? TransferableTypedData.fromList([result])
+        : result;
+  });
+}
+
+class _NativeEngine {
+  _NativeEngine(this.kind, this.library);
+  final NativeDocumentKind kind;
+  final String? library;
+  Object? _bridge;
+  Object _open() => switch (kind) {
+    NativeDocumentKind.word =>
+      library == null
+          ? WordCraftBridge.tryOpen()!
+          : WordCraftBridge.openLibraryForTesting(library!),
+    NativeDocumentKind.grid =>
+      library == null
+          ? GridCraftBridge.tryOpen()!
+          : GridCraftBridge.openLibraryForTesting(library!),
+    NativeDocumentKind.deck =>
+      library == null
+          ? DeckCraftBridge.tryOpen()!
+          : DeckCraftBridge.openLibraryForTesting(library!),
+    NativeDocumentKind.pdf =>
+      library == null
+          ? PdfCraftBridge.tryOpen()!
+          : PdfCraftBridge.openLibraryForTesting(library!),
+  };
+  Object call(
+    String operation,
+    Uint8List? bytes,
+    Map<String, dynamic> request,
+  ) {
+    final bridge = _bridge ??= _open();
+    switch (kind) {
+      case NativeDocumentKind.word:
+        final engine = bridge as WordCraftBridge;
+        if (operation == 'create') {
+          return engine.create(request['text'] as String? ?? '');
+        }
+        if (operation == 'inspect') return engine.inspect(bytes!);
+        if (request['action'] == 'append') {
+          return engine.appendParagraph(bytes!, request['text'] as String);
+        }
+        return engine.edit(bytes!, request);
+      case NativeDocumentKind.grid:
+        final engine = bridge as GridCraftBridge;
+        if (operation == 'create') return engine.create();
+        if (operation == 'inspect') return engine.inspect(bytes!);
+        return engine.edit(bytes!, request);
+      case NativeDocumentKind.deck:
+        final engine = bridge as DeckCraftBridge;
+        if (operation == 'create') return engine.create();
+        if (operation == 'inspect') return engine.inspect(bytes!);
+        if (operation == 'image') {
+          return engine.image(
+            bytes!,
+            request['slide'] as int,
+            request['media'] as int,
+          );
+        }
+        return engine.edit(bytes!, request);
+      case NativeDocumentKind.pdf:
+        final engine = bridge as PdfCraftBridge;
+        if (operation == 'create') return engine.create();
+        if (operation == 'inspect') return engine.inspect(bytes!);
+        return engine.edit(bytes!, request);
+    }
   }
 }

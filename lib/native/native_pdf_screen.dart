@@ -110,8 +110,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     String? name,
     bool edited = false,
     int page = 0,
+    Map<String, dynamic>? preview,
   }) async {
-    final summary = await engine!.inspect(data);
+    data = immutableDocumentBytes(data);
+    final summary = preview ?? await engine!.inspect(data);
     if (!mounted) return;
     final raw = summary['pages'];
     if (raw is! List || raw.isEmpty) {
@@ -146,6 +148,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     if (previous != null) {
       unawaited(_pageRenderer.close(previous).catchError((Object _) {}));
     }
+    if (widget.backend == null) unawaited(closeDocumentBackend(engine));
     super.dispose();
   }
 
@@ -244,7 +247,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       if (yes != true) return;
     }
     {
-      final updated = await engine!.edit(contents!, {
+      final updated = await engine!.editAndInspect(contents!, {
         'action': action,
         'page': selected,
       });
@@ -255,7 +258,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
           action == 'insert_blank') {
         next++;
       }
-      await load(updated, page: next, edited: true);
+      await load(
+        updated.bytes,
+        preview: updated.preview,
+        page: next,
+        edited: true,
+      );
       tip('Структура PDF изменена');
     }
   });

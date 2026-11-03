@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Latest validated release: alpha 0.15.0 — not a finished office suite.**
+**Latest validated release: alpha 0.16.0 — not a finished office suite.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -11,7 +11,7 @@ English and Russian UI follow the Android language, with a persisted override in
 About. Spreadsheets support pinch zoom and pan; PDF opens at page width in the
 full available canvas, with optional thumbnails and fit controls. Large editor
 tool targets and the approved nested slab navigation remain unchanged.
-See [0.15.0 validation and limits](docs/validation-0.15.0.md).
+See [0.16.0 validation and limits](docs/validation-0.16.0.md).
 
 | Format | Current capability |
 | --- | --- |
@@ -23,9 +23,11 @@ See [0.15.0 validation and limits](docs/validation-0.15.0.md).
 ### Architecture and current limits
 
 Flutter owns touch interaction and display. `DocumentBackend` sends file parsing,
-editing, recalculation and serialization to Dart worker isolates, where the
-bounded C ABI invokes the four pinned Rust adapters. Native buffers are released
-on success and on error. Each edit still serializes and reparses a whole document;
+editing, recalculation and serialization to one persistent Dart worker per native
+backend, where the bounded C ABI invokes the four pinned Rust adapters. Applied
+edits return immutable bytes and their checked view together; PPTX picture reads
+share that worker. Explicit shutdown drains accepted calls before exit. Native
+buffers are released on success and on error. Each edit still serializes and reparses a whole document;
 a persistent native document/session model and faithful page layout are future work.
 DOCX keeps the active paragraph draft locally while typing; moving to another
 paragraph, Done, formatting and Save As flush it through the native adapter.
@@ -35,7 +37,7 @@ and preserves styles on value/formula replacement. Applied Grid edits update
 the app-private working copy. Locally written recovery checkpoints retain pending
 Word/Grid/Deck input and modified PDF bytes after process termination; Home offers
 to resume them. Only the last completed checkpoint is recoverable, and undo history
-is session-local. See docs/validation-0.15.0.md for current checks and limits.
+is session-local. See docs/validation-0.16.0.md for current checks and limits.
 The shared panel navigation follows design/INTERACTION_SPEC.md.
 
 The mobile app integrates four independent upstream projects. It is an independent

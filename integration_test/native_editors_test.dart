@@ -1,3 +1,5 @@
+import 'worker_media_fixture.dart';
+
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:artofficecraft_mobile/l10n/app_strings.dart';
 import 'package:artofficecraft_mobile/ui/sheet_viewport.dart';
@@ -40,6 +42,7 @@ void main() {
       await tester.pumpAndSettle();
       await capture(tester, 'home');
       final word = NativeDocumentBackend.tryOpen(NativeDocumentKind.word)!;
+      addTearDown(() => closeDocumentBackend(word));
       var doc = await word.create('Нативный тест Android');
       doc = await word.edit(doc, {
         'action': 'paragraph',
@@ -150,6 +153,7 @@ void main() {
       expect(find.text(finalText), findsWidgets);
 
       final grid = NativeDocumentBackend.tryOpen(NativeDocumentKind.grid)!;
+      addTearDown(() => closeDocumentBackend(grid));
       var book = await grid.create();
       for (final entry in {
         'A1': '12',
@@ -260,6 +264,7 @@ void main() {
       expect(find.text('75.00%'), findsOneWidget);
 
       final deck = NativeDocumentBackend.tryOpen(NativeDocumentKind.deck)!;
+      addTearDown(() => closeDocumentBackend(deck));
       var slides = await deck.create();
       slides = await deck.edit(slides, {
         'action': 'add_text',
@@ -296,6 +301,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       final pdf = NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf)!;
+      addTearDown(() => closeDocumentBackend(pdf));
       Uint8List pages = await pdf.create();
       pages = await pdf.edit(pages, {'action': 'duplicate', 'page': 0});
       expect(((await pdf.inspect(pages))['pages'] as List).length, 2);
@@ -378,6 +384,7 @@ void main() {
           EditorKind.pdf => NativeDocumentKind.pdf,
         };
         final backend = NativeDocumentBackend.tryOpen(nativeKind)!;
+        addTearDown(() => closeDocumentBackend(backend));
         final base = await backend.create(
           kind == EditorKind.word ? 'Сохранённая основа' : '',
         );
@@ -532,6 +539,7 @@ void main() {
       }
 
       final word = NativeDocumentBackend.tryOpen(NativeDocumentKind.word)!;
+      addTearDown(() => closeDocumentBackend(word));
       final docx = await word.create('Главная');
       await tester.pumpWidget(
         englishScreen(
@@ -549,6 +557,7 @@ void main() {
       expect(find.text('Home'), findsOneWidget);
 
       final grid = NativeDocumentBackend.tryOpen(NativeDocumentKind.grid)!;
+      addTearDown(() => closeDocumentBackend(grid));
       final xlsx = await grid.create();
       await tester.pumpWidget(
         englishScreen(
@@ -592,6 +601,7 @@ void main() {
       await capture(tester, 'english-grid-zoom');
 
       final pdf = NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf)!;
+      addTearDown(() => closeDocumentBackend(pdf));
       final bytes = await pdf.create();
       await tester.pumpWidget(
         englishScreen(
@@ -618,6 +628,131 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'Actual Android: owned workers validate edits, reuse input and close for all four engines',
+    (tester) async {
+      for (final kind in NativeDocumentKind.values) {
+        final backend = NativeDocumentBackend(kind);
+        addTearDown(backend.close);
+        final original = await backend.create('Worker original');
+        final before = await backend.inspect(original);
+        expect(await backend.inspect(original), before);
+        expect(backend.workerStarts, 1);
+        expect(backend.inputTransfers, 1);
+        await expectLater(
+          backend.editInspected(original, {'action': 'not-supported'}),
+          throwsFormatException,
+        );
+        expect(await backend.inspect(original), before);
+        final request = switch (kind) {
+          NativeDocumentKind.word => <String, dynamic>{
+            'action': 'paragraph',
+            'block': 0,
+            'text': 'Worker changed 😀',
+          },
+          NativeDocumentKind.grid => <String, dynamic>{
+            'sheet': 0,
+            'address': 'A1',
+            'value': '42',
+          },
+          NativeDocumentKind.deck => <String, dynamic>{
+            'action': 'add_text',
+            'slide': 0,
+            'text': 'Worker changed 😀',
+          },
+          NativeDocumentKind.pdf => <String, dynamic>{
+            'action': 'duplicate',
+            'page': 0,
+          },
+        };
+        final changed = await backend.editInspected(original, request);
+        switch (kind) {
+          case NativeDocumentKind.word:
+            expect(
+              changed.preview['paragraphs'],
+              contains('Worker changed 😀'),
+            );
+          case NativeDocumentKind.grid:
+            expect(changed.preview['sheets'][0]['cells']['A1']['input'], '42');
+          case NativeDocumentKind.deck:
+            expect(
+              changed.preview['slides'][0]['shapes'].toString(),
+              contains('Worker changed 😀'),
+            );
+          case NativeDocumentKind.pdf:
+            expect(changed.preview['pages'], hasLength(2));
+        }
+        expect(
+          backend.inputTransfers,
+          1,
+          reason: 'Edit + preview do not resend the output to another isolate',
+        );
+        expect(await backend.inspect(changed.bytes), changed.preview);
+        expect(backend.inputTransfers, 2);
+        // A mutable external buffer must never be mistaken for an immutable cached input.
+        final mutable = Uint8List.fromList(original);
+        expect(await backend.inspect(mutable), before);
+        mutable.fillRange(0, mutable.length, 0);
+        await expectLater(backend.inspect(mutable), throwsFormatException);
+        expect(await backend.inspect(original), before);
+        final accepted = backend.inspect(changed.bytes);
+        await Future<void>.delayed(Duration.zero);
+        await backend.close();
+        expect(await accepted, changed.preview);
+        await backend.close();
+        await expectLater(backend.inspect(original), throwsStateError);
+        expect(backend.workerStarts, 1);
+        debugPrint(
+          'WORKER_LIFECYCLE ${kind.name} starts=${backend.workerStarts} inputTransfers=${backend.inputTransfers} passed',
+        );
+      }
+    },
+  );
+
+  testWidgets(
+    'Actual Android: PPTX pictures share one worker/input and preserve slide authorization',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.deck);
+      addTearDown(backend.close);
+      final file = immutableDocumentBytes(workerMediaDeck);
+      final report = await backend.inspect(file);
+      final shapes = report['slides'][1]['shapes'] as List;
+      final media =
+          shapes.firstWhere((s) => s['imageId'] is int)['imageId'] as int;
+      final pictures = await Future.wait(
+        List.generate(3, (_) => backend.image(file, 1, media)),
+      );
+      for (final picture in pictures) {
+        expect(picture, orderedEquals(workerMediaPng));
+      }
+      await expectLater(backend.image(file, 0, media), throwsFormatException);
+      expect(
+        await backend.image(file, 1, media),
+        orderedEquals(workerMediaPng),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: OfficeTheme.build(Brightness.light),
+          home: NativeDeckScreen(
+            backend: backend,
+            launch: EditorLaunch(bytes: file, name: 'Worker picture.pptx'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsWidgets);
+      expect(tester.takeException(), isNull);
+      expect(backend.workerStarts, 1);
+      expect(backend.inputTransfers, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await backend.close();
+      debugPrint(
+        'WORKER_MEDIA starts=1 inputTransfers=1 exactPNG=verified authorization=verified',
+      );
     },
   );
 }

@@ -6,3 +6,4 @@
 
 # Approved HTML UI design is documentation, not app runtime code.
 design/*.html linguist-documentation
+integration_test/worker_media_fixture.dart linguist-generated=true

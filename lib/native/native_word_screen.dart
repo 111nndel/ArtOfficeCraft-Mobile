@@ -113,7 +113,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       final selection = inline.selection;
       setState(() => busy = true);
       try {
-        final updated = await engine!.edit(previous, {
+        final updated = await engine!.editAndInspect(previous, {
           'action': 'paragraph',
           'block': id,
           'text': inline.text,
@@ -127,7 +127,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
           },
           ...patch,
         });
-        await updatePreview(updated);
+        await updatePreview(updated.bytes, preview: updated.preview);
         if (!mounted) return false;
         history.push(previous);
         inline.load(
@@ -180,6 +180,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     inline.removeListener(selectionChanged);
     inline.dispose();
     inlineFocus.dispose();
+    if (widget.backend == null) unawaited(closeDocumentBackend(engine));
     super.dispose();
   }
 
@@ -190,8 +191,12 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     );
   }
 
-  Future<void> updatePreview(Uint8List bytes) async {
-    final summary = await engine!.inspect(bytes);
+  Future<void> updatePreview(
+    Uint8List bytes, {
+    Map<String, dynamic>? preview,
+  }) async {
+    bytes = immutableDocumentBytes(bytes);
+    final summary = preview ?? await engine!.inspect(bytes);
     if (!mounted) return;
     final lines = summary['paragraphs'];
     if (lines is! List) {
@@ -312,11 +317,11 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   Future<void> appendParagraph() => guarded(() async {
     if (document == null) return;
     final previous = document!;
-    final updated = await engine!.edit(previous, {
+    final updated = await engine!.editAndInspect(previous, {
       'action': 'append',
       'text': '',
     });
-    await updatePreview(updated);
+    await updatePreview(updated.bytes, preview: updated.preview);
     if (!mounted) return;
     history.push(previous);
     setState(() => changed = true);
@@ -344,8 +349,16 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     if (document == null || (undo ? !history.canUndo : !history.canRedo)) {
       return;
     }
-    final bytes = undo ? history.undo(document!) : history.redo(document!);
-    await updatePreview(bytes);
+    final previous = document!;
+    final target = undo ? history.undoTarget : history.redoTarget;
+    if (target == null) return;
+    await updatePreview(target);
+    if (!mounted) return;
+    if (undo) {
+      history.undo(previous);
+    } else {
+      history.redo(previous);
+    }
     setState(() => changed = true);
   });
   Future<void> saveAs() => guarded(() async {

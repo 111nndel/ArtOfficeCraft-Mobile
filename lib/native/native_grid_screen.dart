@@ -85,6 +85,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (widget.draft != null) unawaited(widget.draft!.close());
     inputFocus.dispose();
     input.dispose();
+    if (widget.backend == null) unawaited(closeDocumentBackend(bridge));
     super.dispose();
   }
 
@@ -128,6 +129,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     bool edited = false,
     int index = 0,
   }) async {
+    data = immutableDocumentBytes(data);
     final parsed = await bridge!.inspect(data);
     if (!mounted) return;
     final list = parsed['sheets'];
@@ -268,11 +270,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
 
   Future<void> applyEdit(Map<String, dynamic> request) async {
     final previous = book!;
-    final updated = await bridge!.edit(previous, request);
-    final parsed = parsedSheets(await bridge!.inspect(updated));
+    final updated = await bridge!.editAndInspect(previous, request);
+    final parsed = parsedSheets(updated.preview);
     if (!mounted) return;
     history.push(previous);
-    install(updated, parsed);
+    install(updated.bytes, parsed);
     await rememberCurrent();
   }
 
