@@ -71,10 +71,15 @@ async function openPicker(kind){
     const state=command(['shell','dumpsys','activity','activities']);fs.writeFileSync(path.join(proof,'intent-'+kind+'.txt'),state);
     if(!state.includes('typ='+mime))throw Error(`Missing runtime MIME filter ${kind}`);
     verified.push({kind,mime});shot('picker-'+kind);
-    command(['shell','input','keyevent','4']);await pause(300);
+    // Back first closes a provider drawer, if it was restored open.
+    for(let back=0;back<4;back++) {
+      if(nodes().some(n=>n.package===pkg && n.label==='Files'))break;
+      command(['shell','input','keyevent','4']);await pause(300);
+    }
+    await waitFor(n=>n.package===pkg && n.label==='Files','Return to app');
   }
   await openPicker('Spreadsheet');
-  tap(await waitFor(/^Show roots$|^Open navigation drawer$/));
+  if(!nodes().some(n=>n.label==='Open from')) tap(await waitFor(/^Show roots$|^Open navigation drawer$/));
   // ADB-pushed fixtures are not DownloadManager entries; browse the real storage root.
   tap(await waitFor(n=>/^sdk_gphone/.test(n.label) && n['resource-id']==='android:id/title','Emulator storage root'));
   tap(await waitFor('Download'));

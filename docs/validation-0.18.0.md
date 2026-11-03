@@ -57,6 +57,17 @@ to 500%. Instructions stay inside View in the approved slab.
   the selected value while other windows are loaded.
 - An ordinary offline x86_64 profile APK was rebuilt after test manifests were
   restored and passed the package/permission/signature/ELF/ZIP alignment checker.
+- The ordinary app also passed tools/test_grid_touch_import.js on Android 16.
+  All four real ACTION_OPEN_DOCUMENT requests had their exact MIME types. The
+  independent fixture opened through the real system picker. Actual touchscreen
+  DOWN/hold/MOVE/UP events resized the column from 404 to 543 screen pixels and
+  the row from 210 to 121; Undo restored the 210-pixel row and Redo reapplied it.
+  These are emulator display measurements, not the file's document-pixel units.
+  The merged title, colours, borders, date/percentage values and hidden row were
+  visually inspected. The dedicated helper handles restored provider drawers and
+  browses storage directly because ADB-pushed fixtures are not DownloadManager
+  entries. No extra application permissions were needed. The ordinary APK retains
+  the original signing fingerprint and has no INTERNET permission.
 
 ## Limits
 
