@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "policy": "Reviewed source updates only; Android Rust FFI not yet integrated",
+  "policy": "All four engines integrated through bounded FFI; reviewed source commits only; no automatic binary downloads",
   "engines": {
     "wordcraft": {
       "repo": "https://github.com/storytold/wordcraft.git",

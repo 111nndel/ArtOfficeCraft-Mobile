@@ -1,9 +1,10 @@
 """Resolve approved git commits to Cargo path dependencies.
 
 This script does not fetch or execute downloaded source code.
-It refuses dirty or mismatched upstream checkouts. WordCraft and GridCraft
-are integrated; DeckCraft and PDFCraft will use the same pins after porting.
+It refuses dirty or mismatched upstream checkouts, including untracked compiler
+inputs. All four adapters use the exact approved commits.
 """
+from engine_updater import config, clean_source
 import json
 import re
 import subprocess
@@ -18,8 +19,7 @@ def git(path,*args):
                                    stderr=subprocess.STDOUT).strip()
 
 def main():
-    config=json.loads(LOCK.read_text(encoding='utf-8'))
-    pins=config['engines']
+    pins=config()['engines']
     for name in ('wordcraft','gridcraft','deckcraft','pdfcraft'):
         v=pins[name]
         assert re.fullmatch(r'v\d+\.\d+\.\d+',v['tag'])
@@ -30,8 +30,8 @@ def main():
             return 2
         if git(folder,'rev-parse','HEAD')!=v['commit']:
             raise RuntimeError(f'{name}: commit mismatch; refusing build')
-        if git(folder,'status','--porcelain','--untracked-files=no'):
-            raise RuntimeError(f'{name}: modified tracked files; refusing build')
+        if not clean_source(folder):
+            raise RuntimeError(f'{name}: modified or untracked source files; refusing build')
         print(f'{name}: {v["tag"]} {v["commit"][:12]} verified')
     w=pins['wordcraft']
     wbase='../../upstream/staged/wordcraft/'+w['tag']+'-'+w['commit'][:12]+'/crates/'

@@ -1,3 +1,5 @@
+import 'project_info_screen.dart';
+
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -206,6 +208,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'О проекте и лицензиях',
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ProjectInfoScreen(),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Изменить тему',
             onPressed: widget.toggleTheme,

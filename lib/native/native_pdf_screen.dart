@@ -1,3 +1,5 @@
+import '../ui/editor_tools.dart';
+import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 import 'format_limits_notice.dart';
@@ -11,32 +13,41 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
-import 'pdfcraft_bridge.dart';
+
 import 'pdf_page_renderer.dart';
-import 'pdf_page_action_bar.dart';
 
 class NativePdfScreen extends StatefulWidget {
-  const NativePdfScreen({super.key, this.launch, this.onRemember});
+  const NativePdfScreen({
+    super.key,
+    this.launch,
+    this.onRemember,
+    this.backend,
+    this.renderer,
+  });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final DocumentBackend? backend;
+  final PdfPageRenderer? renderer;
   @override
   State<NativePdfScreen> createState() => _NativePdfScreenState();
 }
 
 class _NativePdfScreenState extends State<NativePdfScreen> {
-  late final PdfCraftBridge? engine = PdfCraftBridge.tryOpen();
+  late final DocumentBackend? engine =
+      widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf);
   Uint8List? contents;
   List<Map<String, dynamic>> pages = [];
   String filename = 'Новый документ.pdf';
   int selected = 0;
   bool busy = false, changed = false;
-  final PdfPageRenderer _pageRenderer = PdfPageRenderer();
+  late final PdfPageRenderer _pageRenderer =
+      widget.renderer ?? PdfPageRenderer();
   Future<Uint8List>? _pageImage;
   int? _session;
   final Map<int, Future<Uint8List>> _thumbnailImages = {};
 
   void selectPage(int page) {
-    if (contents == null || page < 0 || page >= pages.length) return;
+    if (busy || contents == null || page < 0 || page >= pages.length) return;
     setState(() {
       selected = page;
       _pageImage = _pageRenderer.render(_session!, page);
@@ -69,7 +80,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     bool edited = false,
     int page = 0,
   }) async {
-    final summary = engine!.inspect(data);
+    final summary = await engine!.inspect(data);
+    if (!mounted) return;
     final raw = summary['pages'];
     if (raw is! List || raw.isEmpty) {
       throw const FormatException('Страницы PDF не найдены');
@@ -95,7 +107,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   void dispose() {
     final previous = _session;
     if (previous != null) {
-      unawaited(_pageRenderer.close(previous));
+      unawaited(_pageRenderer.close(previous).catchError((Object _) {}));
     }
     super.dispose();
   }
@@ -124,7 +136,11 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
 
   Future<void> create() => execute(() async {
     if (!await discard()) return;
-    await load(engine!.create(), name: 'Новый документ.pdf', edited: true);
+    await load(
+      await engine!.create(),
+      name: 'Новый документ.pdf',
+      edited: true,
+    );
     tip('Создан PDF с одной страницей');
   });
   Future<void> open() => execute(() async {
@@ -155,7 +171,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     await rememberCurrent();
     tip('Копия PDF сохранена. Подписи могут стать недействительными.');
   });
-  Future<void> edit(String action) async {
+  Future<void> edit(String action) => execute(() async {
     if (contents == null) return;
     if (action == 'delete') {
       if (pages.length <= 1) {
@@ -183,8 +199,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       );
       if (yes != true) return;
     }
-    await execute(() async {
-      final updated = engine!.edit(contents!, {
+    {
+      final updated = await engine!.edit(contents!, {
         'action': action,
         'page': selected,
       });
@@ -197,9 +213,53 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       }
       await load(updated, page: next, edited: true);
       tip('Структура PDF изменена');
-    });
-  }
+    }
+  });
 
+  List<EditorCommand> get commands => [
+    EditorCommand(
+      'Предыдущая',
+      Icons.chevron_left,
+      selected > 0 && !busy ? () => selectPage(selected - 1) : null,
+    ),
+    EditorCommand(
+      'Следующая',
+      Icons.chevron_right,
+      selected + 1 < pages.length && !busy
+          ? () => selectPage(selected + 1)
+          : null,
+    ),
+    EditorCommand(
+      'Повернуть влево',
+      Icons.rotate_left,
+      contents != null && !busy ? () => edit('rotate_ccw') : null,
+    ),
+    EditorCommand(
+      'Повернуть вправо',
+      Icons.rotate_right,
+      contents != null && !busy ? () => edit('rotate_cw') : null,
+    ),
+    EditorCommand(
+      'Копировать страницу',
+      Icons.copy,
+      contents != null && !busy ? () => edit('duplicate') : null,
+    ),
+    EditorCommand(
+      'Вставить страницу',
+      Icons.note_add_outlined,
+      contents != null && !busy ? () => edit('insert_blank') : null,
+    ),
+    EditorCommand(
+      'Удалить страницу',
+      Icons.delete_outline,
+      pages.length > 1 && !busy ? () => edit('delete') : null,
+    ),
+    EditorCommand(
+      'Сохранить копию',
+      Icons.save_outlined,
+      contents != null && !busy ? save : null,
+    ),
+  ];
   Future<Uint8List> thumbnailFor(int index) {
     final old = _thumbnailImages[index];
     if (old != null) return old;
@@ -300,6 +360,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   @override
   Widget build(BuildContext context) {
     final available = engine != null;
+    final compact = MediaQuery.sizeOf(context).height < 650;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return UnsavedChangesGuard(
       dirty: changed,
       busy: busy,
@@ -315,6 +377,25 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                 : 'Rust недоступен',
             color: const Color(0xffc94e59),
           ),
+          bottom: keyboardOpen
+              ? null
+              : EditorSectionTabs(
+                  color: const Color(0xffc94e59),
+                  height: (MediaQuery.textScalerOf(context).scale(16) + 30)
+                      .clamp(56.0, 90.0),
+                  sections: [
+                    EditorToolSection('Главная', commands),
+                    EditorToolSection('Страницы', commands),
+                    EditorToolSection('Файл', [
+                      EditorCommand(
+                        'Открыть PDF',
+                        Icons.folder_open,
+                        available && !busy ? open : null,
+                      ),
+                      commands.last,
+                    ]),
+                  ],
+                ),
           actions: [
             IconButton(
               tooltip: 'Открыть PDF',
@@ -331,36 +412,25 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         body: !available
             ? const Center(child: Text('PDFCraft Rust недоступен'))
             : contents == null
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.picture_as_pdf_outlined, size: 50),
-                    const SizedBox(height: 12),
-                    const Text('PDFCraft — работа со страницами'),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: open,
-                      icon: const Icon(Icons.folder_open),
-                      label: const Text('Открыть PDF'),
-                    ),
-                    TextButton.icon(
-                      onPressed: create,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Новый PDF'),
-                    ),
-                  ],
-                ),
+            ? EditorWelcome(
+                icon: Icons.picture_as_pdf_outlined,
+                title: 'PDF',
+                openLabel: 'Открыть PDF',
+                createLabel: 'Новый PDF',
+                onOpen: open,
+                onCreate: create,
+                busy: busy,
               )
             : Column(
                 children: [
-                  const FormatLimitsNotice(
-                    summary: 'PDF · возможности редактора',
-                    details:
-                        'PDFCraft изменяет структуру страниц; '
-                        'Android отображает содержимое. Формы, сложные '
-                        'ссылки и цифровые подписи требуют отдельной проверки.',
-                  ),
+                  if (!compact)
+                    const FormatLimitsNotice(
+                      summary: 'PDF · возможности редактора',
+                      details:
+                          'PDFCraft изменяет структуру страниц; '
+                          'Android отображает содержимое. Формы, сложные '
+                          'ссылки и цифровые подписи требуют отдельной проверки.',
+                    ),
                   Expanded(
                     child: Center(
                       child: Padding(
@@ -418,19 +488,28 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(
-                    height: 136,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: pages.length,
-                      itemBuilder: (c, i) => pageThumb(i),
+                  if (!compact)
+                    SizedBox(
+                      height: 136,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: pages.length,
+                        itemBuilder: (c, i) => pageThumb(i),
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Text(
+                      'Страница ${selected + 1} из ${pages.length}',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
-                  PdfPageActionBar(
-                    selected: selected,
-                    pageCount: pages.length,
-                    busy: busy,
-                    onAction: edit,
+                  EditorCommandBar(
+                    commands: commands,
+                    color: const Color(0xffc94e59),
                   ),
                   if (busy) const LinearProgressIndicator(),
                 ],

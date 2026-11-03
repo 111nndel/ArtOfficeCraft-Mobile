@@ -1,3 +1,5 @@
+import '../ui/editor_tools.dart';
+import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 import 'format_limits_notice.dart';
@@ -10,18 +12,24 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
-import 'gridcraft_bridge.dart';
 
 class NativeGridScreen extends StatefulWidget {
-  const NativeGridScreen({super.key, this.launch, this.onRemember});
+  const NativeGridScreen({
+    super.key,
+    this.launch,
+    this.onRemember,
+    this.backend,
+  });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final DocumentBackend? backend;
   @override
   State<NativeGridScreen> createState() => _NativeGridScreenState();
 }
 
 class _NativeGridScreenState extends State<NativeGridScreen> {
-  late final GridCraftBridge? bridge = GridCraftBridge.tryOpen();
+  late final DocumentBackend? bridge =
+      widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.grid);
   Uint8List? book;
   String filename = 'Книга.xlsx', selected = 'A1';
   int sheetIndex = 0;
@@ -30,13 +38,19 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   List<Map<String, dynamic>> sheets = [];
   @override
   void dispose() {
+    inputFocus.dispose();
     input.dispose();
     super.dispose();
   }
 
-  Map<String, dynamic> get cells => sheets.isNotEmpty
-      ? Map<String, dynamic>.from(sheets[sheetIndex]['cells'] as Map)
-      : {};
+  Map<String, dynamic> _sheetCells = {};
+  Map<String, dynamic> get cells => _sheetCells;
+  void refreshCells() {
+    _sheetCells = sheets.isEmpty
+        ? {}
+        : Map<String, dynamic>.from(sheets[sheetIndex]['cells'] as Map);
+  }
+
   String get currentInput {
     final value = cells[selected];
     return value is Map ? value['input']?.toString() ?? '' : '';
@@ -62,13 +76,14 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
   }
 
-  void setBook(
+  Future<void> setBook(
     Uint8List data, {
     String? name,
     bool edited = false,
     int index = 0,
-  }) {
-    final parsed = bridge!.inspect(data);
+  }) async {
+    final parsed = await bridge!.inspect(data);
+    if (!mounted) return;
     final list = parsed['sheets'];
     if (list is! List || list.isEmpty) {
       throw const FormatException('Листы не найдены');
@@ -78,6 +93,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       sheetIndex = index.clamp(0, sheets.length - 1);
       selected = 'A1';
+      refreshCells();
       input.text = currentInput;
       if (name != null) filename = name;
       modified = edited;
@@ -108,7 +124,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
 
   Future<void> create() => run(() async {
     if (!await askDiscard()) return;
-    var bytes = bridge!.create();
+    var bytes = await bridge!.create();
     if (widget.launch?.template == true) {
       const values = {
         'A1': 'Статья',
@@ -129,17 +145,20 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         'D5': '=SUM(D2:D3)',
       };
       for (final entry in values.entries) {
-        bytes = bridge!.editCell(bytes, 0, entry.key, entry.value);
+        bytes = await bridge!.edit(bytes, {
+          'sheet': 0,
+          'address': entry.key,
+          'value': entry.value,
+        });
       }
     }
-    setBook(
+    await setBook(
       bytes,
       name: widget.launch?.template == true
           ? 'Бюджет команды.xlsx'
           : 'Новая книга.xlsx',
       edited: true,
     );
-    tip('XLSX создан через GridCraft');
   });
   Future<void> open() => run(() async {
     if (!await askDiscard()) return;
@@ -150,7 +169,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       throw const FormatException('Размер файла более 64 МБ');
     }
     final name = importedFilename(path, 'xlsx');
-    setBook(await file.readAsBytes(), name: name);
+    await setBook(await file.readAsBytes(), name: name);
     await rememberCurrent();
     tip('XLSX прочитан GridCraft');
   });
@@ -176,13 +195,19 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (book == null) return;
     final before = selected;
     final idx = sheetIndex;
-    final updated = bridge!.editCell(book!, idx, before, input.text);
-    final parsed = bridge!.inspect(updated);
+    final updated = await bridge!.edit(book!, {
+      'sheet': idx,
+      'address': before,
+      'value': input.text,
+    });
+    final parsed = await bridge!.inspect(updated);
+    if (!mounted) return;
     final list = parsed['sheets'] as List;
     setState(() {
       book = updated;
       sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       modified = true;
+      refreshCells();
       input.text = currentInput;
     });
     FocusManager.instance.primaryFocus?.unfocus();
@@ -195,8 +220,32 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   void chooseSheet(int idx) => setState(() {
     sheetIndex = idx;
     selected = 'A1';
+    refreshCells();
     input.text = currentInput;
   });
+  List<EditorCommand> get commands => [
+    EditorCommand(
+      'Ввести значение',
+      Icons.edit_outlined,
+      book != null && !busy ? () => inputFocus.requestFocus() : null,
+    ),
+    EditorCommand(
+      'Применить',
+      Icons.check,
+      book != null && !busy ? commit : null,
+    ),
+    EditorCommand(
+      'Скрыть / показать листы',
+      Icons.tab,
+      book != null && !busy ? () => setState(() => showTabs = !showTabs) : null,
+    ),
+    EditorCommand(
+      'Сохранить копию',
+      Icons.save_outlined,
+      book != null && !busy ? save : null,
+    ),
+  ];
+  final inputFocus = FocusNode();
   Widget header(String text) => Container(
     height: 56,
     alignment: Alignment.center,
@@ -210,7 +259,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     final item = cells[address];
     final value = item is Map ? item['display']?.toString() ?? '' : '';
     return InkWell(
-      onTap: () => selectCell(address),
+      key: ValueKey('grid-cell-$address'),
+      onTap: busy ? null : () => selectCell(address),
       child: Container(
         height: 56,
         alignment: Alignment.centerLeft,
@@ -231,31 +281,54 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     );
   }
 
-  Widget grid() => ColoredBox(
-    color: Colors.white,
-    child: SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+  Widget grid() => LayoutBuilder(
+    builder: (context, constraints) => ColoredBox(
+      color: Colors.white,
       child: SingleChildScrollView(
-        child: Table(
-          defaultColumnWidth: const FixedColumnWidth(116),
-          border: TableBorder.all(color: const Color(0xffd5dde1), width: .7),
-          children: [
-            TableRow(
-              children: [
-                header(''),
-                for (int c = 0; c < 12; c++)
-                  header(String.fromCharCode(65 + c)),
-              ],
-            ),
-            for (int r = 1; r <= 55; r++)
-              TableRow(
-                children: [
-                  header(r.toString()),
-                  for (int c = 0; c < 12; c++)
-                    cell(String.fromCharCode(65 + c) + r.toString()),
-                ],
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 52 + 12 * 116,
+          child: Column(
+            children: [
+              if (constraints.maxHeight > 100)
+                Row(
+                  children: [
+                    SizedBox(width: 52, child: header('')),
+                    for (var c = 0; c < 12; c++)
+                      SizedBox(
+                        width: 116,
+                        child: header(String.fromCharCode(65 + c)),
+                      ),
+                  ],
+                ),
+              Expanded(
+                child: ListView.builder(
+                  key: const Key('grid-rows'),
+                  itemCount: 55,
+                  itemExtent: 56,
+                  itemBuilder: (context, index) => DecoratedBox(
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xffe4e8ee)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 52, child: header('${index + 1}')),
+                        for (var c = 0; c < 12; c++)
+                          SizedBox(
+                            width: 116,
+                            child: cell(
+                              '${String.fromCharCode(65 + c)}${index + 1}',
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     ),
@@ -269,7 +342,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         if (!mounted) return;
         if (request.bytes != null) {
           run(() async {
-            setBook(request.bytes!, name: request.name);
+            await setBook(request.bytes!, name: request.name);
             await rememberCurrent();
           });
         } else if (request.create) {
@@ -295,6 +368,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   Widget build(BuildContext context) {
     final online = bridge != null;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final compact = MediaQuery.sizeOf(context).height < 650;
     return UnsavedChangesGuard(
       dirty: modified,
       busy: busy,
@@ -309,6 +383,25 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             status: online ? 'GridCraft Rust · XLSX' : 'Rust недоступен',
             color: const Color(0xff17815c),
           ),
+          bottom: keyboardOpen
+              ? null
+              : EditorSectionTabs(
+                  color: const Color(0xff17815c),
+                  height: (MediaQuery.textScalerOf(context).scale(16) + 30)
+                      .clamp(56.0, 90.0),
+                  sections: [
+                    EditorToolSection('Главная', commands),
+                    EditorToolSection('Формулы', commands),
+                    EditorToolSection('Файл', [
+                      EditorCommand(
+                        'Открыть XLSX',
+                        Icons.folder_open,
+                        online && !busy ? open : null,
+                      ),
+                      commands.last,
+                    ]),
+                  ],
+                ),
           actions: [
             IconButton(
               tooltip: 'Открыть XLSX',
@@ -329,30 +422,18 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 ),
               )
             : book == null
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.grid_on_outlined, size: 46),
-                    const SizedBox(height: 12),
-                    const Text('GridCraft — редактор XLSX'),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: open,
-                      icon: const Icon(Icons.folder_open),
-                      label: const Text('Открыть XLSX'),
-                    ),
-                    TextButton.icon(
-                      onPressed: create,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Создать XLSX'),
-                    ),
-                  ],
-                ),
+            ? EditorWelcome(
+                icon: Icons.grid_on_outlined,
+                title: 'Таблицы',
+                openLabel: 'Открыть XLSX',
+                createLabel: 'Создать XLSX',
+                onOpen: open,
+                onCreate: create,
+                busy: busy,
               )
             : Column(
                 children: [
-                  if (!keyboardOpen)
+                  if (!keyboardOpen && !compact)
                     const FormatLimitsNotice(
                       summary: 'XLSX · ограничения просмотра',
                       details:
@@ -380,6 +461,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                       Expanded(
                         child: TextField(
                           controller: input,
+                          focusNode: inputFocus,
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             hintText: 'Введите…',
@@ -402,7 +484,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                       ),
                     ],
                   ),
-                  if (showTabs && !keyboardOpen)
+                  if (showTabs && !keyboardOpen && !compact)
                     SizedBox(
                       height: 56,
                       child: ListView(
@@ -410,7 +492,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                         children: [
                           for (int i = 0; i < sheets.length; i++)
                             TextButton(
-                              onPressed: () => chooseSheet(i),
+                              onPressed: busy ? null : () => chooseSheet(i),
                               child: Text(
                                 sheets[i]['name']?.toString() ?? 'Лист',
                                 style: TextStyle(
@@ -424,49 +506,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                       ),
                     ),
                   if (!keyboardOpen)
-                    SafeArea(
-                      top: false,
-                      child: SizedBox(
-                        height: 68,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 5,
-                          ),
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: () =>
-                                  setState(() => showTabs = !showTabs),
-                              icon: const Icon(Icons.view_carousel_outlined),
-                              label: Text(
-                                showTabs ? 'Скрыть листы' : 'Показать листы',
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 52),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton.icon(
-                              onPressed: busy ? null : create,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Новая книга'),
-                              style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 52),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton.icon(
-                              onPressed: busy ? null : save,
-                              icon: const Icon(Icons.save_outlined),
-                              label: const Text('Сохранить копию'),
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size(0, 52),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    EditorCommandBar(
+                      commands: commands,
+                      color: const Color(0xff17815c),
                     ),
                   if (busy) const LinearProgressIndicator(),
                 ],

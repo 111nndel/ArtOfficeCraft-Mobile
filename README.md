@@ -2,14 +2,38 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.9.0 — not a finished office suite.**
+**Status: alpha 0.10.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
-| DOCX / WordCraft | Rust FFI: create, parse text, append paragraph and save a new copy. No complete layout or formatting editing. |
-| XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Limited preview; no full charts/styles. |
+| DOCX / WordCraft | Create/read DOCX, edit existing plain paragraphs, selected bold/italic/underline/font size and paragraph alignment/spacing; undo/redo; save a new copy. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
+| XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Lazy rows; bounded preview (55 × 12, up to 1600 populated cells inspected per sheet); no full charts/styles. |
 | PPTX / DeckCraft | Create/import PPTX, add/delete slides, add/edit text, Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
 | PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model basic page organization and Save As. Complex editing/forms/signing not complete. |
+
+### Architecture and current limits
+
+Flutter owns touch interaction and display. `DocumentBackend` sends file parsing,
+editing, recalculation and serialization to Dart worker isolates, where the
+bounded C ABI invokes the four pinned Rust adapters. Native buffers are released
+on success and on error. Each edit still serializes and reparses a whole document;
+a persistent native document/session model and faithful page layout are future work.
+
+The mobile app integrates four independent upstream projects. It is an independent
+Android port, rather than a GitHub fork with a single upstream parent:
+
+| Engine | Original source | Pinned version |
+| --- | --- | --- |
+| WordCraft | https://github.com/storytold/wordcraft | v0.14.0 |
+| GridCraft | https://github.com/storytold/gridcraft | v0.15.0 |
+| DeckCraft | https://github.com/storytold/deckcraft | v0.14.1 |
+| PDFCraft | https://github.com/storytold/pdfcraft | v0.17.0 |
+
+Exact commits are recorded in `upstream/engines.lock.json` and embedded in the
+native binary (`ac_engine_info`). The About screen reads those binary values.
+Rust dependency license texts are included in the APK and in its Licenses screen.
+Updates require reviewed source changes, compatible adapters, tests and a new APK;
+there is no runtime download or replacement of native engines.
 
 ### Independence and license
 
@@ -32,7 +56,8 @@ Then from a PowerShell prompt in this repository:
     flutter pub get
     flutter analyze
     flutter test
-    .\native\build_android_arm64.ps1
+    python tools/collect_rust_licenses.py
+    .\native\build_android_arm64.ps1 -Release
     flutter build apk --debug --target-platform android-arm64
 
 The native build verifies locked source commits and refuses modified upstream checkouts. ANDROID_HOME should point to Android SDK; ANDROID_NDK_HOME is optional if Android NDK is installed under SDK/ndk.
@@ -55,7 +80,12 @@ INTERNET permission added for VM-service debugging and hot reload.
 Consequently Flutter network debugging/hot reload may be unavailable.
 Verified APKs must pass an aapt dump permissions check before release.
 Android PdfRenderer uses a temporary app-private copy of the document
-and removes it after the page has been rendered.
+and removes it when its session closes or is replaced.
+
+### Earlier release validation and history
+
+The version-specific results below describe earlier builds. They are not a
+claim of complete compatibility or of testing on Vivo hardware.
 
 ### PDF session lifecycle (0.7.0)
 

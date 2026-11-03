@@ -1,3 +1,7 @@
+import '../ui/editor_tools.dart';
+import 'word_paragraph_editor.dart';
+import 'document_history.dart';
+import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 import 'format_limits_notice.dart';
@@ -10,30 +14,38 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
-import 'wordcraft_bridge.dart';
 
 /// Real DOCX read/append/save path, not a full Word layout renderer.
 class NativeWordScreen extends StatefulWidget {
-  const NativeWordScreen({super.key, this.launch, this.onRemember});
+  const NativeWordScreen({
+    super.key,
+    this.launch,
+    this.onRemember,
+    this.backend,
+  });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final DocumentBackend? backend;
   @override
   State<NativeWordScreen> createState() => _NativeWordScreenState();
 }
 
 class _NativeWordScreenState extends State<NativeWordScreen> {
-  late final WordCraftBridge? engine = WordCraftBridge.tryOpen();
-  final TextEditingController paragraph = TextEditingController();
+  late final DocumentBackend? engine =
+      widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.word);
+  final history = DocumentHistory();
+  List<Map<String, dynamic>> blocks = [];
+  int? selectedBlock;
   Uint8List? document;
   List<String> paragraphs = [];
   String filename = 'Документ.docx';
   int tables = 0;
   bool changed = false;
   bool busy = false;
+  bool waitingForText = false;
 
   @override
   void dispose() {
-    paragraph.dispose();
     super.dispose();
   }
 
@@ -44,8 +56,9 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     );
   }
 
-  void updatePreview(Uint8List bytes) {
-    final summary = engine!.inspect(bytes);
+  Future<void> updatePreview(Uint8List bytes) async {
+    final summary = await engine!.inspect(bytes);
+    if (!mounted) return;
     final lines = summary['paragraphs'];
     if (lines is! List) {
       throw const FormatException('WordCraft не вернул абзацы');
@@ -53,6 +66,12 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     setState(() {
       document = bytes;
       paragraphs = lines.map((item) => item.toString()).toList();
+      blocks = (summary['blocks'] as List? ?? [])
+          .map((b) => Map<String, dynamic>.from(b as Map))
+          .toList();
+      selectedBlock =
+          blocks.where((b) => b['editable'] == true).firstOrNull?['block']
+              as int?;
       tables = (summary['tables'] as num?)?.toInt() ?? 0;
     });
   }
@@ -70,7 +89,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   }
 
   Future<void> createNew() => guarded(() async {
-    var bytes = engine!.create(
+    var bytes = await engine!.create(
       widget.launch?.template == true ? 'План проекта' : '',
     );
     if (widget.launch?.template == true) {
@@ -82,17 +101,17 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         'Следующий шаг',
         'Определите ближайшую задачу и ответственного.',
       ]) {
-        bytes = engine!.appendParagraph(bytes, text);
+        bytes = await engine!.edit(bytes, {'action': 'append', 'text': text});
       }
     }
-    updatePreview(bytes);
+    await updatePreview(bytes);
     setState(() {
       filename = widget.launch?.template == true
           ? 'План проекта.docx'
           : 'Новый документ.docx';
       changed = true;
     });
-    inform('Новый DOCX создан в WordCraft. Сохраните копию на устройство.');
+    history.clear();
   });
 
   Future<void> openDocument() => guarded(() async {
@@ -128,7 +147,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       );
     }
     final data = await file.readAsBytes();
-    updatePreview(data);
+    await updatePreview(data);
     setState(() {
       filename = importedFilename(selected, 'docx');
       if (!filename.toLowerCase().endsWith('.docx')) {
@@ -137,26 +156,96 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       changed = false;
     });
     await rememberCurrent();
+    history.clear();
     inform('Файл открыт локальным движком WordCraft');
   });
 
   Future<void> appendParagraph() => guarded(() async {
-    if (document == null) {
-      inform('Сначала создайте или откройте DOCX');
-      return;
-    }
-    final value = paragraph.text.trim();
-    if (value.isEmpty) return;
-    final bytes = engine!.appendParagraph(document!, value);
-    updatePreview(bytes);
+    if (document == null) return;
+    final request = await paragraphRequest(const {'text': ''}, insert: true);
+    if (request == null || !mounted) return;
+    final previous = document!;
+    final bytes = await engine!.edit(previous, {
+      'action': 'append',
+      'text': request['text'],
+    });
+    await updatePreview(bytes);
+    history.push(previous);
+    setState(() => changed = true);
+  });
+
+  Future<void> editParagraph(Map<String, dynamic> block) => guarded(() async {
+    if (document == null || block['editable'] != true) return;
+    final request = await paragraphRequest(block);
+    if (request == null || !mounted) return;
+    final previous = document!;
+    final bytes = await engine!.edit(previous, {
+      'action': 'paragraph',
+      'block': block['block'],
+      ...request,
+    });
+    await updatePreview(bytes);
+    history.push(previous);
     setState(() {
       changed = true;
-      paragraph.clear();
+      selectedBlock = block['block'] as int;
     });
-    // Reveal the edited document after successful entry on compact phones.
-    FocusManager.instance.primaryFocus?.unfocus();
-    inform('Абзац добавлен в модель документа WordCraft');
   });
+  Future<Map<String, dynamic>?> paragraphRequest(
+    Map<String, dynamic> block, {
+    bool insert = false,
+  }) async {
+    setState(() => waitingForText = true);
+    try {
+      return await showWordParagraphEditor(
+        context,
+        block: block,
+        insert: insert,
+      );
+    } finally {
+      if (mounted) setState(() => waitingForText = false);
+    }
+  }
+
+  Future<void> restoreHistory(bool undo) => guarded(() async {
+    if (document == null || (undo ? !history.canUndo : !history.canRedo)) {
+      return;
+    }
+    final bytes = undo ? history.undo(document!) : history.redo(document!);
+    await updatePreview(bytes);
+    setState(() => changed = true);
+  });
+  List<EditorCommand> get commands => [
+    EditorCommand(
+      'Новый абзац',
+      Icons.add,
+      document != null && !busy ? appendParagraph : null,
+    ),
+    EditorCommand(
+      'Изменить текст',
+      Icons.edit_outlined,
+      !busy && selectedBlock != null
+          ? () => editParagraph(
+              blocks.firstWhere((b) => b['block'] == selectedBlock),
+            )
+          : null,
+    ),
+    EditorCommand(
+      'Отменить',
+      Icons.undo,
+      !busy && history.canUndo ? () => restoreHistory(true) : null,
+    ),
+    EditorCommand(
+      'Повторить',
+      Icons.redo,
+      !busy && history.canRedo ? () => restoreHistory(false) : null,
+    ),
+    EditorCommand(
+      'Сохранить копию',
+      Icons.save_outlined,
+      document != null && !busy ? saveAs : null,
+    ),
+  ];
 
   Future<void> saveAs() => guarded(() async {
     if (document == null) return;
@@ -188,7 +277,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         if (!mounted) return;
         if (request.bytes != null) {
           guarded(() async {
-            updatePreview(request.bytes!);
+            await updatePreview(request.bytes!);
             setState(() {
               filename = request.name ?? filename;
               changed = false;
@@ -231,6 +320,25 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
             status: enabled ? 'WordCraft Rust · DOCX' : 'Rust недоступен',
             color: const Color(0xff3565ca),
           ),
+          bottom: keyboardOpen
+              ? null
+              : EditorSectionTabs(
+                  color: const Color(0xff3565ca),
+                  height: (MediaQuery.textScalerOf(context).scale(16) + 30)
+                      .clamp(56.0, 90.0),
+                  sections: [
+                    EditorToolSection('Главная', commands),
+                    EditorToolSection('Вставка', [commands.first]),
+                    EditorToolSection('Файл', [
+                      EditorCommand(
+                        'Открыть DOCX',
+                        Icons.folder_open,
+                        enabled && !busy ? openDocument : null,
+                      ),
+                      commands.last,
+                    ]),
+                  ],
+                ),
           actions: [
             IconButton(
               tooltip: 'Открыть DOCX',
@@ -256,26 +364,14 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
               ),
             if (enabled && document == null)
               Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.description_outlined, size: 48),
-                      const SizedBox(height: 16),
-                      const Text('Работа с DOCX через Rust WordCraft'),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: busy ? null : openDocument,
-                        icon: const Icon(Icons.folder_open),
-                        label: const Text('Открыть DOCX'),
-                      ),
-                      TextButton.icon(
-                        onPressed: busy ? null : createNew,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Новый DOCX'),
-                      ),
-                    ],
-                  ),
+                child: EditorWelcome(
+                  icon: Icons.description_outlined,
+                  title: 'Документы',
+                  openLabel: 'Открыть DOCX',
+                  createLabel: 'Новый DOCX',
+                  onOpen: openDocument,
+                  onCreate: createNew,
+                  busy: busy,
                 ),
               )
             else if (document != null) ...[
@@ -285,7 +381,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   details:
                       'Текстовый предпросмотр: таблицы ($tables), '
                       'изображения и точная вёрстка пока не отображаются. '
-                      'Изменять существующий текст в этой сборке нельзя.',
+                      'Коснитесь обычного абзаца для изменения текста и оформления. '
+                      'Абзацы с объектами и исправлениями доступны для чтения.',
                 ),
               Expanded(
                 child: Container(
@@ -304,17 +401,78 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              for (final line in paragraphs)
+                              for (final block in blocks)
                                 Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Text(
-                                    line,
-                                    textAlign: TextAlign.justify,
-                                    style: const TextStyle(
-                                      fontFamily: 'serif',
-                                      color: Color(0xff27313d),
-                                      fontSize: 17,
-                                      height: 1.5,
+                                  padding: EdgeInsets.only(
+                                    bottom:
+                                        (block['spaceAfter'] as num?)
+                                            ?.toDouble() ??
+                                        12,
+                                  ),
+                                  child: InkWell(
+                                    onTap: busy || block['editable'] != true
+                                        ? null
+                                        : () => editParagraph(block),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 7,
+                                      ),
+                                      child: Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            for (final run
+                                                in (block['runs'] as List? ??
+                                                    []))
+                                              TextSpan(
+                                                text:
+                                                    run['text']?.toString() ??
+                                                    '',
+                                                style: TextStyle(
+                                                  fontWeight:
+                                                      run['bold'] == true
+                                                      ? FontWeight.bold
+                                                      : FontWeight.normal,
+                                                  fontStyle:
+                                                      run['italic'] == true
+                                                      ? FontStyle.italic
+                                                      : FontStyle.normal,
+                                                  decoration:
+                                                      run['underline'] == true
+                                                      ? TextDecoration.underline
+                                                      : TextDecoration.none,
+                                                  fontSize:
+                                                      ((run['size'] as num?)
+                                                              ?.toDouble() ??
+                                                          12) *
+                                                      1.33,
+                                                ),
+                                              ),
+                                            if ((block['runs'] as List? ?? [])
+                                                .isEmpty)
+                                              TextSpan(
+                                                text:
+                                                    block['text']
+                                                            ?.toString()
+                                                            .isNotEmpty ==
+                                                        true
+                                                    ? block['text'].toString()
+                                                    : 'Коснитесь, чтобы начать писать',
+                                              ),
+                                          ],
+                                        ),
+                                        textAlign: switch (block['align']) {
+                                          'left' => TextAlign.left,
+                                          'center' => TextAlign.center,
+                                          'right' => TextAlign.right,
+                                          _ => TextAlign.justify,
+                                        },
+                                        style: const TextStyle(
+                                          fontFamily: 'serif',
+                                          color: Color(0xff27313d),
+                                          fontSize: 17,
+                                          height: 1.5,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -326,70 +484,13 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   ),
                 ),
               ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(11),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: paragraph,
-                        maxLines: keyboardOpen ? 1 : 2,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => appendParagraph(),
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                          labelText: 'Новый абзац',
-                        ),
-                      ),
-                      const SizedBox(height: 7),
-                      LayoutBuilder(
-                        builder: (context, size) {
-                          final add = FilledButton.icon(
-                            onPressed: !busy ? appendParagraph : null,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Добавить абзац'),
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                            ),
-                          );
-                          final save = OutlinedButton.icon(
-                            onPressed: !busy ? saveAs : null,
-                            icon: const Icon(Icons.save_outlined),
-                            label: const Text('Сохранить копию'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 52),
-                            ),
-                          );
-                          if (keyboardOpen) {
-                            return SizedBox(width: double.infinity, child: add);
-                          }
-                          if (size.maxWidth < 440) {
-                            return Column(
-                              children: [
-                                SizedBox(width: double.infinity, child: add),
-                                const SizedBox(height: 6),
-                                SizedBox(width: double.infinity, child: save),
-                              ],
-                            );
-                          }
-                          return Row(
-                            children: [
-                              Expanded(child: add),
-                              const SizedBox(width: 8),
-                              Expanded(child: save),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+              if (!keyboardOpen)
+                EditorCommandBar(
+                  commands: commands,
+                  color: const Color(0xff3565ca),
                 ),
-              ),
             ],
-            if (busy) const LinearProgressIndicator(),
+            if (busy && !waitingForText) const LinearProgressIndicator(),
           ],
         ),
       ),

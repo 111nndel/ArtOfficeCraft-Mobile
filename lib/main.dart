@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 
 import 'ui/home_screen.dart';
 import 'ui/office_theme.dart';
+import 'ui/project_info_screen.dart';
 
 export 'ui/home_screen.dart' show HomeScreen;
 export 'workspace/editor_kind.dart';
 
-void main() => runApp(const ArtOfficeCraftApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  registerRustLicenses();
+  runApp(const ArtOfficeCraftApp());
+}
 
 class ArtOfficeCraftApp extends StatefulWidget {
   const ArtOfficeCraftApp({super.key});
