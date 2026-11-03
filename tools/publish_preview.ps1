@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{40}$')][string]$Commit,
     [Parameter(Mandatory=$true)][ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$')][string]$Tag,
     [Parameter(Mandatory=$true)][string]$Notes,
-    [string]$Gh = 'gh'
+    [string]$Gh = 'gh',
+    [switch]$VerifyOnly
 )
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -31,14 +32,21 @@ try {
     $previousErrorAction = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        & (Join-Path $buildTools 'apksigner.bat') verify $apk
+        $signature = & (Join-Path $buildTools 'apksigner.bat') verify --print-certs $apk
         $signatureExit = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorAction
     }
     if ($signatureExit -ne 0) {throw 'APK signature verification failed'}
+    if (($signature -join "`n") -notmatch 'Signer #1 certificate SHA-256 digest: 4e16cc21d19cdcde840361cd34fbdcfbf901b48c6f8ff66ef473e7ddf4a05005') {
+        throw 'Unexpected signing certificate: restore the established preview key; do not publish an incompatible update'
+    }
     & (Join-Path $buildTools 'zipalign.exe') -c -P 16 4 $apk
     if ($LASTEXITCODE -ne 0) {throw 'APK ZIP alignment failed'}
+    if ($VerifyOnly) {
+        Write-Output 'APK checks and established preview certificate verified; nothing published'
+        return
+    }
     $folder = Join-Path $root "build\publish-$Tag"
     New-Item -ItemType Directory -Force $folder | Out-Null
     $hash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()

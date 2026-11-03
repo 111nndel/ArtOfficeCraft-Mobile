@@ -25,6 +25,14 @@ is present on the repository's default branch; branch pushes work beforehand.
    through GitHub CLI. A published release is never overwritten by a rerun.
 
 Jobs use GitHub-hosted Ubuntu 24.04, Java 21 and Android API/build-tools 36.
+The first full successful cloud run was
+[41706407847](https://github.com/111nndel/ArtOfficeCraft-Mobile/actions/runs/41706407847):
+91 Flutter tests, 17 Rust tests, four updater tests, clean analysis and an ARM64
+APK passing package/offline/16-KiB/94-licence checks. The Windows fallback
+publisher's certificate guard was separately exercised with a valid original-key
+APK (accepted) and a valid APK signed with a disposable key (rejected before
+publication). The disposable test key was then deleted.
+
 Actions are pinned to full upstream commit SHAs. The signing environment
 `android-preview` permits only tags matching `v*-alpha.*`; no branch or PR
 deployment is allowed. Test/build jobs receive no signing key. No
@@ -48,6 +56,8 @@ an RSA-2048 key. This is the original **development** certificate, not a new
 production/Play signing identity. Keeping it preserves APK update compatibility.
 The workflow rejects an APK signed with any other certificate. Do not regenerate
 it, delete the source keystore, or silently replace it with a runner-generated key.
+The Windows fallback publisher also checks this exact certificate before it can
+create a release. Use its `-VerifyOnly` switch to check an APK without publishing.
 
 The private keystore is held in GitHub environment secret
 `AOC_PREVIEW_KEYSTORE_BASE64`, not in Git. Base64 is transport encoding, not
