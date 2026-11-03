@@ -10,6 +10,7 @@ class UnsavedChangesGuard extends StatefulWidget {
     required this.child,
     this.interceptBack = false,
     this.onInterceptBack,
+    this.onDiscard,
   });
 
   final bool dirty;
@@ -17,6 +18,7 @@ class UnsavedChangesGuard extends StatefulWidget {
   final Widget child;
   final bool interceptBack;
   final VoidCallback? onInterceptBack;
+  final Future<void> Function()? onDiscard;
 
   @override
   State<UnsavedChangesGuard> createState() => _UnsavedChangesGuardState();
@@ -61,6 +63,12 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
         ),
       );
       if (discard != true || !mounted) return;
+      try {await widget.onDiscard?.call();}
+      catch(_) {
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Не удалось удалить черновик. Работа оставлена открытой.')));
+        return;
+      }
+      if(!mounted) return;
       setState(() => _allowExit = true);
       // Wait until PopScope registers canPop=true before navigating.
       WidgetsBinding.instance.addPostFrameCallback((_) {

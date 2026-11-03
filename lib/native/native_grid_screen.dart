@@ -1,3 +1,5 @@
+import '../workspace/draft_store.dart';
+import 'dart:async';
 import 'document_history.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
@@ -19,16 +21,30 @@ class NativeGridScreen extends StatefulWidget {
     super.key,
     this.launch,
     this.onRemember,
+    this.draft,
     this.backend,
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final DraftSession? draft;
   final DocumentBackend? backend;
   @override
   State<NativeGridScreen> createState() => _NativeGridScreenState();
 }
 
 class _NativeGridScreenState extends State<NativeGridScreen> {
+  bool restoringDraft=false,draftQueued=false;
+  void draftStatusChanged() {if(mounted) setState(() {});}
+  void queueDraft() {
+    if(draftQueued || restoringDraft || widget.draft==null) return;
+    draftQueued=true;
+    scheduleMicrotask(() {
+      draftQueued=false;
+      final bytes=book;
+      if(!mounted || restoringDraft || bytes==null) return;
+      widget.draft!.update(bytes:bytes,name:filename,dirty:modified || inputDirty,editor:{'modified':modified,'sheet':sheetIndex,'selected':selected,'input':input.text});
+    });
+  }
   final toolPanel = GlobalKey<EditorToolPanelState>();
   bool toolsExpanded = false;
   bool formulaExpanded = false;
@@ -47,6 +63,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   List<Map<String, dynamic>> sheets = [];
   @override
   void dispose() {
+    widget.draft?.removeListener(draftStatusChanged);
+    if(widget.draft!=null) unawaited(widget.draft!.close());
     inputFocus.dispose();
     input.dispose();
     super.dispose();
@@ -82,6 +100,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       tip('Ошибка: $e');
     } finally {
       if (mounted) setState(() => busy = false);
+      queueDraft();
     }
   }
 
@@ -184,6 +203,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     tip('XLSX прочитан GridCraft');
   });
   Future<void> save() => run(() async {
+    if(restoringDraft) throw const FormatException('Черновик восстановлен не полностью. Он сохранён на главном экране.');
     if (book == null) return;
     await flushInput();
     final name =
@@ -444,11 +464,15 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   @override
   void initState() {
     super.initState();
+    restoringDraft=widget.launch?.recovery!=null;
+    widget.draft?.addListener(draftStatusChanged);
     input.addListener(() {
       if (mounted) setState(() {});
+      queueDraft();
     });
     inputFocus.addListener(() {
       if (mounted) setState(() {});
+      queueDraft();
     });
     final request = widget.launch;
     if (request != null) {
@@ -457,13 +481,25 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         if (request.bytes != null) {
           run(() async {
             await setBook(request.bytes!, name: request.name);
-            await rememberCurrent();
+            restoreDraft(request.recovery);
+            if(request.recovery==null) await rememberCurrent();
           });
         } else if (request.create) {
           create();
         }
       });
     }
+  }
+
+  void restoreDraft(Map<String,dynamic>? state) {
+    if(state==null) return;
+    final sheet=state['sheet'] as int;
+    final address=state['selected'] as String;
+    if(sheet<0 || sheet>=sheets.length || !RegExp(r'^[A-Z]{1,3}[1-9][0-9]{0,6}$').hasMatch(address)) {
+      throw const FormatException('Не удалось восстановить выбранную ячейку. Черновик сохранён.');
+    }
+    sheetIndex=sheet;selected=address;refreshCells();input.text=state['input'] as String;
+    modified=state['modified']==true;restoringDraft=false;setState(() {});queueDraft();
   }
 
   Future<void> rememberCurrent() async {
@@ -632,6 +668,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return UnsavedChangesGuard(
       interceptBack: toolsExpanded,
       onInterceptBack: () => toolPanel.currentState?.handleBack(),
+      onDiscard:widget.draft?.discard,
       dirty: modified || inputDirty,
       busy: busy,
       child: Scaffold(
@@ -654,7 +691,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   filename: filename,
                   status: online
                       ? (modified || inputDirty
-                            ? 'XLSX · есть изменения'
+                            ? 'XLSX · есть изменения' + (widget.draft?.status ?? '')
                             : 'XLSX · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xff17815c),

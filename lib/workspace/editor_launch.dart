@@ -7,11 +7,13 @@ class EditorLaunch {
     this.name,
     this.create = false,
     this.template = false,
+    this.recovery,
   });
   final Uint8List? bytes;
   final String? name;
   final bool create;
   final bool template;
+  final Map<String,dynamic>? recovery;
 }
 
 typedef RememberFile = Future<void> Function(Uint8List bytes, String filename);

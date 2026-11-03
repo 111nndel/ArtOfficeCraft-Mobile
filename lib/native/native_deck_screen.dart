@@ -1,3 +1,5 @@
+import '../workspace/draft_store.dart';
+import 'dart:async';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
@@ -20,16 +22,30 @@ class NativeDeckScreen extends StatefulWidget {
     super.key,
     this.launch,
     this.onRemember,
+    this.draft,
     this.backend,
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final DraftSession? draft;
   final DocumentBackend? backend;
   @override
   State<NativeDeckScreen> createState() => _NativeDeckScreenState();
 }
 
 class _NativeDeckScreenState extends State<NativeDeckScreen> {
+  bool restoringDraft=false,draftQueued=false;
+  void draftStatusChanged() {if(mounted) setState(() {});}
+  void queueDraft() {
+    if(draftQueued || restoringDraft || widget.draft==null) return;
+    draftQueued=true;
+    scheduleMicrotask(() {
+      draftQueued=false;
+      final bytes=data;
+      if(!mounted || restoringDraft || bytes==null) return;
+      widget.draft!.update(bytes:bytes,name:filename,dirty:modified || textDraftDirty,editor:{'modified':modified,'slide':index,'textEdit':textEdit==null ? null : Map<String,dynamic>.of(textEdit!),'text':deckText.text,'initial':textInitial,'heading':textHeading});
+    });
+  }
   final toolPanel = GlobalKey<EditorToolPanelState>();
   bool toolsExpanded = false;
   late final DocumentBackend? engine =
@@ -61,6 +77,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       message('Ошибка DeckCraft: $e');
     } finally {
       if (mounted) setState(() => busy = false);
+      queueDraft();
     }
   }
 
@@ -155,6 +172,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     message('PPTX открыт через DeckCraft');
   });
   Future<void> save() => action(() async {
+    if(restoringDraft) throw const FormatException('Черновик восстановлен не полностью. Он сохранён на главном экране.');
     if (!loaded) return;
     if (textDraftDirty) await applyTextDraft();
     final saveName =
@@ -202,6 +220,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     if (!apply || request == null) {
       setState(() => textEdit = null);
       toolPanel.currentState?.back();
+      queueDraft();
       return;
     }
     action(applyTextDraft);
@@ -228,6 +247,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
 
   @override
   void dispose() {
+    widget.draft?.removeListener(draftStatusChanged);
+    if(widget.draft!=null) unawaited(widget.draft!.close());
     deckText.dispose();
     super.dispose();
   }
@@ -446,8 +467,11 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   @override
   void initState() {
     super.initState();
+    restoringDraft=widget.launch?.recovery!=null;
+    widget.draft?.addListener(draftStatusChanged);
     deckText.addListener(() {
       if (mounted) setState(() {});
+      queueDraft();
     });
     final request = widget.launch;
     if (request != null) {
@@ -456,13 +480,29 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
         if (request.bytes != null) {
           action(() async {
             await load(request.bytes!, name: request.name);
-            await rememberCurrent();
+            restoreDraft(request.recovery);
+            if(request.recovery==null) await rememberCurrent();
           });
         } else if (request.create) {
           create();
         }
       });
     }
+  }
+
+  void restoreDraft(Map<String,dynamic>? state) {
+    if(state==null) return;
+    final slide=state['slide'] as int;
+    if(slide<0 || slide>=slides.length) throw const FormatException('Слайд черновика не найден. Черновик сохранён.');
+    index=slide;
+    final edit=state['textEdit'];
+    if(edit!=null) {
+      final request=Map<String,dynamic>.from(edit as Map);
+      if(!['add_text','add_slide','edit_text'].contains(request['action'])) throw const FormatException('Неизвестный текстовый черновик.');
+      textEdit=request;textInitial=state['initial'] as String;deckText.text=state['text'] as String;textHeading=state['heading'] as String;
+      WidgetsBinding.instance.addPostFrameCallback((_) {if(mounted) toolPanel.currentState?.openTool(0,[0]);});
+    }
+    modified=state['modified']==true;restoringDraft=false;setState(() {});queueDraft();
   }
 
   Future<void> rememberCurrent() async {
@@ -572,6 +612,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     return UnsavedChangesGuard(
       interceptBack: toolsExpanded,
       onInterceptBack: () => toolPanel.currentState?.handleBack(),
+      onDiscard:widget.draft?.discard,
       dirty: modified || textDraftDirty,
       busy: busy,
       child: Scaffold(
@@ -593,7 +634,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   filename: filename,
                   status: enabled
                       ? (modified
-                            ? 'PPTX · есть изменения'
+                            ? 'PPTX · есть изменения' + (widget.draft?.status ?? '')
                             : 'PPTX · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xffcc6243),

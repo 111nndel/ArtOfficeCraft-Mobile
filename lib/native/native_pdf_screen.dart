@@ -1,3 +1,4 @@
+import '../workspace/draft_store.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
@@ -21,11 +22,13 @@ class NativePdfScreen extends StatefulWidget {
     super.key,
     this.launch,
     this.onRemember,
+    this.draft,
     this.backend,
     this.renderer,
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final DraftSession? draft;
   final DocumentBackend? backend;
   final PdfPageRenderer? renderer;
   @override
@@ -33,6 +36,18 @@ class NativePdfScreen extends StatefulWidget {
 }
 
 class _NativePdfScreenState extends State<NativePdfScreen> {
+  bool restoringDraft=false,draftQueued=false;
+  void draftStatusChanged() {if(mounted) setState(() {});}
+  void queueDraft() {
+    if(draftQueued || restoringDraft || widget.draft==null) return;
+    draftQueued=true;
+    scheduleMicrotask(() {
+      draftQueued=false;
+      final bytes=contents;
+      if(!mounted || restoringDraft || bytes==null) return;
+      widget.draft!.update(bytes:bytes,name:filename,dirty:changed,editor:{'changed':changed,'page':selected});
+    });
+  }
   final toolPanel = GlobalKey<EditorToolPanelState>();
   bool toolsExpanded = false;
   late final DocumentBackend? engine =
@@ -54,6 +69,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       selected = page;
       _pageImage = _pageRenderer.render(_session!, page);
     });
+    queueDraft();
   }
 
   void tip(String msg) {
@@ -73,6 +89,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       tip('PDFCraft: $e');
     } finally {
       if (mounted) setState(() => busy = false);
+      queueDraft();
     }
   }
 
@@ -111,6 +128,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
 
   @override
   void dispose() {
+    widget.draft?.removeListener(draftStatusChanged);
+    if(widget.draft!=null) unawaited(widget.draft!.close());
     final previous = _session;
     if (previous != null) {
       unawaited(_pageRenderer.close(previous).catchError((Object _) {}));
@@ -162,6 +181,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     tip('Структура PDF прочитана');
   });
   Future<void> save() => execute(() async {
+    if(restoringDraft) throw const FormatException('Черновик восстановлен не полностью. Он сохранён на главном экране.');
     if (contents == null) return;
     final name =
         '${filename.replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '')}-ArtOfficeCraft.pdf';
@@ -291,6 +311,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   @override
   void initState() {
     super.initState();
+    restoringDraft=widget.launch?.recovery!=null;
+    widget.draft?.addListener(draftStatusChanged);
     final request = widget.launch;
     if (request != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -298,13 +320,21 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         if (request.bytes != null) {
           execute(() async {
             await load(request.bytes!, name: request.name);
-            await rememberCurrent();
+            restoreDraft(request.recovery);
+            if(request.recovery==null) await rememberCurrent();
           });
         } else if (request.create) {
           create();
         }
       });
     }
+  }
+
+  void restoreDraft(Map<String,dynamic>? state) {
+    if(state==null) return;
+    final page=state['page'] as int;
+    if(page<0 || page>=pages.length) throw const FormatException('Страница черновика не найдена. Черновик сохранён.');
+    changed=state['changed']==true;selectPage(page);restoringDraft=false;setState(() {});queueDraft();
   }
 
   Future<void> rememberCurrent() async {
@@ -388,6 +418,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     return UnsavedChangesGuard(
       interceptBack: toolsExpanded,
       onInterceptBack: () => toolPanel.currentState?.handleBack(),
+      onDiscard:widget.draft?.discard,
       dirty: changed,
       busy: busy,
       child: Scaffold(
@@ -409,7 +440,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                   filename: filename,
                   status: available
                       ? (changed
-                            ? 'PDF · есть изменения'
+                            ? 'PDF · есть изменения' + (widget.draft?.status ?? '')
                             : 'PDF · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xffc94e59),

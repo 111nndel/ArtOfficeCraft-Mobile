@@ -1,3 +1,5 @@
+import '../workspace/draft_store.dart';
+import 'dart:async';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'word_inline_controller.dart';
@@ -21,16 +23,30 @@ class NativeWordScreen extends StatefulWidget {
     super.key,
     this.launch,
     this.onRemember,
+    this.draft,
     this.backend,
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final DraftSession? draft;
   final DocumentBackend? backend;
   @override
   State<NativeWordScreen> createState() => _NativeWordScreenState();
 }
 
 class _NativeWordScreenState extends State<NativeWordScreen> {
+  bool restoringDraft=false,draftQueued=false;
+  void draftStatusChanged() {if(mounted) setState(() {});}
+  void queueDraft() {
+    if(draftQueued || restoringDraft || widget.draft==null) return;
+    draftQueued=true;
+    scheduleMicrotask(() {
+      draftQueued=false;
+      final bytes=document;
+      if(!mounted || restoringDraft || bytes==null) return;
+      widget.draft!.update(bytes:bytes,name:filename,dirty:changed || inlineDirty,editor:{'changed':changed,'activeBlock':activeBlock,'text':inline.text,'baseOffset':inline.selection.baseOffset,'extentOffset':inline.selection.extentOffset});
+    });
+  }
   final toolPanel = GlobalKey<EditorToolPanelState>();
   bool toolsExpanded = false;
   late final DocumentBackend? engine =
@@ -52,6 +68,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
 
   void selectionChanged() {
     if (mounted) setState(() {});
+    queueDraft();
   }
 
   void startInline(Map<String, dynamic> block) {
@@ -111,6 +128,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         return false;
       } finally {
         if (mounted) setState(() => busy = false);
+      queueDraft();
       }
     }
     if (mounted && finish) {
@@ -139,6 +157,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
 
   @override
   void dispose() {
+    widget.draft?.removeListener(draftStatusChanged);
+    if(widget.draft!=null) unawaited(widget.draft!.close());
     inline.removeListener(selectionChanged);
     inline.dispose();
     inlineFocus.dispose();
@@ -184,10 +204,38 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     } finally {
       operationPending = false;
       if (mounted) setState(() => busy = false);
+      queueDraft();
     }
   }
 
+  Future<bool> confirmReplace() async {
+    if (changed && document != null) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Несохранённые изменения'),
+          content: const Text(
+            'Продолжить без сохранения текущего документа?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Продолжить'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return false;
+    }
+    return true;
+  }
+
   Future<void> createNew() => guarded(() async {
+    if(!await confirmReplace()) return;
     var bytes = await engine!.create(
       widget.launch?.template == true ? 'План проекта' : '',
     );
@@ -214,28 +262,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   });
 
   Future<void> openDocument() => guarded(() async {
-    if (changed && document != null) {
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Несохранённые изменения'),
-          content: const Text(
-            'Изменения текущего документа не сохранены. Открыть другой файл?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Отмена'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Продолжить'),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true) return;
-    }
+    if(!await confirmReplace()) return;
     final selected = await FlutterFileDialog.pickFile();
     if (selected == null) return;
     final file = File(selected);
@@ -299,6 +326,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     setState(() => changed = true);
   });
   Future<void> saveAs() => guarded(() async {
+    if(restoringDraft) throw const FormatException('Черновик восстановлен не полностью. Он сохранён на главном экране.');
     if (document == null) return;
     final bytes = document!;
     final suggested =
@@ -322,6 +350,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   @override
   void initState() {
     super.initState();
+    restoringDraft=widget.launch?.recovery!=null;
+    widget.draft?.addListener(draftStatusChanged);
     inline.addListener(selectionChanged);
     final request = widget.launch;
     if (request != null) {
@@ -334,13 +364,32 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
               filename = request.name ?? filename;
               changed = false;
             });
-            await rememberCurrent();
+            restoreDraft(request.recovery);
+            if(request.recovery==null) await rememberCurrent();
           });
         } else if (request.create) {
           createNew();
         }
       });
     }
+  }
+
+  void restoreDraft(Map<String,dynamic>? state) {
+    if(state==null) return;
+    final id=state['activeBlock'];
+    if(id!=null) {
+      final block=blocks.where((b)=>b['block']==id && b['editable']==true).firstOrNull;
+      if(block==null) throw const FormatException('Абзац черновика не найден. Черновик оставлен для повторного восстановления.');
+      inline.load(block);
+      activeBlock=id as int;selectedBlock=activeBlock;
+      inline.text=state['text'] as String;
+      final base=(state['baseOffset'] as int? ?? inline.text.length).clamp(0,inline.text.length);
+      final extent=(state['extentOffset'] as int? ?? base).clamp(0,inline.text.length);
+      inline.selection=TextSelection(baseOffset:base,extentOffset:extent);
+      inlineDirty=inline.text!=block['text'];
+    }
+    changed=state['changed']==true;restoringDraft=false;
+    setState(() {});queueDraft();
   }
 
   Future<void> rememberCurrent() async {
@@ -448,6 +497,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     return UnsavedChangesGuard(
       interceptBack: toolsExpanded,
       onInterceptBack: () => toolPanel.currentState?.handleBack(),
+      onDiscard:widget.draft?.discard,
       dirty: changed || inlineDirty,
       busy: busy || operationPending,
       child: Scaffold(
@@ -469,7 +519,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   filename: filename,
                   status: enabled
                       ? (changed || inlineDirty
-                            ? 'DOCX · есть изменения'
+                            ? 'DOCX · есть изменения' + (widget.draft?.status ?? '')
                             : 'DOCX · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xff3565ca),
