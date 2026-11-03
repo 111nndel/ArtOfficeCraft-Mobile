@@ -56,6 +56,14 @@ alias `androiddebugkey` and the standard development-store password. It must not
 be presented as production-grade key protection or used as a Play release key.
 
 A separate private copy is kept outside the source checkout on the build PC.
+An encrypted PKCS12 backup of the same key is also saved in ChatGPT as
+`ArtOfficeCraft_Signing_Backup_2026-11-03.zip`. Its independently generated
+256-bit random password is **not** in the archive, chat or repository; it is in
+`%LOCALAPPDATA%\ArtOfficeCraft\Signing\backup-password.txt` on the build PC,
+inside a current-user/SYSTEM-only directory. The backup was restored into a
+temporary keystore and successfully signed an APK with the original fingerprint;
+the temporary keystore was deleted. The owner must move the backup password to
+an independent password manager before retiring or losing that PC.
 Public certificate fingerprints and this document can be stored or shared safely;
 they cannot recreate a lost private key. ChatGPT file storage does not make a
 signing key permanent, and a chat should not be the only recovery location.
