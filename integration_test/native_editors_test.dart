@@ -1,5 +1,7 @@
 import 'worker_media_fixture.dart';
 
+import 'package:artofficecraft_mobile/native/grid_window.dart';
+
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:artofficecraft_mobile/l10n/app_strings.dart';
 import 'package:artofficecraft_mobile/ui/sheet_viewport.dart';
@@ -324,7 +326,7 @@ void main() {
 
       final info = await readNativeBuildInfo();
       expect(info!['abi'], 1);
-      expect(info['coreVersion'], '0.13.0');
+      expect(info['coreVersion'], '0.17.0');
       expect((info['engines'] as Map).keys.toSet(), {
         'wordcraft',
         'gridcraft',
@@ -753,6 +755,121 @@ void main() {
       debugPrint(
         'WORKER_MEDIA starts=1 inputTransfers=1 exactPNG=verified authorization=verified',
       );
+    },
+  );
+  testWidgets(
+    'Actual Android: distant XLSX window edits, pan, history and exported formulas',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      var bytes = await backend.create();
+      bytes = await backend.edit(bytes, {
+        'sheet': 0,
+        'address': 'A1',
+        'value': '12',
+      });
+      bytes = await backend.edit(bytes, {
+        'sheet': 0,
+        'address': 'AA1000',
+        'value': '=A1+30',
+      });
+      final original = bytes;
+      final window = const GridWindow(0, 999, 26, rows: 1, columns: 1).buffered;
+      expect(
+        (await backend.inspectGrid(
+          bytes,
+          window,
+          'AA1000',
+        ))['selection']['display'],
+        '42',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: OfficeTheme.build(Brightness.light),
+          home: NativeGridScreen(
+            backend: backend,
+            launch: EditorLaunch(bytes: bytes, name: 'Distant.xlsx'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final formula = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(formula, '15');
+      await tester.tap(find.byKey(const Key('tool-section-caption')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вид'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Перейти к ячейке'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('grid-address-input')),
+        'AA1000',
+      );
+      await tester.tap(find.text('Перейти'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '=A1+30');
+      expect(find.byKey(const ValueKey('grid-cell-AA1000')), findsOneWidget);
+      await tester.tap(find.byTooltip('Свернуть инструменты'));
+      await tester.pumpAndSettle();
+      expect(find.text('45'), findsWidgets);
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpAndSettle();
+      await capture(tester, 'grid-window-AA1000');
+      await tester.enterText(formula, '=A1*4');
+      final viewport = tester.state<SheetViewportState>(
+        find.byType(SheetViewport),
+      );
+      viewport.goToCell(1500, 60);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '=A1*4');
+      viewport.goToCell(999, 26);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '=A1*4');
+      await tester.tap(find.byTooltip('Применить'));
+      await tester.pumpAndSettle();
+      expect(find.text('60'), findsWidgets);
+      await tester.tap(find.byTooltip('Отменить'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '=A1+30');
+      await tester.tap(find.byTooltip('Повторить'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '=A1*4');
+      Uint8List? exported;
+      const files = MethodChannel('flutter_file_dialog');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(files, (call) async {
+            exported = (call.arguments as Map)['data'] as Uint8List;
+            return '/test/distant.xlsx';
+          });
+      try {
+        await tester.tap(find.byTooltip('Меню файла'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Сохранить копию'));
+        await tester.pumpAndSettle();
+        final reread = await backend.inspectGrid(exported!, window, 'AA1000');
+        expect(reread['selection']['input'], '=A1*4');
+        expect(reread['selection']['display'], '60');
+        expect(
+          (await backend.inspectGrid(
+            original,
+            window,
+            'AA1000',
+          ))['selection']['display'],
+          '42',
+        );
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(files, null);
+      }
+      expect(backend.workerStarts, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await backend.close();
     },
   );
 }

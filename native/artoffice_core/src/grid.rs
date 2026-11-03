@@ -154,6 +154,91 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         write(&wb)
     })
 }
+
+/// Bounded rectangle plus an independent selected-cell value. Sparse cells are
+/// looked up by address, never selected by a global populated-cell cutoff.
+#[unsafe(no_mangle)]
+pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u8,req_len:usize)->AcResult {
+    protect(|| {
+        let req:Json=serde_json::from_str(input(request,req_len)?).map_err(|e|e.to_string())?;
+        let field=|name:&str| req.get(name).and_then(Json::as_u64).ok_or_else(||format!("Missing integer {name}"));
+        let idx=field("sheet")?;
+        let row=field("row")?; let col=field("column")?;
+        let rows=field("rows")?; let cols=field("columns")?;
+        if rows==0 || cols==0 || rows>128 || cols>32 || rows*cols>4096 ||
+            row>=gridcraft_core::MAX_ROWS as u64 || col>=gridcraft_core::MAX_COLS as u64 ||
+            row+rows>gridcraft_core::MAX_ROWS as u64 || col+cols>gridcraft_core::MAX_COLS as u64 {
+            return Err("Invalid or oversized sheet window".into())
+        }
+        let selected=CellRef::parse(req.get("selected").and_then(Json::as_str).ok_or("Missing selected cell")?)
+            .ok_or("Invalid selected cell")?;
+        let bytes=decode(data,n,MAX_INPUT_BYTES)?;
+        let (wb,report)=gridcraft_xlsx::read_xlsx(bytes).map_err(|e|format!("GridCraft XLSX read: {e}"))?;
+        let sh=wb.sheets.get(usize::try_from(idx).map_err(|_|"Invalid sheet index")?).ok_or("Sheet index out of bounds")?;
+        let mut formats=HashMap::new();
+        let mut inspect=|loc:CellRef| {
+            let style=sh.style_id(loc);
+            let fmt=formats.entry(style).or_insert_with(||NumberFormat::parse(wb.styles.get(style).num_fmt.as_str()));
+            let displayed=format_value(&sh.value(loc),fmt,wb.date_system);
+            json!({"input":sh.input_text(loc),"display":displayed.text,"numeric":displayed.numeric,
+                "formula":sh.cell(loc).is_some_and(|c|c.formula.is_some()),"style":style_json(&wb,style)})
+        };
+        let mut cells=serde_json::Map::new();
+        for r in row..row+rows {
+            for c in col..col+cols {
+                let loc=CellRef::new(r as u32,c as u32);
+                if sh.cell(loc).is_some() || sh.spill.contains_key(&loc) || sh.style_id(loc)!=Default::default() {
+                    cells.insert(loc.a1(),inspect(loc));
+                }
+            }
+        }
+        let selection=inspect(selected);
+        let sheets:Vec<_>=wb.sheets.iter().enumerate().map(|(i,s)|json!({"index":i,"name":s.name,
+            "cells":if i as u64==idx {Json::Object(cells.clone())} else {json!({})},
+            "protected":s.protection.is_some() || wb.protected_structure})).collect();
+        serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
+            "selection":selection,"window":req,"warnings":report.warnings,
+            "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
+    })
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+    fn view(bytes:&[u8], req:Json)->Result<Json,String> {
+        let request=req.to_string();
+        let r=ac_xlsx_inspect_window(bytes.as_ptr(),bytes.len(),request.as_ptr(),request.len());
+        let data=unsafe{std::slice::from_raw_parts(r.ptr,r.len)}.to_vec();
+        let status=r.status; super::super::ac_result_free(r);
+        if status==0 {Ok(serde_json::from_slice(&data).unwrap())} else {Err(String::from_utf8_lossy(&data).into_owned())}
+    }
+    #[test]
+    fn window_finds_dense_and_far_cells_without_global_cutoff() {
+        let mut wb=Workbook::new();
+        for r in 0..100 {for c in 0..25 {
+            wb.sheet_mut(0).unwrap().set_value(CellRef::new(r,c),Value::number((r*25+c) as f64));
+        }}
+        let far=CellRef::parse("XFD1048576").unwrap();
+        wb.sheet_mut(0).unwrap().set_value(far,Value::text("last cell"));
+        let bytes=write(&wb).unwrap();
+        let middle=view(&bytes,json!({"sheet":0,"row":70,"column":20,"rows":20,"columns":12,"selected":"A1"})).unwrap();
+        assert_eq!(middle["sheets"][0]["cells"]["Y90"]["display"],"2249");
+        assert_eq!(middle["selection"]["input"],"0");
+        assert!(middle["sheets"][0]["cells"].get("A1").is_none());
+        let end=view(&bytes,json!({"sheet":0,"row":1048575,"column":16383,"rows":1,"columns":1,"selected":"XFD1048576"})).unwrap();
+        assert_eq!(end["selection"]["input"],"last cell");
+        assert_eq!(end["sheets"][0]["cells"]["XFD1048576"]["display"],"last cell");
+    }
+    #[test]
+    fn window_rejects_invalid_bounds_and_selection_without_panicking() {
+        let bytes=write(&Workbook::new()).unwrap();
+        for patch in [json!({"row":-1}),json!({"rows":0}),json!({"rows":129}),json!({"column":16383,"columns":2}),json!({"selected":"XFE1"}),json!({"sheet":999})] {
+            let mut req=json!({"sheet":0,"row":0,"column":0,"rows":32,"columns":16,"selected":"A1"});
+            req.as_object_mut().unwrap().extend(patch.as_object().unwrap().clone());
+            assert!(view(&bytes,req).is_err());
+        }
+    }
+}
 #[cfg(test)]
 mod tests{
     use super::*;

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'document_worker.dart';
+import 'grid_window.dart';
 
 import 'dart:typed_data';
 
@@ -71,6 +72,58 @@ abstract interface class DocumentImages {
   Future<Uint8List> image(Uint8List bytes, int slide, int media);
 }
 
+abstract interface class GridDocuments {
+  Future<Map<String, dynamic>> gridView(
+    Uint8List bytes,
+    GridWindow window,
+    String selected,
+  );
+  Future<DocumentSnapshot> editGridView(
+    Uint8List bytes,
+    Map<String, dynamic> edit,
+    GridWindow window,
+    String selected,
+  );
+}
+
+extension GridTransactions on DocumentBackend {
+  Future<Map<String, dynamic>> inspectGrid(
+    Uint8List bytes,
+    GridWindow window,
+    String selected,
+  ) async {
+    final backend = this;
+    if (backend is GridDocuments) {
+      return (backend as GridDocuments).gridView(bytes, window, selected);
+    }
+    final parsed = await inspect(bytes);
+    final sheets = parsed['sheets'] as List;
+    return {
+      ...parsed,
+      'selection': (sheets[window.sheet]['cells'] as Map)[selected] ?? {},
+    };
+  }
+
+  Future<DocumentSnapshot> editAndInspectGrid(
+    Uint8List bytes,
+    Map<String, dynamic> edit,
+    GridWindow window,
+    String selected,
+  ) async {
+    final backend = this;
+    if (backend is GridDocuments) {
+      return (backend as GridDocuments).editGridView(
+        bytes,
+        edit,
+        window,
+        selected,
+      );
+    }
+    final next = await this.edit(bytes, edit);
+    return DocumentSnapshot(next, await inspectGrid(next, window, selected));
+  }
+}
+
 extension DocumentTransactions on DocumentBackend {
   Future<DocumentSnapshot> editAndInspect(
     Uint8List bytes,
@@ -99,7 +152,8 @@ final class NativeDocumentBackend
         DocumentBackend,
         InspectedDocumentBackend,
         DocumentBackendLifetime,
-        DocumentImages {
+        DocumentImages,
+        GridDocuments {
   NativeDocumentBackend(this.kind, {this.libraryPath});
   final NativeDocumentKind kind;
   final String? libraryPath;
@@ -183,6 +237,31 @@ final class NativeDocumentBackend
   Future<Uint8List> image(Uint8List bytes, int slide, int media) async =>
       _bytes(await _call('image', bytes, {'slide': slide, 'media': media}));
   @override
+  Future<Map<String, dynamic>> gridView(
+    Uint8List bytes,
+    GridWindow window,
+    String selected,
+  ) async =>
+      _freeze(await _call('gridInspect', bytes, window.request(selected)))
+          as Map<String, dynamic>;
+  @override
+  Future<DocumentSnapshot> editGridView(
+    Uint8List bytes,
+    Map<String, dynamic> edit,
+    GridWindow window,
+    String selected,
+  ) async {
+    final result = await _call('gridEditInspect', bytes, {
+      'edit': edit,
+      'view': window.request(selected),
+    }) as Map;
+    return DocumentSnapshot(
+      _bytes(result['bytes']),
+      Map<String, dynamic>.from(result['preview'] as Map),
+    );
+  }
+
+  @override
   Future<void> close() async {
     _closed = true;
     if (_started) await _worker.close();
@@ -208,9 +287,18 @@ void _documentWorkerMain((SendPort, Map<String, Object?>) bootstrap) {
     }
     final bytes = token == null ? null : currentBytes;
     final request = Map<String, dynamic>.from(payload['request'] as Map);
-    if (operation == 'editInspect') {
-      final next = engine.call('edit', bytes, request) as Uint8List;
-      final preview = engine.call('inspect', next, const {});
+    if (operation == 'editInspect' || operation == 'gridEditInspect') {
+      final grid = operation == 'gridEditInspect';
+      final next = engine.call(
+        'edit',
+        bytes,
+        grid ? Map<String, dynamic>.from(request['edit'] as Map) : request,
+      ) as Uint8List;
+      final preview = engine.call(
+        grid ? 'gridInspect' : 'inspect',
+        next,
+        grid ? Map<String, dynamic>.from(request['view'] as Map) : const {},
+      );
       return {
         'bytes': TransferableTypedData.fromList([next]),
         'preview': preview,
@@ -267,6 +355,9 @@ class _NativeEngine {
         final engine = bridge as GridCraftBridge;
         if (operation == 'create') return engine.create();
         if (operation == 'inspect') return engine.inspect(bytes!);
+        if (operation == 'gridInspect') {
+          return engine.inspectWindow(bytes!, request);
+        }
         return engine.edit(bytes!, request);
       case NativeDocumentKind.deck:
         final engine = bridge as DeckCraftBridge;

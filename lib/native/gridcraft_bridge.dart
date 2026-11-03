@@ -43,6 +43,9 @@ final class GridCraftBridge {
         'ac_xlsx_inspect',
       ),
       _edit = library.lookupFunction<_NativeTwo, _DartTwo>('ac_xlsx_set_cell'),
+      _window = library.lookupFunction<_NativeTwo, _DartTwo>(
+        'ac_xlsx_inspect_window',
+      ),
       _free = library.lookupFunction<_NativeFree, _DartFree>('ac_result_free'),
       _abi = library.lookupFunction<_NativeAbi, _DartAbi>(
         'ac_engine_abi_version',
@@ -52,6 +55,7 @@ final class GridCraftBridge {
   final _DartOne _create;
   final _DartOne _inspect;
   final _DartTwo _edit;
+  final _DartTwo _window;
   final _DartFree _free;
   final _DartAbi _abi;
 
@@ -121,6 +125,25 @@ final class GridCraftBridge {
     String value,
   ) {
     return edit(workbook, {'sheet': sheet, 'address': address, 'value': value});
+  }
+
+  Map<String, dynamic> inspectWindow(
+    Uint8List workbook,
+    Map<String, dynamic> view,
+  ) {
+    final p = _alloc(workbook);
+    final request = Uint8List.fromList(utf8.encode(jsonEncode(view)));
+    final q = _alloc(request);
+    try {
+      return Map<String, dynamic>.from(
+        jsonDecode(
+          utf8.decode(_read(_window(p, workbook.length, q, request.length))),
+        ) as Map,
+      );
+    } finally {
+      calloc.free(q);
+      calloc.free(p);
+    }
   }
 
   Uint8List edit(Uint8List workbook, Map<String, dynamic> changes) {

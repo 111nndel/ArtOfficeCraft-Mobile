@@ -8,6 +8,7 @@ import 'document_history.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
+import 'grid_window.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 
@@ -74,16 +75,23 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   bool modified = false, busy = false;
   final input = TextEditingController();
   final history = DocumentHistory();
+  final addressInput = TextEditingController();
+  Map<String, dynamic> selectedCell = {};
+  GridWindow loadedWindow = const GridWindow(0, 0, 0);
+  GridWindow? wantedWindow;
+  Timer? viewTimer;
+  bool loadingView = false, viewFailed = false;
   bool get inputDirty => input.text != currentInput;
-  Map<String, dynamic> get cellStyle => Map<String, dynamic>.from(
-    (cells[selected] as Map?)?['style'] as Map? ?? {},
-  );
+  Map<String, dynamic> get cellStyle =>
+      Map<String, dynamic>.from(selectedCell['style'] as Map? ?? {});
   List<Map<String, dynamic>> sheets = [];
   @override
   void dispose() {
     widget.draft?.removeListener(draftStatusChanged);
     if (widget.draft != null) unawaited(widget.draft!.close());
     inputFocus.dispose();
+    viewTimer?.cancel();
+    addressInput.dispose();
     input.dispose();
     if (widget.backend == null) unawaited(closeDocumentBackend(bridge));
     super.dispose();
@@ -98,8 +106,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   }
 
   String get currentInput {
-    final value = cells[selected];
-    return value is Map ? value['input']?.toString() ?? '' : '';
+    return selectedCell['input']?.toString() ?? '';
   }
 
   void tip(String msg) {
@@ -120,6 +127,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     } finally {
       if (mounted) setState(() => busy = false);
       queueDraft();
+      scheduleView();
     }
   }
 
@@ -130,7 +138,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     int index = 0,
   }) async {
     data = immutableDocumentBytes(data);
-    final parsed = await bridge!.inspect(data);
+    final window = GridWindow(index, 0, 0);
+    final parsed = await bridge!.inspectGrid(data, window, 'A1');
     if (!mounted) return;
     final list = parsed['sheets'];
     if (list is! List || list.isEmpty) {
@@ -141,7 +150,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       sheetIndex = index.clamp(0, sheets.length - 1);
       selected = 'A1';
-      refreshCells();
+      acceptView(parsed, window);
+      wantedWindow = window;
       input.text = currentInput;
       if (name != null) filename = name;
       modified = edited;
@@ -257,12 +267,90 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
   }
 
-  void install(Uint8List bytes, List<Map<String, dynamic>> list) {
+  void acceptView(Map<String, dynamic> parsed, GridWindow window) {
+    sheets = parsedSheets(parsed);
+    refreshCells();
+    selectedCell = Map<String, dynamic>.from(parsed['selection'] as Map? ?? {});
+    loadedWindow = window;
+    viewFailed = false;
+  }
+
+  void visibleWindow(GridWindow region) {
+    final visible = GridWindow(
+      sheetIndex,
+      region.row,
+      region.column,
+      rows: region.rows,
+      columns: region.columns,
+    );
+    if (loadedWindow.covers(visible)) {
+      wantedWindow = loadedWindow;
+      viewTimer?.cancel();
+      if (viewFailed) setState(() => viewFailed = false);
+      return;
+    }
+    wantedWindow = visible.buffered;
+    viewFailed = false;
+    scheduleView();
+  }
+
+  void scheduleView() {
+    viewTimer?.cancel();
+    final wanted = wantedWindow;
+    if (!mounted ||
+        busy ||
+        loadingView ||
+        viewFailed ||
+        book == null ||
+        wanted == null ||
+        loadedWindow.covers(wanted)) {
+      return;
+    }
+    viewTimer = Timer(const Duration(milliseconds: 160), loadVisibleWindow);
+  }
+
+  Future<void> loadVisibleWindow() async {
+    final bytes = book;
+    final window = wantedWindow;
+    final address = selected;
+    if (!mounted ||
+        busy ||
+        loadingView ||
+        bytes == null ||
+        window == null ||
+        loadedWindow.covers(window)) {
+      return;
+    }
+    setState(() => loadingView = true);
+    try {
+      final parsed = await bridge!.inspectGrid(bytes, window, address);
+      if (mounted &&
+          !busy &&
+          identical(bytes, book) &&
+          address == selected &&
+          window.sheet == sheetIndex) {
+        setState(() => acceptView(parsed, window));
+      }
+    } catch (_) {
+      if (mounted && identical(bytes, book) && window.sheet == sheetIndex) {
+        setState(() => viewFailed = true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => loadingView = false);
+        scheduleView();
+      }
+    }
+  }
+
+  void install(
+    Uint8List bytes,
+    Map<String, dynamic> parsed,
+    GridWindow window,
+  ) {
     setState(() {
       book = bytes;
-      sheets = list;
-      sheetIndex = sheetIndex.clamp(0, list.length - 1);
-      refreshCells();
+      acceptView(parsed, window);
       input.text = currentInput;
       modified = true;
     });
@@ -270,11 +358,17 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
 
   Future<void> applyEdit(Map<String, dynamic> request) async {
     final previous = book!;
-    final updated = await bridge!.editAndInspect(previous, request);
-    final parsed = parsedSheets(updated.preview);
+    final window = loadedWindow;
+    final updated = await bridge!.editAndInspectGrid(
+      previous,
+      request,
+      window,
+      selected,
+    );
+    parsedSheets(updated.preview);
     if (!mounted) return;
     history.push(previous);
-    install(updated.bytes, parsed);
+    install(updated.bytes, updated.preview, window);
     await rememberCurrent();
   }
 
@@ -291,25 +385,49 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await flushInput();
     inputFocus.unfocus();
   });
-  Future<void> selectCell(String address) => run(() async {
-    if (address == selected) return;
-    await flushInput();
-    if (!mounted) return;
-    setState(() {
-      selected = address;
-      input.text = currentInput;
-    });
-  });
+  Future<void> selectCell(String address, {bool reveal = false}) =>
+      run(() async {
+        if (address == selected && !reveal) return;
+        await flushInput();
+        final position = gridAddress(address);
+        if (position == null) {
+          throw const FormatException('Введите адрес от A1 до XFD1048576');
+        }
+        final window = loadedWindow.contains(position.row, position.column)
+            ? loadedWindow
+            : GridWindow(
+                sheetIndex,
+                position.row,
+                position.column,
+                rows: 1,
+                columns: 1,
+              ).buffered;
+        final parsed = await bridge!.inspectGrid(book!, window, address);
+        if (!mounted) return;
+        setState(() {
+          selected = address;
+          acceptView(parsed, window);
+          input.text = currentInput;
+        });
+        if (reveal) {
+          gridViewport.currentState?.goToCell(position.row, position.column);
+        }
+        if (reveal) FocusManager.instance.primaryFocus?.unfocus();
+      });
   Future<void> chooseSheet(int idx) => run(() async {
     if (idx == sheetIndex) return;
     await flushInput();
+    final window = GridWindow(idx, 0, 0);
+    final parsed = await bridge!.inspectGrid(book!, window, 'A1');
     if (!mounted) return;
     setState(() {
       sheetIndex = idx;
       selected = 'A1';
-      refreshCells();
+      acceptView(parsed, window);
+      wantedWindow = window;
       input.text = currentInput;
     });
+    gridViewport.currentState?.reset();
   });
   Future<void> formatCell(Map<String, dynamic> style) => run(() async {
     if (book == null) return;
@@ -329,35 +447,47 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     final target = undo ? history.undoTarget : history.redoTarget;
     if (target == null) return;
-    final parsed = parsedSheets(await bridge!.inspect(target));
+    final window = loadedWindow;
+    final parsed = await bridge!.inspectGrid(target, window, selected);
+    parsedSheets(parsed);
     if (!mounted) return;
     if (undo) {
       history.undo(book!);
     } else {
       history.redo(book!);
     }
-    install(target, parsed);
+    install(target, parsed, window);
     await rememberCurrent();
   });
   final inputFocus = FocusNode();
   Widget header(String text) => Container(
     height: 56,
     alignment: Alignment.center,
-    decoration: const BoxDecoration(
-      color: Color(0xfff5f7fa),
-      border: Border(
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      border: const Border(
         right: BorderSide(color: Color(0xffe5e9ef)),
         bottom: BorderSide(color: Color(0xffe5e9ef)),
       ),
     ),
     child: Text(
       text,
-      style: const TextStyle(color: Color(0xff7c8694), fontSize: 14),
+      maxLines: 1,
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        fontSize: 14,
+      ),
     ),
   );
   Widget cell(String address) {
     final item = cells[address];
-    final value = item is Map ? item['display']?.toString() ?? '' : '';
+    final position = gridAddress(address)!;
+    final known = loadedWindow.contains(position.row, position.column);
+    final value = !known
+        ? '…'
+        : item is Map
+        ? item['display']?.toString() ?? ''
+        : '';
     final style = Map<String, dynamic>.from(
       item is Map ? item['style'] as Map? ?? {} : {},
     );
@@ -366,6 +496,14 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return InkWell(
       key: ValueKey('grid-cell-$address'),
       onTap: busy ? null : () => selectCell(address),
+      onLongPress: busy
+          ? null
+          : () async {
+              await selectCell(address);
+              if (mounted && selected == address && !busy) {
+                inputFocus.requestFocus();
+              }
+            },
       child: Container(
         height: 56,
         alignment: switch (style['align']) {
@@ -437,28 +575,61 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   }
 
   final gridViewport = GlobalKey<SheetViewportState>();
-  Widget grid() => SheetViewport(
-    key: gridViewport,
-    width: 52 + 12 * 116,
-    rowCount: 55,
-    header: Row(
-      children: [
-        SizedBox(width: 52, child: header('')),
-        for (var c = 0; c < 12; c++)
-          SizedBox(width: 116, child: header(String.fromCharCode(65 + c))),
-      ],
-    ),
-    rowBuilder: (context, index) => Row(
-      children: [
-        SizedBox(width: 52, child: header('${index + 1}')),
-        for (var c = 0; c < 12; c++)
-          SizedBox(
-            width: 116,
-            child: cell('${String.fromCharCode(65 + c)}${index + 1}'),
+  Widget grid() => Stack(
+    children: [
+      SheetViewport.cells(
+        key: gridViewport,
+        rowCount: gridMaxRows,
+        columnCount: gridMaxColumns,
+        rowHeaderExtent: 64,
+        corner: header(''),
+        columnHeaderBuilder: (context, col) => header(gridColumnName(col)),
+        rowHeaderBuilder: (context, row) => header('${row + 1}'),
+        cellBuilder: (context, row, col) =>
+            cell('${gridColumnName(col)}${row + 1}'),
+        onWindowChanged: visibleWindow,
+      ),
+      if (loadingView)
+        const Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: LinearProgressIndicator(),
+        ),
+      if (viewFailed)
+        Positioned(
+          top: 56,
+          left: 4,
+          right: 4,
+          child: Material(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() => viewFailed = false);
+                scheduleView();
+              },
+              icon: const Icon(Icons.refresh),
+              label: const UiText('Повторить загрузку области'),
+            ),
           ),
-      ],
-    ),
+        ),
+    ],
   );
+
+  void goToAddress() {
+    final position = gridAddress(addressInput.text);
+    if (position == null) {
+      tip('Введите адрес от A1 до XFD1048576');
+      return;
+    }
+    unawaited(
+      selectCell(
+        '${gridColumnName(position.column)}${position.row + 1}',
+        reveal: true,
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -479,7 +650,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         if (request.bytes != null) {
           run(() async {
             await setBook(request.bytes!, name: request.name);
-            restoreDraft(request.recovery);
+            await restoreDraft(request.recovery);
             if (request.recovery == null) await rememberCurrent();
           });
         } else if (request.create) {
@@ -489,24 +660,38 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
   }
 
-  void restoreDraft(Map<String, dynamic>? state) {
+  Future<void> restoreDraft(Map<String, dynamic>? state) async {
     if (state == null) return;
     final sheet = state['sheet'] as int;
     final address = state['selected'] as String;
-    if (sheet < 0 ||
-        sheet >= sheets.length ||
-        !RegExp(r'^[A-Z]{1,3}[1-9][0-9]{0,6}$').hasMatch(address)) {
+    if (sheet < 0 || sheet >= sheets.length || gridAddress(address) == null) {
       throw const FormatException(
         'Не удалось восстановить выбранную ячейку. Черновик сохранён.',
       );
     }
+    final position = gridAddress(address)!;
+    final window = GridWindow(
+      sheet,
+      position.row,
+      position.column,
+      rows: 1,
+      columns: 1,
+    ).buffered;
+    final parsed = await bridge!.inspectGrid(book!, window, address);
+    if (!mounted) return;
     sheetIndex = sheet;
     selected = address;
-    refreshCells();
+    acceptView(parsed, window);
+    wantedWindow = window;
     input.text = state['input'] as String;
     modified = state['modified'] == true;
     restoringDraft = false;
     setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        gridViewport.currentState?.goToCell(position.row, position.column);
+      }
+    });
     queueDraft();
   }
 
@@ -568,6 +753,32 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         'grid',
         exclude: {'Ж'},
         leading: {
+          'Вид': [
+            EditorTool(
+              'Перейти к ячейке',
+              Icons.my_location,
+              builder: (_) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    key: const Key('grid-address-input'),
+                    controller: addressInput,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      labelText: tr(context, 'Адрес ячейки'),
+                      hintText: 'AA1000',
+                    ),
+                    onSubmitted: (_) => goToAddress(),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: busy ? null : goToAddress,
+                    child: const UiText('Перейти'),
+                  ),
+                ],
+              ),
+            ),
+          ],
           'Главная': [
             EditorTool(
               'Стиль',
@@ -771,7 +982,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                         child: Row(
                           children: [
                             SizedBox(
-                              width: 52,
+                              width: selected.length > 5 ? 104 : 52,
                               child: UiText(
                                 selected,
                                 textAlign: TextAlign.center,

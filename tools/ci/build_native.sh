@@ -9,7 +9,7 @@ python tools/sync_native_pins.py
 cargo test --locked --manifest-path native/artoffice_core/Cargo.toml
 
 sdk="${ANDROID_HOME:?}"
-"$sdk/cmdline-tools/latest/bin/sdkmanager" --install 'ndk;28.2.13676358'
+bash tools/ci/install_android.sh 'ndk;28.2.13676358'
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS='-C link-arg=-Wl,-z,max-page-size=16384'
 cargo build --locked --release --target aarch64-linux-android --manifest-path native/artoffice_core/Cargo.toml

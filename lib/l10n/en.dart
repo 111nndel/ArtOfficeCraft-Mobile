@@ -399,4 +399,11 @@ const english = <String, String>{
   "Бюджет команды.xlsx": "Team budget.xlsx",
   "Презентация идеи.pptx": "Idea presentation.pptx",
   "Импортированный.{0}": "Imported.{0}",
+  "Не удалось сохранить тему. Повторите выбор.":
+      "Could not save the theme. Please choose it again.",
+  "Перейти к ячейке": "Go to cell",
+  "Адрес ячейки": "Cell address",
+  "Перейти": "Go",
+  "Введите адрес от A1 до XFD1048576": "Enter an address from A1 to XFD1048576",
+  "Повторить загрузку области": "Retry loading this area",
 };
