@@ -1,3 +1,5 @@
+import '../workspace/document_picker.dart';
+import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 
@@ -291,7 +293,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
 
   Future<void> openDocument() => guarded(() async {
     if (!await confirmReplace()) return;
-    final selected = await FlutterFileDialog.pickFile();
+    final selected = await pickDocument(EditorKind.word);
     if (selected == null) return;
     final file = File(selected);
     final length = await file.length();

@@ -32,15 +32,44 @@ class GridWindow {
     this.column, {
     this.rows = 64,
     this.columns = 16,
-  });
+  }) : rowIndices = null,
+       columnIndices = null;
+  GridWindow.visible(this.sheet, List<int> rowList, List<int> columnList)
+    : rowIndices = List.unmodifiable(rowList),
+      columnIndices = List.unmodifiable(columnList),
+      row = rowList.first,
+      column = columnList.first,
+      rows = rowList.last - rowList.first + 1,
+      columns = columnList.last - columnList.first + 1;
   final int sheet, row, column, rows, columns;
+  final List<int>? rowIndices, columnIndices;
+  Iterable<int> get requestedRows =>
+      rowIndices ?? List.generate(rows, (i) => row + i);
+  Iterable<int> get requestedColumns =>
+      columnIndices ?? List.generate(columns, (i) => column + i);
   bool contains(int r, int c) =>
-      r >= row && r < row + rows && c >= column && c < column + columns;
+      r >= row &&
+      r < row + rows &&
+      c >= column &&
+      c < column + columns &&
+      (rowIndices == null || rowIndices!.contains(r)) &&
+      (columnIndices == null || columnIndices!.contains(c));
   bool covers(GridWindow other) =>
       sheet == other.sheet &&
-      contains(other.row, other.column) &&
-      contains(other.row + other.rows - 1, other.column + other.columns - 1);
+      other.requestedRows.every(
+        (r) =>
+            r >= row &&
+            r < row + rows &&
+            (rowIndices == null || rowIndices!.contains(r)),
+      ) &&
+      other.requestedColumns.every(
+        (c) =>
+            c >= column &&
+            c < column + columns &&
+            (columnIndices == null || columnIndices!.contains(c)),
+      );
   GridWindow get buffered {
+    if (rowIndices != null) return this;
     final height = (rows + 32).clamp(64, 128);
     final width = (columns + 8).clamp(16, 32);
     final r = (row - 16).clamp(0, gridMaxRows - height);
@@ -55,5 +84,7 @@ class GridWindow {
     'rows': rows,
     'columns': columns,
     'selected': selected,
+    if (rowIndices != null) 'rowIndices': rowIndices,
+    if (columnIndices != null) 'columnIndices': columnIndices,
   };
 }

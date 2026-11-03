@@ -1,5 +1,14 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
+  "Удерживайте и тяните для изменения размера": "Hold and drag to resize",
+  "Высота строки": "Row height",
+  "Ширина столбца": "Column width",
+  "Размер строк и столбцов": "Row and column sizes",
+  "Удерживайте заголовок строки или столбца и тяните для изменения размера. Двумя пальцами изменяйте масштаб таблицы.": "Hold a row or column heading and drag to resize. Pinch with two fingers to zoom the sheet.",
+  "Сверху": "Top",
+  "Посередине": "Middle",
+  "Снизу": "Bottom",
+
   "Цель проекта": "Project goal",
   "Опишите результат, который хотите получить.":
       "Describe the result you want to achieve.",

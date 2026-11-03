@@ -1,3 +1,4 @@
+import '../workspace/document_picker.dart';
 import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 import 'project_info_screen.dart';
@@ -6,7 +7,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import '../native/imported_filename.dart';
 import '../native/native_deck_screen.dart';
@@ -259,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await open(kind, launch: const EditorLaunch(create: true));
     } else {
       try {
-        final path = await FlutterFileDialog.pickFile();
+        final path = await pickDocument(kind);
         if (path == null || !mounted) return;
         final file = File(path);
         if (await file.length() > 64 * 1024 * 1024) {

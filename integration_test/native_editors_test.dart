@@ -1,3 +1,4 @@
+import 'grid_layout_fixture.dart';
 import 'worker_media_fixture.dart';
 
 import 'package:artofficecraft_mobile/native/grid_window.dart';
@@ -326,7 +327,7 @@ void main() {
 
       final info = await readNativeBuildInfo();
       expect(info!['abi'], 1);
-      expect(info['coreVersion'], '0.17.0');
+      expect(info['coreVersion'], '0.18.0');
       expect((info['engines'] as Map).keys.toSet(), {
         'wordcraft',
         'gridcraft',
@@ -867,6 +868,146 @@ void main() {
             .setMockMethodCallHandler(files, null);
       }
       expect(backend.workerStarts, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await backend.close();
+    },
+  );
+  testWidgets(
+    'Actual Android: imported XLSX geometry, finger resize, undo and saved layout',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      final original = gridLayoutFixture();
+      final initial = await backend.inspectGrid(
+        original,
+        const GridWindow(0, 0, 0),
+        'A1',
+      );
+      final colRun = (initial['layout']['columns'] as List).first as List;
+      final oldWidth = (colRun[2] as num).toDouble();
+      final oldHeight =
+          ((initial['layout']['rows'] as List).firstWhere((v) => v[0] == 3)[2]
+                  as num)
+              .toDouble();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: OfficeTheme.build(Brightness.light),
+          home: NativeGridScreen(
+            backend: backend,
+            launch: EditorLaunch(bytes: original, name: 'Imported-layout.xlsx'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpAndSettle();
+      final merged = find.byKey(const ValueKey('grid-cell-A1'));
+      expect(tester.getSize(merged).width, greaterThan(oldWidth * 2));
+      expect(tester.getSize(merged).height, closeTo(68 * 4 / 3, .1));
+      expect(find.byKey(const ValueKey('grid-cell-B2')), findsNothing);
+      expect(find.byKey(const ValueKey('grid-row-header-2')), findsNothing);
+      expect(find.byKey(const ValueKey('grid-column-header-3')), findsNothing);
+      await capture(tester, 'imported-grid-layout');
+      final formula = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(formula, 'Edited merged title');
+      // Keep the keyboard out of the document, without applying pending text.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      Future<void> dragHeading(String key, Offset delta) async {
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(ValueKey(key))),
+        );
+        await tester.pump(const Duration(milliseconds: 650));
+        await gesture.moveBy(delta);
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      await dragHeading('grid-column-header-0', const Offset(60, 0));
+      expect(
+        tester
+            .state<SheetViewportState>(find.byType(SheetViewport))
+            .columns
+            .extent(0),
+        closeTo(oldWidth + 60, 1),
+      );
+      expect(
+        tester.widget<TextField>(formula).controller!.text,
+        'Edited merged title',
+      );
+      await dragHeading('grid-row-header-3', const Offset(0, -20));
+      expect(
+        tester
+            .state<SheetViewportState>(find.byType(SheetViewport))
+            .rows
+            .extent(3),
+        closeTo(oldHeight - 20, 1),
+      );
+      await tester.tap(find.byTooltip('Отменить'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .state<SheetViewportState>(find.byType(SheetViewport))
+            .rows
+            .extent(3),
+        closeTo(oldHeight, 1),
+      );
+      await tester.tap(find.byTooltip('Повторить'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .state<SheetViewportState>(find.byType(SheetViewport))
+            .rows
+            .extent(3),
+        closeTo(oldHeight - 20, 1),
+      );
+      Uint8List? exported;
+      const files = MethodChannel('flutter_file_dialog');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(files, (call) async {
+            exported = (call.arguments as Map)['data'] as Uint8List;
+            return '/test/imported-layout.xlsx';
+          });
+      try {
+        await tester.tap(find.byTooltip('Меню файла'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Сохранить копию'));
+        await tester.pumpAndSettle();
+        final saved = await backend.inspectGrid(
+          exported!,
+          const GridWindow(0, 0, 0),
+          'B2',
+        );
+        expect(saved['selection']['address'], 'A1');
+        expect(saved['selection']['input'], 'Edited merged title');
+        expect(saved['layout']['merges'], initial['layout']['merges']);
+        expect(
+          (saved['layout']['columns'] as List).first[2],
+          closeTo(oldWidth + 60, 1),
+        );
+        expect(
+          (saved['layout']['rows'] as List).firstWhere((v) => v[0] == 3)[2],
+          closeTo(oldHeight - 20, 1),
+        );
+        expect(saved['sheets'][0]['cells']['B4']['display'], '12.50%');
+        expect(
+          (await backend.inspectGrid(
+            original,
+            const GridWindow(0, 0, 0),
+            'A1',
+          ))['selection']['input'],
+          'Imported merged title',
+        );
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(files, null);
+      }
+      await capture(tester, 'imported-grid-resized');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await backend.close();

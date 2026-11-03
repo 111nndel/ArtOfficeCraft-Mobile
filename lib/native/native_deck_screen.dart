@@ -1,3 +1,5 @@
+import '../workspace/document_picker.dart';
+import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 
@@ -184,7 +186,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   });
   Future<void> open() => action(() async {
     if (!await discard()) return;
-    final path = await FlutterFileDialog.pickFile();
+    final path = await pickDocument(EditorKind.slides);
     if (path == null) return;
     final file = File(path);
     if (await file.length() > 64 * 1024 * 1024) {

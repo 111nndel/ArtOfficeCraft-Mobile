@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview: alpha 0.17.0 — not a finished office suite.**
+**Current preview: alpha 0.18.0 — not a finished office suite.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -12,12 +12,12 @@ About. Spreadsheets support pinch zoom and pan; PDF opens at page width in the
 full available canvas, with optional thumbnails and fit controls. Large editor
 tool targets and the approved nested slab navigation remain unchanged. Light/dark
 appearance is saved locally and restored before the first Flutter frame.
-See [0.17.0 validation and limits](docs/validation-0.17.0.md).
+See [0.18.0 validation and limits](docs/validation-0.18.0.md).
 
 | Format | Current capability |
 | --- | --- |
 | DOCX / WordCraft | Create/read DOCX, edit plain paragraphs directly on the page with cursor/selection, selected bold/italic/underline/font size and paragraph alignment/spacing; undo/redo; save a new copy. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
-| XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; sticky headings and Go to cell inside View. Imported geometry/merges/charts still lack faithful rendering. |
+| XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; sticky headings and Go to cell inside View. Imported dimensions/hidden rows and columns/merged regions; finger-driven row/column resizing with undo/redo and saved XLSX sizes. Charts and complex styles remain incomplete. |
 | PPTX / DeckCraft | Create/import PPTX, add/delete slides, add/edit text, Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
 | PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model basic page organization and Save As. Complex editing/forms/signing not complete. |
 
@@ -32,7 +32,7 @@ buffers are released on success and on error. Each edit still serializes and rep
 a persistent native document/session model and faithful page layout are future work.
 Grid's mobile view bypasses the legacy first-1600-cell inspection limit: it reads
 the requested rectangle plus the selected cell independently. Panning is debounced
-and does not replace pending formula input. Window reads still reparse the XLSX.
+and does not replace pending formula input. Sparse geometry and visible index lists handle hidden lines. Hold a row/column heading and drag to resize; pinch zoom extends to 500%. Window reads still reparse the XLSX.
 DOCX keeps the active paragraph draft locally while typing; moving to another
 paragraph, Done, formatting and Save As flush it through the native adapter.
 Failed commits keep the visible draft and block export of stale bytes.
@@ -41,7 +41,7 @@ and preserves styles on value/formula replacement. Applied Grid edits update
 the app-private working copy. Locally written recovery checkpoints retain pending
 Word/Grid/Deck input and modified PDF bytes after process termination; Home offers
 to resume them. Only the last completed checkpoint is recoverable, and undo history
-is session-local. See docs/validation-0.17.0.md for current checks and limits.
+is session-local. See docs/validation-0.18.0.md for current checks and limits.
 The shared panel navigation follows design/INTERACTION_SPEC.md.
 
 The mobile app integrates four independent upstream projects. It is an independent
@@ -235,11 +235,12 @@ are outstanding.
 
 ### Limitations and safe handling
 
-The WordCraft mobile UI is currently only a text preview of the document body. Existing rich text, images, tables and page layout are not rendered faithfully. Round-trip behavior for complex DOCX has not been established. Keep originals and save edited files as new copies.
+WordCraft now supports in-page paragraph edits and selected character/paragraph formatting. Images, tables and page layout are not rendered faithfully. Round-trip behavior for complex DOCX has not been established. Keep originals and save edited files as new copies.
 
 XLSX uses native GridCraft for actual file operations and, since 0.17.0, windowed
-cell reads across the full Excel address range. Imported geometry is still
-approximate. PPTX uses real DeckCraft operations with limited preview; PDF displays
+cell reads across the full Excel address range. Version 0.18.0 connects imported
+dimensions, hidden lines and merged regions, plus touch resizing. Conditional/table
+styles, images/charts and several other layout features remain incomplete. PPTX uses real DeckCraft operations with limited preview; PDF displays
 real page contents with Android PdfRenderer, but advanced PDF editing is unfinished.
 No format is yet fully featured.
 

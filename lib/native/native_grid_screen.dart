@@ -1,3 +1,6 @@
+import 'grid_layout.dart';
+import '../workspace/document_picker.dart';
+import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../ui/sheet_viewport.dart';
 import '../workspace/draft_store.dart';
@@ -77,6 +80,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   final history = DocumentHistory();
   final addressInput = TextEditingController();
   Map<String, dynamic> selectedCell = {};
+  GridLayout layout = GridLayout.fromJson(null);
   GridWindow loadedWindow = const GridWindow(0, 0, 0);
   GridWindow? wantedWindow;
   Timer? viewTimer;
@@ -224,7 +228,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
   Future<void> open() => run(() async {
     if (!await askDiscard()) return;
-    final path = await FlutterFileDialog.pickFile();
+    final path = await pickDocument(EditorKind.excel);
     if (path == null) return;
     final file = File(path);
     if (await file.length() > 64 * 1024 * 1024) {
@@ -271,18 +275,26 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     sheets = parsedSheets(parsed);
     refreshCells();
     selectedCell = Map<String, dynamic>.from(parsed['selection'] as Map? ?? {});
+    layout = GridLayout.fromJson(parsed['layout'] as Map?);
+    selected = selectedCell['address'] as String? ?? selected;
     loadedWindow = window;
     viewFailed = false;
   }
 
   void visibleWindow(GridWindow region) {
-    final visible = GridWindow(
-      sheetIndex,
-      region.row,
-      region.column,
-      rows: region.rows,
-      columns: region.columns,
-    );
+    final visible = region.rowIndices != null
+        ? GridWindow.visible(
+            sheetIndex,
+            region.rowIndices!,
+            region.columnIndices!,
+          )
+        : GridWindow(
+            sheetIndex,
+            region.row,
+            region.column,
+            rows: region.rows,
+            columns: region.columns,
+          );
     if (loadedWindow.covers(visible)) {
       wantedWindow = loadedWindow;
       viewTimer?.cancel();
@@ -480,9 +492,10 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     ),
   );
   Widget cell(String address) {
-    final item = cells[address];
+    final item = address == selected ? selectedCell : cells[address];
     final position = gridAddress(address)!;
-    final known = loadedWindow.contains(position.row, position.column);
+    final known =
+        item is Map || loadedWindow.contains(position.row, position.column);
     final value = !known
         ? '…'
         : item is Map
@@ -505,17 +518,23 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
               }
             },
       child: Container(
-        height: 56,
-        alignment: switch (style['align']) {
-          'left' => Alignment.centerLeft,
-          'center' => Alignment.center,
-          'right' => Alignment.centerRight,
-          _ =>
-            numeric || double.tryParse(value.replaceAll(' ', '')) != null
-                ? Alignment.centerRight
-                : Alignment.centerLeft,
-        },
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment(
+          switch (style['align']) {
+            'left' => -1.0,
+            'center' => 0.0,
+            'right' => 1.0,
+            _ => numeric ? 1.0 : -1.0,
+          },
+          switch (style['verticalAlign']) {
+            'top' => -1.0,
+            'bottom' => 1.0,
+            _ => 0.0,
+          },
+        ),
+        padding: EdgeInsets.only(
+          left: 3 + ((style['indent'] as num?)?.toDouble() ?? 0) * 8,
+          right: 3,
+        ),
         decoration: BoxDecoration(
           color: address == selected
               ? Color.alphaBlend(const Color(0x16188458), fill)
@@ -529,28 +548,35 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   bottom: cellBorder(style, 'bottom'),
                 ),
         ),
-        child: Text(
-          value,
-          textAlign: switch (style['align']) {
-            'center' => TextAlign.center,
-            'right' => TextAlign.right,
-            _ => TextAlign.left,
-          },
-          style: TextStyle(
-            color: rgb(style['color']) ?? const Color(0xff172634),
-            fontSize: ((style['fontSize'] as num?)?.toDouble() ?? 12) * 1.33,
-            fontWeight: style['bold'] == true
-                ? FontWeight.bold
-                : FontWeight.normal,
-            fontStyle: style['italic'] == true
-                ? FontStyle.italic
-                : FontStyle.normal,
-            decoration: style['underline'] == true
-                ? TextDecoration.underline
-                : TextDecoration.none,
+        child: ClipRect(
+          child: Text(
+            value,
+            softWrap: style['wrap'] == true,
+            textAlign: switch (style['align']) {
+              'center' => TextAlign.center,
+              'right' => TextAlign.right,
+              _ => numeric ? TextAlign.right : TextAlign.left,
+            },
+            textScaler: TextScaler.noScaling,
+            style: TextStyle(
+              height: 1.1,
+              color: rgb(style['color']) ?? const Color(0xff172634),
+              fontSize: ((style['fontSize'] as num?)?.toDouble() ?? 12) * 4 / 3,
+              fontFamily: style['fontName'] as String?,
+              fontWeight: style['bold'] == true
+                  ? FontWeight.bold
+                  : FontWeight.normal,
+              fontStyle: style['italic'] == true
+                  ? FontStyle.italic
+                  : FontStyle.normal,
+              decoration: TextDecoration.combine([
+                if (style['underline'] == true) TextDecoration.underline,
+                if (style['strike'] == true) TextDecoration.lineThrough,
+              ]),
+            ),
+            maxLines: style['wrap'] == true ? null : 1,
+            overflow: TextOverflow.clip,
           ),
-          maxLines: style['wrap'] == true ? 3 : 1,
-          overflow: TextOverflow.clip,
         ),
       ),
     );
@@ -569,8 +595,10 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return BorderSide(
       color: width > 0
           ? rgb(border?['color']) ?? Colors.black
-          : const Color(0xffe5e9ef),
-      width: width > 0 ? width.clamp(1, 3).toDouble() : .7,
+          : layout.showGridlines
+          ? const Color(0xffe5e9ef)
+          : Colors.transparent,
+      width: width > 0 ? width.clamp(.3, 6).toDouble() : .7,
     );
   }
 
@@ -582,6 +610,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         rowCount: gridMaxRows,
         columnCount: gridMaxColumns,
         rowHeaderExtent: 64,
+        layout: layout,
+        onResize: busy ? null : resizeLine,
         corner: header(''),
         columnHeaderBuilder: (context, col) => header(gridColumnName(col)),
         rowHeaderBuilder: (context, row) => header('${row + 1}'),
@@ -615,6 +645,18 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         ),
     ],
   );
+
+  Future<void> resizeLine(bool row, int index, double size) => run(() async {
+    if (book == null) return;
+    await flushInput();
+    await applyEdit({
+      'action': row ? 'rowHeight' : 'columnWidth',
+      'sheet': sheetIndex,
+      'address': selected,
+      'index': index,
+      'size': size,
+    });
+  });
 
   void goToAddress() {
     final position = gridAddress(addressInput.text);
@@ -755,6 +797,17 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         leading: {
           'Вид': [
             EditorTool(
+              'Размер строк и столбцов',
+              Icons.touch_app_outlined,
+              inline: true,
+              builder: (_) => const Padding(
+                padding: EdgeInsets.all(12),
+                child: UiText(
+                  'Удерживайте заголовок строки или столбца и тяните для изменения размера. Двумя пальцами изменяйте масштаб таблицы.',
+                ),
+              ),
+            ),
+            EditorTool(
               'Перейти к ячейке',
               Icons.my_location,
               builder: (_) => Column(
@@ -810,7 +863,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             'Масштаб',
             Icons.zoom_in,
             children: [
-              for (final percent in [50, 75, 100, 125, 150, 200, 300])
+              for (final percent in [50, 75, 100, 125, 150, 200, 300, 400, 500])
                 EditorTool(
                   '$percent%',
                   Icons.zoom_in,
@@ -853,6 +906,15 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   }),
                   action('Справа', Icons.format_align_right, {
                     'align': 'right',
+                  }),
+                  action('Сверху', Icons.vertical_align_top, {
+                    'verticalAlign': 'top',
+                  }),
+                  action('Посередине', Icons.vertical_align_center, {
+                    'verticalAlign': 'center',
+                  }),
+                  action('Снизу', Icons.vertical_align_bottom, {
+                    'verticalAlign': 'bottom',
                   }),
                 ],
               ),

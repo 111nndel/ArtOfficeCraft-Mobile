@@ -1,3 +1,5 @@
+import '../workspace/document_picker.dart';
+import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../ui/pdf_viewport.dart';
 import '../workspace/draft_store.dart';
@@ -187,7 +189,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   });
   Future<void> open() => execute(() async {
     if (!await discard()) return;
-    final path = await FlutterFileDialog.pickFile();
+    final path = await pickDocument(EditorKind.pdf);
     if (path == null) return;
     final f = File(path);
     if (await f.length() > 64 * 1024 * 1024) {

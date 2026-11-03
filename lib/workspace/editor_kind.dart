@@ -17,6 +17,20 @@ extension EditorInfo on EditorKind {
     EditorKind.pdf => 'pdf',
   };
   String get format => extension.toUpperCase();
+  String get mimeType => switch (this) {
+    EditorKind.word =>
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    EditorKind.excel =>
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    EditorKind.slides => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    EditorKind.pdf => 'application/pdf',
+  };
+  String get utiType => switch (this) {
+    EditorKind.word => 'org.openxmlformats.wordprocessingml.document',
+    EditorKind.excel => 'org.openxmlformats.spreadsheetml.sheet',
+    EditorKind.slides => 'org.openxmlformats.presentationml.presentation',
+    EditorKind.pdf => 'com.adobe.pdf',
+  };
   String get description => switch (this) {
     EditorKind.word => 'Текст и документы',
     EditorKind.excel => 'Данные и формулы',
