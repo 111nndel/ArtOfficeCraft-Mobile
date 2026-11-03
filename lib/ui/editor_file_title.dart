@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 import 'package:flutter/material.dart';
 
 /// Readable document identity shared by all four native format screens.
@@ -34,7 +36,7 @@ class EditorFileTitle extends StatelessWidget {
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 3),
-            Text(
+            UiText(
               status,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

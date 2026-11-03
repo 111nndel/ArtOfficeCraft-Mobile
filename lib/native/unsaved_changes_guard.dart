@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 import 'package:flutter/material.dart';
 
 /// Blocks Back while an editor is writing a file or has unsaved changes.
@@ -36,7 +38,9 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
     }
     if (widget.busy) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Дождитесь завершения операции с файлом')),
+        const SnackBar(
+          content: UiText('Дождитесь завершения операции с файлом'),
+        ),
       );
       return;
     }
@@ -46,18 +50,18 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
       final discard = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Несохранённые изменения'),
-          content: const Text(
+          title: const UiText('Несохранённые изменения'),
+          content: const UiText(
             'Изменения не сохранены. Выйти из редактора без сохранения копии?',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Остаться'),
+              child: const UiText('Остаться'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Выйти без сохранения'),
+              child: const UiText('Выйти без сохранения'),
             ),
           ],
         ),
@@ -69,7 +73,7 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
+              content: UiText(
                 'Не удалось удалить черновик. Работа оставлена открытой.',
               ),
             ),

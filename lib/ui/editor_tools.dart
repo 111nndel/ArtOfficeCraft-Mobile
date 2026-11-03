@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 import 'package:flutter/material.dart';
 
 class EditorCommand {
@@ -17,13 +19,14 @@ class EditorTool {
     this.builder,
     this.pending = false,
     this.inline = false,
+    this.localize = true,
   });
   final String label;
   final IconData icon;
   final VoidCallback? onPressed;
   final List<EditorTool>? children;
   final WidgetBuilder? builder;
-  final bool pending, inline;
+  final bool pending, inline, localize;
 }
 
 class EditorSection {
@@ -116,7 +119,7 @@ class EditorToolPanelState extends State<EditorToolPanel> {
       SizedBox.square(
         dimension: 52,
         child: IconButton(
-          tooltip: label,
+          tooltip: tr(context, label),
           onPressed: action,
           icon: Icon(icon, size: 26),
           style: IconButton.styleFrom(
@@ -166,7 +169,7 @@ class EditorToolPanelState extends State<EditorToolPanel> {
                             alpha: .09,
                           ),
                           selectedColor: widget.color,
-                          title: Text(widget.sections[i].label),
+                          title: UiText(widget.sections[i].label),
                           onTap: () => openTool(i, []),
                         ),
                     ],
@@ -207,9 +210,12 @@ class EditorToolPanelState extends State<EditorToolPanel> {
                             ? Theme.of(context).disabledColor
                             : widget.color,
                       ),
-                      title: Text(tools[i].label),
+                      title: UiText(
+                        tools[i].label,
+                        translate: tools[i].localize,
+                      ),
                       subtitle: tools[i].pending
-                          ? const Text(
+                          ? const UiText(
                               'Ещё не подключено',
                               style: TextStyle(fontSize: 13),
                             )
@@ -307,8 +313,12 @@ class EditorToolPanelState extends State<EditorToolPanel> {
                                 child: Row(
                                   children: [
                                     Expanded(
-                                      child: Text(
+                                      child: UiText(
                                         title,
+                                        translate:
+                                            _path.isEmpty ||
+                                            _tool(_section, _path)?.localize !=
+                                                false,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
@@ -373,7 +383,7 @@ class EditorFileMenu extends StatelessWidget {
   final List<EditorCommand> commands;
   @override
   Widget build(BuildContext context) => PopupMenuButton<int>(
-    tooltip: 'Меню файла',
+    tooltip: tr(context, 'Меню файла'),
     icon: const Icon(Icons.more_horiz),
     onSelected: (i) => commands[i].onPressed?.call(),
     itemBuilder: (_) => [
@@ -386,7 +396,7 @@ class EditorFileMenu extends StatelessWidget {
             children: [
               Icon(commands[i].icon),
               const SizedBox(width: 12),
-              Expanded(child: Text(commands[i].label)),
+              Expanded(child: UiText(commands[i].label)),
             ],
           ),
         ),
@@ -418,7 +428,7 @@ class EditorWelcome extends StatelessWidget {
         children: [
           Icon(icon, size: 48),
           const SizedBox(height: 18),
-          Text(
+          UiText(
             title,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleLarge,
@@ -427,13 +437,13 @@ class EditorWelcome extends StatelessWidget {
           FilledButton.icon(
             onPressed: busy ? null : onOpen,
             icon: const Icon(Icons.folder_open_outlined),
-            label: Text(openLabel),
+            label: UiText(openLabel),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: busy ? null : onCreate,
             icon: const Icon(Icons.add),
-            label: Text(createLabel),
+            label: UiText(createLabel),
           ),
           if (busy)
             const Padding(
@@ -470,10 +480,10 @@ class EditorTextStyleControls extends StatelessWidget {
         child: Row(
           children: [
             const Expanded(
-              child: Text('Шрифт и стиль', style: TextStyle(fontSize: 16)),
+              child: UiText('Шрифт и стиль', style: TextStyle(fontSize: 16)),
             ),
             DropdownButton<double>(
-              hint: const Text('Размер'),
+              hint: const UiText('Размер'),
               value: fontSize,
               onChanged: onSize == null
                   ? null
@@ -485,7 +495,7 @@ class EditorTextStyleControls extends StatelessWidget {
                   .map(
                     (v) => DropdownMenuItem(
                       value: v,
-                      child: Text(v.toInt().toString()),
+                      child: UiText(v.toInt().toString()),
                     ),
                   )
                   .toList(),
@@ -509,7 +519,7 @@ class EditorTextStyleControls extends StatelessWidget {
                     : command.icon == Icons.format_italic
                     ? italic
                     : underline,
-                tooltip: command.label,
+                tooltip: tr(context, command.label),
                 onPressed: command.onPressed,
                 icon: Icon(command.icon, size: 28),
               ),

@@ -1,3 +1,4 @@
+import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 
 import 'dart:async';
@@ -83,7 +84,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   void message(String value) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(value), duration: const Duration(seconds: 3)),
+        SnackBar(content: UiText(value), duration: const Duration(seconds: 3)),
       );
     }
   }
@@ -134,18 +135,18 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     return await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
-            title: const Text('Несохранённые изменения'),
-            content: const Text(
+            title: const UiText('Несохранённые изменения'),
+            content: const UiText(
               'Открыть другую презентацию без сохранения текущей?',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(c, false),
-                child: const Text('Отмена'),
+                child: const UiText('Отмена'),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(c, true),
-                child: const Text('Продолжить'),
+                child: const UiText('Продолжить'),
               ),
             ],
           ),
@@ -154,28 +155,30 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   }
 
   Future<void> create() => action(() async {
+    final strings = Localizations.of<AppStrings>(context, AppStrings);
+    String translated(String value) => strings?.translate(value) ?? value;
     if (!await discard()) return;
     var bytes = await engine!.create();
     if (widget.launch?.template == true) {
       bytes = await engine!.edit(bytes, {
         'action': 'add_text',
         'slide': 0,
-        'text': 'Идея, которая объединяет.',
+        'text': translated('Идея, которая объединяет.'),
       });
       bytes = await engine!.edit(bytes, {
         'action': 'add_slide',
-        'text': 'От идеи — к действию',
+        'text': translated('От идеи — к действию'),
       });
       bytes = await engine!.edit(bytes, {
         'action': 'add_slide',
-        'text': 'Следующий шаг',
+        'text': translated('Следующий шаг'),
       });
     }
     await load(
       bytes,
       name: widget.launch?.template == true
-          ? 'Презентация идеи.pptx'
-          : 'Новая презентация.pptx',
+          ? translated('Презентация идеи.pptx')
+          : translated('Новая презентация.pptx'),
       changed: true,
     );
   });
@@ -294,15 +297,15 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Удалить слайд?'),
+        title: const UiText('Удалить слайд?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c, false),
-            child: const Text('Отмена'),
+            child: const UiText('Отмена'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Удалить'),
+            child: const UiText('Удалить'),
           ),
         ],
       ),
@@ -569,7 +572,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
             builder: (_) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
+                UiText(
                   textHeading,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
@@ -579,8 +582,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   controller: deckText,
                   minLines: 2,
                   maxLines: 4,
-                  decoration: const InputDecoration(
-                    hintText: 'Текст на слайде',
+                  decoration: InputDecoration(
+                    hintText: tr(context, 'Текст на слайде'),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -589,13 +592,13 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   children: [
                     TextButton(
                       onPressed: () => finishText(false),
-                      child: const Text('Отмена'),
+                      child: const UiText('Отмена'),
                     ),
                     FilledButton(
                       onPressed: textEdit != null && !busy
                           ? () => finishText(true)
                           : null,
-                      child: const Text('Применить'),
+                      child: const UiText('Применить'),
                     ),
                   ],
                 ),
@@ -611,7 +614,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                     (x) => x['editableText'] == true,
                   ))
                 EditorTool(
-                  shape['text']?.toString() ?? 'Текст',
+                  shape['text']?.toString() ?? tr(context, 'Текст'),
+                  localize: false,
                   Icons.text_fields,
                   onPressed: busy
                       ? null
@@ -672,7 +676,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   filename: filename,
                   status: enabled
                       ? (modified
-                            ? 'PPTX · есть изменения${widget.draft?.status ?? ''}'
+                            ? 'PPTX · есть изменения${tr(context, widget.draft?.status ?? '')}'
                             : 'PPTX · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xffcc6243),
@@ -701,7 +705,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
               ),
         body: !enabled
             ? const Center(
-                child: Text('DeckCraft Rust недоступен на этом устройстве'),
+                child: UiText('DeckCraft Rust недоступен на этом устройстве'),
               )
             : !loaded
             ? EditorWelcome(
@@ -775,7 +779,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                                       ),
                                     ),
                                   ),
-                                  Text(
+                                  UiText(
                                     (i + 1).toString(),
                                     style: const TextStyle(fontSize: 14),
                                   ),

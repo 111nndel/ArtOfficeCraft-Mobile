@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 import 'package:flutter/material.dart';
 
 /// A compact format warning. Long explanatory text opens as a scrollable
@@ -33,12 +35,12 @@ class FormatLimitsNotice extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      UiText(
                         summary,
                         style: Theme.of(sheetContext).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 12),
-                      Text(
+                      UiText(
                         details,
                         style: Theme.of(sheetContext).textTheme.bodyLarge,
                       ),
@@ -55,7 +57,7 @@ class FormatLimitsNotice extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(0, 52),
                     ),
-                    child: const Text('Закрыть'),
+                    child: const UiText('Закрыть'),
                   ),
                 ),
               ),
@@ -73,7 +75,7 @@ class FormatLimitsNotice extends StatelessWidget {
       child: ListTile(
         minTileHeight: 52,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        title: Text(
+        title: UiText(
           summary,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,

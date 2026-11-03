@@ -1,3 +1,4 @@
+import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 import 'project_info_screen.dart';
 
@@ -65,7 +66,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void message(String text) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: UiText(text)));
     }
   }
 
@@ -145,11 +147,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (recoveryStore.error != null)
       Padding(
         padding: const EdgeInsets.only(top: 12),
-        child: Text(recoveryStore.error!),
+        child: UiText(recoveryStore.error!),
       ),
     if (recoveryStore.items.isNotEmpty) ...[
       const SizedBox(height: 20),
-      const Text(
+      const UiText(
         'Восстановить работу',
         style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
       ),
@@ -166,17 +168,17 @@ class _HomeScreenState extends State<HomeScreen> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            subtitle: const Text(
+            subtitle: const UiText(
               'Локальный черновик · коснитесь, чтобы продолжить',
             ),
             onTap: opening ? null : () => open(item.kind, recovered: item),
             trailing: PopupMenuButton<String>(
-              tooltip: 'Действия с черновиком',
+              tooltip: tr(context, 'Действия с черновиком'),
               enabled: !opening,
               itemBuilder: (_) => [
                 const PopupMenuItem(
                   value: 'delete',
-                  child: Text('Удалить черновик'),
+                  child: UiText('Удалить черновик'),
                 ),
               ],
               onSelected: (_) => deleteDraft(item),
@@ -189,18 +191,18 @@ class _HomeScreenState extends State<HomeScreen> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Удалить черновик?'),
-        content: Text(
+        title: const UiText('Удалить черновик?'),
+        content: UiText(
           'Несохранённый ввод «${info.name}» будет удалён. Исходный файл останется на месте.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
+            child: const UiText('Отмена'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Удалить'),
+            child: const UiText('Удалить'),
           ),
         ],
       ),
@@ -229,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
+                UiText(
                   create ? 'Что создадим?' : 'Какой файл открыть?',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
@@ -240,8 +242,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: ListTile(
                       minTileHeight: 68,
                       leading: FormatIcon(kind: k),
-                      title: Text(k.label),
-                      subtitle: Text(k.format),
+                      title: UiText(k.label),
+                      subtitle: UiText(k.format),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.pop(context, k),
                     ),
@@ -316,7 +318,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: OfficeTheme.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Text(
+              child: const UiText(
                 'a',
                 style: TextStyle(
                   color: Colors.white,
@@ -327,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 10),
             const Expanded(
-              child: Text(
+              child: UiText(
                 'ArtOfficeCraft',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -342,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'О проекте и лицензиях',
+            tooltip: tr(context, 'О проекте и лицензиях'),
             icon: const Icon(Icons.info_outline),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -351,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Изменить тему',
+            tooltip: tr(context, 'Изменить тему'),
             onPressed: widget.toggleTheme,
             icon: Icon(
               Theme.of(context).brightness == Brightness.dark
@@ -386,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           leading: Icon(navIcon(i)),
-                          title: Text(navLabel(i)),
+                          title: UiText(navLabel(i)),
                           onTap: () => selectSection(i),
                         ),
                       ),
@@ -396,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: FilledButton.icon(
                         onPressed: () => chooseKind(create: true),
                         icon: const Icon(Icons.add),
-                        label: const Text('Создать'),
+                        label: const UiText('Создать'),
                       ),
                     ),
                   ],
@@ -417,12 +419,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: (_) => setState(() {}),
                       textInputAction: TextInputAction.search,
                       decoration: InputDecoration(
-                        hintText: 'Найти файл',
+                        hintText: tr(context, 'Найти файл'),
                         prefixIcon: const Icon(Icons.search),
                         suffixIcon: search.text.isEmpty
                             ? null
                             : IconButton(
-                                tooltip: 'Очистить поиск',
+                                tooltip: tr(context, 'Очистить поиск'),
                                 onPressed: () => setState(() => search.clear()),
                                 icon: const Icon(Icons.close),
                               ),
@@ -435,7 +437,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (section == 0 && !searching) ...recoveryWidgets(),
                     if (!searching) ...[
                       const SizedBox(height: 28),
-                      Text(
+                      UiText(
                         title,
                         style: TextStyle(
                           fontSize: wide ? 32 : 29,
@@ -445,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text(
+                      UiText(
                         section == 3
                             ? 'Продуманные заготовки для ваших задач.'
                             : 'Документы, расчёты и большие замыслы.\nВсё в одном пространстве.',
@@ -458,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 24),
                     ],
                     if (!searching && section != 2 && section != 3) ...[
-                      const Text(
+                      const UiText(
                         'Создать файл',
                         style: TextStyle(
                           fontSize: 18,
@@ -503,7 +505,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 28),
                     ],
                     if (section != 3 || searching) ...[
-                      Text(
+                      UiText(
                         searching
                             ? 'Результаты поиска'
                             : section == 2
@@ -522,7 +524,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: TextButton.icon(
                           onPressed: opening ? null : chooseKind,
                           icon: const Icon(Icons.folder_open_outlined),
-                          label: const Text('Открыть файл с устройства'),
+                          label: const UiText('Открыть файл с устройства'),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -541,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     minHeight: 52,
                                   ),
                                   child: ChoiceChip(
-                                    label: Text(
+                                    label: UiText(
                                       k?.label ?? 'Все',
                                       style: const TextStyle(fontSize: 15),
                                     ),
@@ -563,7 +565,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 28),
                     ],
                     if (!searching) ...[
-                      const Text(
+                      const UiText(
                         'С чистого листа — или с шаблона',
                         style: TextStyle(
                           fontSize: 20,
@@ -610,7 +612,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                     const SizedBox(height: 24),
-                    Text(
+                    UiText(
                       'Локальные рабочие копии хранятся внутри приложения. '
                       'Исходники не перезаписываются; для переноса используйте «Сохранить копию».',
                       style: TextStyle(
@@ -622,7 +624,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (store.error != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 12),
-                        child: Text(
+                        child: UiText(
                           store.error!,
                           style: TextStyle(fontSize: 14, color: colors.error),
                         ),
@@ -672,7 +674,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: colors.onSurfaceVariant,
               ),
               const SizedBox(height: 12),
-              Text(
+              UiText(
                 q.isNotEmpty
                     ? 'Файлы не найдены'
                     : section == 2
@@ -685,7 +687,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
+              UiText(
                 section == 2
                     ? 'Нажмите звёздочку рядом с нужным файлом.'
                     : 'Откройте документ с устройства или сохраните новый.',
@@ -732,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              Text(
+                              UiText(
                                 '${file.kind.format} · ${file.modified.day}.${file.modified.month} · рабочая копия',
                                 style: TextStyle(
                                   fontSize: 14,
@@ -748,7 +750,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               IconButton(
-                tooltip: file.favorite ? 'Убрать из избранного' : 'В избранное',
+                tooltip: tr(
+                  context,
+                  file.favorite ? 'Убрать из избранного' : 'В избранное',
+                ),
                 onPressed: () => favorite(file),
                 icon: Icon(
                   file.favorite ? Icons.star : Icons.star_border,
@@ -792,7 +797,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             vertical: 4,
                           ),
                           child: IconButton.filled(
-                            tooltip: 'Создать',
+                            tooltip: tr(context, 'Создать'),
                             onPressed: opening
                                 ? null
                                 : () => chooseKind(create: true),
@@ -806,7 +811,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         )
                       : Tooltip(
-                          message: navLabel(i),
+                          message: tr(context, navLabel(i)),
                           child: Semantics(
                             selected: section == i,
                             button: true,
@@ -834,7 +839,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                       if (scale <= 1.3) ...[
                                         const SizedBox(height: 6),
-                                        Text(
+                                        UiText(
                                           navLabel(i),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -914,12 +919,12 @@ class _EditorCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            Text(
+            UiText(
               kind.label,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
-            Text(
+            UiText(
               kind.description,
               style: TextStyle(
                 fontSize: 15,
@@ -965,7 +970,7 @@ class _TemplateCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    UiText(
                       title,
                       style: const TextStyle(
                         fontSize: 17,
@@ -973,7 +978,7 @@ class _TemplateCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
+                    UiText(
                       '${kind.format} · заготовка',
                       style: TextStyle(
                         fontSize: 14,

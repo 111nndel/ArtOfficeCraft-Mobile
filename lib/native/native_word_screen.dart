@@ -1,3 +1,4 @@
+import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 
 import 'dart:async';
@@ -185,7 +186,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   void inform(String text) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(text), duration: const Duration(seconds: 4)),
+      SnackBar(content: UiText(text), duration: const Duration(seconds: 4)),
     );
   }
 
@@ -230,16 +231,18 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Несохранённые изменения'),
-          content: const Text('Продолжить без сохранения текущего документа?'),
+          title: const UiText('Несохранённые изменения'),
+          content: const UiText(
+            'Продолжить без сохранения текущего документа?',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Отмена'),
+              child: const UiText('Отмена'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Продолжить'),
+              child: const UiText('Продолжить'),
             ),
           ],
         ),
@@ -250,9 +253,11 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   }
 
   Future<void> createNew() => guarded(() async {
+    final strings = Localizations.of<AppStrings>(context, AppStrings);
+    String translated(String value) => strings?.translate(value) ?? value;
     if (!await confirmReplace()) return;
     var bytes = await engine!.create(
-      widget.launch?.template == true ? 'План проекта' : '',
+      widget.launch?.template == true ? translated('План проекта') : '',
     );
     if (widget.launch?.template == true) {
       for (final text in [
@@ -263,14 +268,17 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         'Следующий шаг',
         'Определите ближайшую задачу и ответственного.',
       ]) {
-        bytes = await engine!.edit(bytes, {'action': 'append', 'text': text});
+        bytes = await engine!.edit(bytes, {
+          'action': 'append',
+          'text': translated(text),
+        });
       }
     }
     await updatePreview(bytes);
     setState(() {
       filename = widget.launch?.template == true
-          ? 'План проекта.docx'
-          : 'Новый документ.docx';
+          ? translated('План проекта.docx')
+          : translated('Новый документ.docx');
       changed = true;
     });
     history.clear();
@@ -292,7 +300,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     setState(() {
       filename = importedFilename(selected, 'docx');
       if (!filename.toLowerCase().endsWith('.docx')) {
-        filename = 'Импортированный.docx';
+        filename = tr(context, 'Импортированный.docx');
       }
       changed = false;
     });
@@ -553,7 +561,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   filename: filename,
                   status: enabled
                       ? (changed || inlineDirty
-                            ? 'DOCX · есть изменения${widget.draft?.status ?? ''}'
+                            ? 'DOCX · есть изменения${tr(context, widget.draft?.status ?? '')}'
                             : 'DOCX · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xff3565ca),
@@ -585,7 +593,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
             if (!enabled)
               const Padding(
                 padding: EdgeInsets.all(22),
-                child: Text(
+                child: UiText(
                   'Нативная библиотека libartoffice_core.so недоступна. '
                   'Для реального DOCX требуется Android ARM64.',
                 ),
@@ -664,8 +672,11 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                                               height: 1.5,
                                             ),
                                             decoration:
-                                                const InputDecoration.collapsed(
-                                                  hintText: 'Начните писать',
+                                                InputDecoration.collapsed(
+                                                  hintText: tr(
+                                                    context,
+                                                    'Начните писать',
+                                                  ),
                                                 ),
                                           )
                                         : Text.rich(
@@ -713,7 +724,10 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                                                             true
                                                         ? block['text']
                                                               .toString()
-                                                        : 'Коснитесь, чтобы начать писать',
+                                                        : tr(
+                                                            context,
+                                                            'Коснитесь, чтобы начать писать',
+                                                          ),
                                                   ),
                                               ],
                                             ),

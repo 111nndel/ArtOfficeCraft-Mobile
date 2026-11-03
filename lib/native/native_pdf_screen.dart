@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+import '../ui/pdf_viewport.dart';
 import '../workspace/draft_store.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
@@ -58,7 +60,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   }
 
   final toolPanel = GlobalKey<EditorToolPanelState>();
-  bool toolsExpanded = false;
+  bool toolsExpanded = false, showThumbnails = false;
+  final pdfViewport = GlobalKey<PdfViewportState>();
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf);
   Uint8List? contents;
@@ -84,7 +87,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   void tip(String msg) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+        SnackBar(content: UiText(msg), duration: const Duration(seconds: 3)),
       );
     }
   }
@@ -151,16 +154,16 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     return await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
-            title: const Text('Несохранённые изменения'),
-            content: const Text('Заменить текущий PDF без сохранения копии?'),
+            title: const UiText('Несохранённые изменения'),
+            content: const UiText('Заменить текущий PDF без сохранения копии?'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(c, false),
-                child: const Text('Отмена'),
+                child: const UiText('Отмена'),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(c, true),
-                child: const Text('Продолжить'),
+                child: const UiText('Продолжить'),
               ),
             ],
           ),
@@ -169,10 +172,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   }
 
   Future<void> create() => execute(() async {
+    final strings = Localizations.of<AppStrings>(context, AppStrings);
+    String translated(String value) => strings?.translate(value) ?? value;
     if (!await discard()) return;
     await load(
       await engine!.create(),
-      name: 'Новый документ.pdf',
+      name: translated('Новый документ.pdf'),
       edited: true,
     );
     tip('Создан PDF с одной страницей');
@@ -220,18 +225,18 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       final yes = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-          title: const Text('Удалить страницу?'),
-          content: const Text(
+          title: const UiText('Удалить страницу?'),
+          content: const UiText(
             'Оригинал PDF не изменяется, сохранение только в новую копию.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(c, false),
-              child: const Text('Отмена'),
+              child: const UiText('Отмена'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(c, true),
-              child: const Text('Удалить'),
+              child: const UiText('Удалить'),
             ),
           ],
         ),
@@ -293,7 +298,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                       return Image.memory(snapshot.data!, fit: BoxFit.contain);
                     }
                     if (snapshot.hasError) {
-                      return Text(
+                      return UiText(
                         (i + 1).toString(),
                         style: const TextStyle(
                           color: Colors.black54,
@@ -310,7 +315,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                 ),
               ),
             ),
-            Text(
+            UiText(
               'Стр. ${i + 1} · ${p['rotation']}°',
               style: const TextStyle(fontSize: 14),
               maxLines: 1,
@@ -403,6 +408,22 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         ],
       },
       overrides: {
+        'Масштаб': EditorTool(
+          'Масштаб',
+          Icons.zoom_in,
+          children: [
+            EditorTool(
+              'По ширине страницы',
+              Icons.width_normal,
+              onPressed: () => pdfViewport.currentState?.fitWidth(),
+            ),
+            EditorTool(
+              'Вся страница',
+              Icons.fit_screen,
+              onPressed: () => pdfViewport.currentState?.fitPage(),
+            ),
+          ],
+        ),
         'Повернуть': EditorTool(
           'Повернуть',
           Icons.rotate_right,
@@ -436,7 +457,6 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   @override
   Widget build(BuildContext context) {
     final available = engine != null;
-    final compact = MediaQuery.sizeOf(context).height < 650;
     return UnsavedChangesGuard(
       interceptBack: toolsExpanded,
       onInterceptBack: () => toolPanel.currentState?.handleBack(),
@@ -462,7 +482,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                   filename: filename,
                   status: available
                       ? (changed
-                            ? 'PDF · есть изменения${widget.draft?.status ?? ''}'
+                            ? 'PDF · есть изменения${tr(context, widget.draft?.status ?? '')}'
                             : 'PDF · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xffc94e59),
@@ -490,7 +510,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                 ],
               ),
         body: !available
-            ? const Center(child: Text('PDFCraft Rust недоступен'))
+            ? const Center(child: UiText('PDFCraft Rust недоступен'))
             : contents == null
             ? EditorWelcome(
                 icon: Icons.picture_as_pdf_outlined,
@@ -504,63 +524,28 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
             : Column(
                 children: [
                   Expanded(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: AspectRatio(
-                          aspectRatio:
-                              (pages[selected]['width'] as num).toDouble() /
-                              (pages[selected]['height'] as num).toDouble(),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: Colors.black12),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black26, blurRadius: 8),
-                              ],
-                            ),
-                            child: FutureBuilder<Uint8List>(
-                              future: _pageImage,
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                        ConnectionState.done &&
-                                    snapshot.hasError) {
-                                  return const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(12),
-                                      child: Text(
-                                        'Android не смог показать страницу. '
-                                        'PDF может быть зашифрован или поврежден.',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.black54),
-                                      ),
-                                    ),
-                                  );
-                                }
-                                if (snapshot.connectionState !=
-                                        ConnectionState.done ||
-                                    !snapshot.hasData) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(),
-                                  );
-                                }
-                                return InteractiveViewer(
-                                  minScale: 0.75,
-                                  maxScale: 4.0,
-                                  child: Image.memory(
-                                    snapshot.data!,
-                                    fit: BoxFit.contain,
-                                    gaplessPlayback: false,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
+                    child: PdfViewport(
+                      key: pdfViewport,
+                      image: _pageImage,
+                      pageWidth:
+                          (((pages[selected]['rotation'] as num? ?? 0).toInt() %
+                                              180 ==
+                                          0
+                                      ? pages[selected]['width']
+                                      : pages[selected]['height'])
+                                  as num)
+                              .toDouble(),
+                      pageHeight:
+                          (((pages[selected]['rotation'] as num? ?? 0).toInt() %
+                                              180 ==
+                                          0
+                                      ? pages[selected]['height']
+                                      : pages[selected]['width'])
+                                  as num)
+                              .toDouble(),
                     ),
                   ),
-                  if (!compact && !toolsExpanded)
+                  if (showThumbnails && !toolsExpanded)
                     SizedBox(
                       height: 136,
                       child: ListView.builder(
@@ -570,13 +555,23 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                       ),
                     ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: Text(
-                      'Страница ${selected + 1} из ${pages.length}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: UiText(
+                            'Страница ${selected + 1} из ${pages.length}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: tr(context, 'Миниатюры страниц'),
+                          isSelected: showThumbnails,
+                          onPressed: () =>
+                              setState(() => showThumbnails = !showThumbnails),
+                          icon: const Icon(Icons.view_carousel_outlined),
+                        ),
+                      ],
                     ),
                   ),
                   if (busy) const LinearProgressIndicator(),

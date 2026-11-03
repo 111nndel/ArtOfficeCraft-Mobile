@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+import '../ui/sheet_viewport.dart';
 import '../workspace/draft_store.dart';
 
 import 'dart:async';
@@ -102,7 +104,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   void tip(String msg) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+        SnackBar(content: UiText(msg), duration: const Duration(seconds: 3)),
       );
     }
   }
@@ -143,6 +145,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       modified = edited;
       history.clear();
     });
+    gridViewport.currentState?.reset();
   }
 
   Future<bool> askDiscard() async {
@@ -150,16 +153,16 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     final choice = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Изменения не сохранены'),
-        content: const Text('Открыть другую книгу без сохранения этой?'),
+        title: const UiText('Изменения не сохранены'),
+        content: const UiText('Открыть другую книгу без сохранения этой?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Отмена'),
+            child: const UiText('Отмена'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Продолжить'),
+            child: const UiText('Продолжить'),
           ),
         ],
       ),
@@ -168,6 +171,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   }
 
   Future<void> create() => run(() async {
+    final strings = Localizations.of<AppStrings>(context, AppStrings);
+    String translated(String value) => strings?.translate(value) ?? value;
     if (!await askDiscard()) return;
     var bytes = await bridge!.create();
     if (widget.launch?.template == true) {
@@ -193,15 +198,15 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         bytes = await bridge!.edit(bytes, {
           'sheet': 0,
           'address': entry.key,
-          'value': entry.value,
+          'value': translated(entry.value),
         });
       }
     }
     await setBook(
       bytes,
       name: widget.launch?.template == true
-          ? 'Бюджет команды.xlsx'
-          : 'Новая книга.xlsx',
+          ? translated('Бюджет команды.xlsx')
+          : translated('Новая книга.xlsx'),
       edited: true,
     );
   });
@@ -429,56 +434,27 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     );
   }
 
-  Widget grid() => LayoutBuilder(
-    builder: (context, constraints) => ColoredBox(
-      color: Colors.white,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: 52 + 12 * 116,
-          child: Column(
-            children: [
-              if (constraints.maxHeight > 100)
-                Row(
-                  children: [
-                    SizedBox(width: 52, child: header('')),
-                    for (var c = 0; c < 12; c++)
-                      SizedBox(
-                        width: 116,
-                        child: header(String.fromCharCode(65 + c)),
-                      ),
-                  ],
-                ),
-              Expanded(
-                child: ListView.builder(
-                  key: const Key('grid-rows'),
-                  itemCount: 55,
-                  itemExtent: 56,
-                  itemBuilder: (context, index) => DecoratedBox(
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: Color(0xffe4e8ee)),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        SizedBox(width: 52, child: header('${index + 1}')),
-                        for (var c = 0; c < 12; c++)
-                          SizedBox(
-                            width: 116,
-                            child: cell(
-                              '${String.fromCharCode(65 + c)}${index + 1}',
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+  final gridViewport = GlobalKey<SheetViewportState>();
+  Widget grid() => SheetViewport(
+    key: gridViewport,
+    width: 52 + 12 * 116,
+    rowCount: 55,
+    header: Row(
+      children: [
+        SizedBox(width: 52, child: header('')),
+        for (var c = 0; c < 12; c++)
+          SizedBox(width: 116, child: header(String.fromCharCode(65 + c))),
+      ],
+    ),
+    rowBuilder: (context, index) => Row(
+      children: [
+        SizedBox(width: 52, child: header('${index + 1}')),
+        for (var c = 0; c < 12; c++)
+          SizedBox(
+            width: 116,
+            child: cell('${String.fromCharCode(65 + c)}${index + 1}'),
           ),
-        ),
-      ),
+      ],
     ),
   );
   @override
@@ -617,6 +593,19 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ],
         },
         overrides: {
+          'Масштаб': EditorTool(
+            'Масштаб',
+            Icons.zoom_in,
+            children: [
+              for (final percent in [50, 75, 100, 125, 150, 200, 300])
+                EditorTool(
+                  '$percent%',
+                  Icons.zoom_in,
+                  onPressed: () =>
+                      gridViewport.currentState?.setZoom(percent / 100),
+                ),
+            ],
+          ),
           'Формат ячейки': EditorTool(
             'Формат ячейки',
             Icons.numbers,
@@ -679,10 +668,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             children: [
               for (var i = 0; i < sheets.length; i++)
                 EditorTool(
-                  sheets[i]['name']?.toString() ?? 'Лист',
+                  sheets[i]['name']?.toString() ?? tr(context, 'Лист'),
                   i == sheetIndex
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
+                  localize: false,
                   onPressed: busy ? null : () => chooseSheet(i),
                 ),
             ],
@@ -721,7 +711,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   filename: filename,
                   status: online
                       ? (modified || inputDirty
-                            ? 'XLSX · есть изменения${widget.draft?.status ?? ''}'
+                            ? 'XLSX · есть изменения${tr(context, widget.draft?.status ?? '')}'
                             : 'XLSX · на устройстве')
                       : 'Rust недоступен',
                   color: const Color(0xff17815c),
@@ -750,7 +740,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
               ),
         body: !online
             ? const Center(
-                child: Text(
+                child: UiText(
                   'Нет нативной GridCraft-библиотеки для Android ARM64',
                 ),
               )
@@ -778,7 +768,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                         children: [
                           SizedBox(
                             width: 52,
-                            child: Text(
+                            child: UiText(
                               selected,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
@@ -791,7 +781,10 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                           if (!inputFocus.hasFocus)
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('ƒₓ', style: TextStyle(fontSize: 24)),
+                              child: UiText(
+                                'ƒₓ',
+                                style: TextStyle(fontSize: 24),
+                              ),
                             ),
                           Expanded(
                             key: const ValueKey('formula-input'),
@@ -801,8 +794,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                               focusNode: inputFocus,
                               minLines: 1,
                               maxLines: formulaExpanded ? 4 : 1,
-                              decoration: const InputDecoration(
-                                hintText: 'Введите…',
+                              decoration: InputDecoration(
+                                hintText: tr(context, 'Введите…'),
                                 contentPadding: EdgeInsets.all(12),
                               ),
                               textInputAction: TextInputAction.done,
@@ -811,7 +804,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                           ),
                           if (inputFocus.hasFocus) ...[
                             IconButton(
-                              tooltip: 'Отменить ввод',
+                              tooltip: tr(context, 'Отменить ввод'),
                               onPressed: busy
                                   ? null
                                   : () {
@@ -821,7 +814,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                               icon: const Icon(Icons.close),
                             ),
                             IconButton(
-                              tooltip: 'Применить',
+                              tooltip: tr(context, 'Применить'),
                               onPressed: busy ? null : commit,
                               icon: const Icon(
                                 Icons.check,
@@ -830,9 +823,12 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                             ),
                           ] else
                             IconButton(
-                              tooltip: formulaExpanded
-                                  ? 'Свернуть формулу'
-                                  : 'Развернуть формулу',
+                              tooltip: tr(
+                                context,
+                                formulaExpanded
+                                    ? 'Свернуть формулу'
+                                    : 'Развернуть формулу',
+                              ),
                               onPressed: () => setState(
                                 () => formulaExpanded = !formulaExpanded,
                               ),
@@ -860,7 +856,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                                     : null,
                               ),
                               child: Text(
-                                sheets[i]['name']?.toString() ?? 'Лист',
+                                sheets[i]['name']?.toString() ??
+                                    tr(context, 'Лист'),
                               ),
                             ),
                         ],

@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 import 'package:flutter/material.dart';
 
 Future<Map<String, dynamic>?> showWordParagraphEditor(
@@ -114,7 +116,7 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
+              UiText(
                 widget.formatOnly
                     ? 'Оформление текста и абзаца'
                     : widget.insert
@@ -131,14 +133,14 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
                   maxLines: 6,
                   autofocus: true,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    labelText: 'Текст абзаца',
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'Текст абзаца'),
                     alignLabelWithHint: true,
                   ),
                 ),
               if (!widget.insert) ...[
                 const SizedBox(height: 14),
-                Text(
+                UiText(
                   text.selection.isValid && !text.selection.isCollapsed
                       ? 'Форматирование выделенного текста'
                       : 'Нет выделения — форматирование всего абзаца',
@@ -155,12 +157,12 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
                       ('underline', 'Подчеркнуть', 'Ч'),
                     ])
                       Tooltip(
-                        message: item.$2,
+                        message: tr(context, item.$2),
                         child: FilterChip(
                           selected: active(item.$1),
                           label: Padding(
                             padding: const EdgeInsets.all(10),
-                            child: Text(
+                            child: UiText(
                               item.$3,
                               style: const TextStyle(fontSize: 20),
                             ),
@@ -175,14 +177,14 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
                 DropdownButtonFormField<double>(
                   isExpanded: true,
                   initialValue: null,
-                  decoration: const InputDecoration(
-                    labelText: 'Размер шрифта, pt',
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'Размер шрифта, pt'),
                   ),
                   items: [10.0, 12.0, 14.0, 16.0, 18.0, 24.0, 32.0]
                       .map(
                         (n) => DropdownMenuItem(
                           value: n,
-                          child: Text(n.toInt().toString()),
+                          child: UiText(n.toInt().toString()),
                         ),
                       )
                       .toList(),
@@ -194,20 +196,23 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
                 DropdownButtonFormField<String>(
                   isExpanded: true,
                   initialValue: widget.block['align']?.toString() ?? 'justify',
-                  decoration: const InputDecoration(
-                    labelText: 'Выравнивание абзаца',
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'Выравнивание абзаца'),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'left', child: Text('Слева')),
-                    DropdownMenuItem(value: 'center', child: Text('По центру')),
-                    DropdownMenuItem(value: 'right', child: Text('Справа')),
+                    DropdownMenuItem(value: 'left', child: UiText('Слева')),
+                    DropdownMenuItem(
+                      value: 'center',
+                      child: UiText('По центру'),
+                    ),
+                    DropdownMenuItem(value: 'right', child: UiText('Справа')),
                     DropdownMenuItem(
                       value: 'justify',
-                      child: Text('По ширине'),
+                      child: UiText('По ширине'),
                     ),
                     DropdownMenuItem(
                       value: 'distribute',
-                      child: Text('Распределённое (исходное)'),
+                      child: UiText('Распределённое (исходное)'),
                     ),
                   ],
                   onChanged: (value) {
@@ -220,14 +225,14 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
                 DropdownButtonFormField<double>(
                   isExpanded: true,
                   initialValue: null,
-                  decoration: const InputDecoration(
-                    labelText: 'Межстрочный интервал',
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'Межстрочный интервал'),
                   ),
                   items: [1.0, 1.15, 1.5, 2.0]
                       .map(
                         (n) => DropdownMenuItem(
                           value: n,
-                          child: Text(n.toString()),
+                          child: UiText(n.toString()),
                         ),
                       )
                       .toList(),
@@ -246,12 +251,12 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Отмена'),
+                    child: const UiText('Отмена'),
                   ),
                   FilledButton.icon(
                     onPressed: dirty ? apply : null,
                     icon: const Icon(Icons.check),
-                    label: const Text('Применить к документу'),
+                    label: const UiText('Применить к документу'),
                   ),
                 ],
               ),

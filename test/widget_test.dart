@@ -3,7 +3,7 @@ import 'package:artofficecraft_mobile/main.dart';
 
 void main() {
   testWidgets('Home shows four editors and opens spreadsheet', (tester) async {
-    await tester.pumpWidget(const ArtOfficeCraftApp());
+    await tester.pumpWidget(const ArtOfficeCraftApp(initialLanguage: 'ru'));
     expect(find.text('ArtOfficeCraft'), findsOneWidget);
     expect(find.text('Таблица'), findsOneWidget);
     await tester.tap(find.text('Таблица'));

@@ -2,7 +2,14 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.14.0 — not a finished office suite.**
+**Latest validated release: alpha 0.14.0 — not a finished office suite.**
+
+[Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
+· [Contribute or fork this app](CONTRIBUTING.md)
+
+The current development branch contains **unreleased 0.15.0 work** on English UI,
+spreadsheet gestures and a full-area PDF viewport. Final tests/build are pending;
+see [the explicit validation status](docs/mobile-ux-0.15.0-wip.md).
 
 | Format | Current capability |
 | --- | --- |
