@@ -34,7 +34,7 @@ typedef _DartFree = void Function(_GridResult);
 typedef _NativeAbi = ffi.Uint32 Function();
 typedef _DartAbi = int Function();
 
-/// GridCraft native engine. Synchronous FFI; limit file sizes until isolate support.
+/// GridCraft native engine. Synchronous FFI used by the background DocumentBackend isolate.
 /// No data leaves the phone; saving occurs only into a user-chosen new file.
 final class GridCraftBridge {
   GridCraftBridge._(ffi.DynamicLibrary library)
@@ -120,12 +120,12 @@ final class GridCraftBridge {
     String address,
     String value,
   ) {
+    return edit(workbook, {'sheet': sheet, 'address': address, 'value': value});
+  }
+
+  Uint8List edit(Uint8List workbook, Map<String, dynamic> changes) {
     final p = _alloc(workbook);
-    final request = Uint8List.fromList(
-      utf8.encode(
-        jsonEncode({'sheet': sheet, 'address': address, 'value': value}),
-      ),
-    );
+    final request = Uint8List.fromList(utf8.encode(jsonEncode(changes)));
     final q = _alloc(request);
     try {
       return _read(_edit(p, workbook.length, q, request.length));

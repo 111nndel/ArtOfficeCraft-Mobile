@@ -383,6 +383,9 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
               Icons.text_fields,
               inline: true,
               builder: (_) => EditorTextStyleControls(
+                bold: editing && inline.propertyAtSelection('bold'),
+                italic: editing && inline.propertyAtSelection('italic'),
+                underline: editing && inline.propertyAtSelection('underline'),
                 onBold: editing ? () => formatInline('bold') : null,
                 onItalic: editing ? () => formatInline('italic') : null,
                 onUnderline: editing ? () => formatInline('underline') : null,

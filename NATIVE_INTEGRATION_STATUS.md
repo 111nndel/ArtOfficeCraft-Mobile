@@ -1,6 +1,14 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Date: 2026-11-02. Android UI preview with WordCraft DOCX, GridCraft XLSX, DeckCraft PPTX and PDFCraft COS/model operations.
+Current checkpoint: 2026-11-03, app/core 0.13.0, native ABI 1. The approved mobile
+panel design is implemented across all editors. DOCX supports in-page paragraph
+editing and selected formatting. XLSX additionally supports guarded pending input,
+undo/redo, native cell styles and number formats. Deck text forms stay within the
+slab; PDF uses Android rendering with explicit session cleanup. See
+`docs/validation-0.13.0.md` and `design/INTERACTION_SPEC.md` for the current state.
+
+The version-labelled sections below describe historical checkpoints and retain
+their original limitations; they are not a current capability inventory.
 
 ## Source and provenance
 

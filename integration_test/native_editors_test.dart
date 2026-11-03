@@ -180,11 +180,78 @@ void main() {
       expect(find.text('20'), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.tap(find.byKey(const ValueKey('grid-cell-A1')));
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '15');
       await tester.tap(find.byTooltip('Применить'));
       await tester.pumpAndSettle();
       expect(find.text('23'), findsWidgets);
       expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const ValueKey('grid-cell-A1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '0,5');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '0,5',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('tool-section-caption')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Главная'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Жирный'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Формат ячейки'));
+      await tester.tap(find.text('Формат ячейки'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Числовой формат'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Процентный'));
+      await tester.tap(find.text('Процентный'));
+      await tester.pumpAndSettle();
+      await capture(tester, 'grid-percent');
+      expect(find.text('50.00%'), findsOneWidget);
+      await tester.tap(find.byTooltip('Свернуть инструменты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('grid-cell-A1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '0,75');
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '0,75',
+      );
+      await tester.pump();
+      Uint8List? gridExport;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(files, (call) async {
+            gridExport = (call.arguments as Map)['data'] as Uint8List;
+            return '/test/saved.xlsx';
+          });
+      try {
+        await tester.tap(find.byTooltip('Меню файла'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Сохранить копию'));
+        await tester.pumpAndSettle();
+        final reread = await grid.inspect(gridExport!);
+        final c = reread['sheets'][0]['cells']['A1'];
+        expect(c['input'], '0.75');
+        expect(c['display'], '75.00%');
+        expect(c['style']['bold'], isTrue);
+        expect(c['style']['numFmt'], '0.00%');
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(files, null);
+      }
+      await tester.tap(find.byTooltip('Отменить'));
+      await tester.pumpAndSettle();
+      expect(find.text('50.00%'), findsOneWidget);
+      await tester.tap(find.byTooltip('Повторить'));
+      await tester.pumpAndSettle();
+      expect(find.text('75.00%'), findsOneWidget);
 
       final deck = NativeDocumentBackend.tryOpen(NativeDocumentKind.deck)!;
       var slides = await deck.create();
@@ -245,7 +312,7 @@ void main() {
 
       final info = await readNativeBuildInfo();
       expect(info!['abi'], 1);
-      expect(info['coreVersion'], '0.10.0');
+      expect(info['coreVersion'], '0.13.0');
       expect((info['engines'] as Map).keys.toSet(), {
         'wordcraft',
         'gridcraft',

@@ -6,6 +6,8 @@ class DocumentHistory {
   static const maxBytes = 24 * 1024 * 1024;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
+  Uint8List? get undoTarget => _undo.isEmpty ? null : _undo.last;
+  Uint8List? get redoTarget => _redo.isEmpty ? null : _redo.last;
   void clear() {
     _undo.clear();
     _redo.clear();

@@ -48,7 +48,7 @@ class WorkspaceFile {
   }
 }
 
-/// App-private copies of successfully opened / exported documents only.
+/// App-private copies of opened/exported documents and applied Grid edits.
 /// Unsaved native editing sessions keep their existing explicit Save As guard.
 class WorkspaceStore extends ChangeNotifier {
   WorkspaceStore({this._directory});

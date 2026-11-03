@@ -93,6 +93,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       await _pageRenderer.close(newSession);
       return;
     }
+    final previousSession = _session;
     setState(() {
       _session = newSession;
       contents = data;
@@ -103,6 +104,9 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       _pageImage = _pageRenderer.render(newSession, selected);
       if (name != null) filename = name;
     });
+    if (previousSession != null) {
+      unawaited(_pageRenderer.close(previousSession).catchError((Object _) {}));
+    }
   }
 
   @override

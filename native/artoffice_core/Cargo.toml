@@ -1,6 +1,6 @@
 [package]
 name = "artoffice_core"
-version = "0.10.0"
+version = "0.13.0"
 edition = "2024"
 publish = false
 license = "MIT OR Apache-2.0"
@@ -20,3 +20,4 @@ gridcraft-core = { path = "../../upstream/staged/gridcraft/v0.15.0-30b210b4ef03/
 gridcraft-model = { path = "../../upstream/staged/gridcraft/v0.15.0-30b210b4ef03/crates/model" }
 gridcraft-xlsx = { path = "../../upstream/staged/gridcraft/v0.15.0-30b210b4ef03/crates/xlsx" }
 gridcraft-calc = { path = "../../upstream/staged/gridcraft/v0.15.0-30b210b4ef03/crates/calc" }
+gridcraft-numfmt = { path = "../../upstream/staged/gridcraft/v0.15.0-30b210b4ef03/crates/numfmt" }

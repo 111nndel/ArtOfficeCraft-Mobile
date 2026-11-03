@@ -2,12 +2,12 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.11.0 — not a finished office suite.**
+**Status: alpha 0.13.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
 | DOCX / WordCraft | Create/read DOCX, edit plain paragraphs directly on the page with cursor/selection, selected bold/italic/underline/font size and paragraph alignment/spacing; undo/redo; save a new copy. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
-| XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Lazy rows; bounded preview (55 × 12, up to 1600 populated cells inspected per sheet); no full charts/styles. |
+| XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Lazy rows; bounded preview (55 × 12, up to 1600 populated cells inspected per sheet); no complete Excel rendering. |
 | PPTX / DeckCraft | Create/import PPTX, add/delete slides, add/edit text, Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
 | PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model basic page organization and Save As. Complex editing/forms/signing not complete. |
 
@@ -21,7 +21,10 @@ a persistent native document/session model and faithful page layout are future w
 DOCX keeps the active paragraph draft locally while typing; moving to another
 paragraph, Done, formatting and Save As flush it through the native adapter.
 Failed commits keep the visible draft and block export of stale bytes.
-See docs/validation-0.11.0.md for the current checks and remaining limits.
+Grid similarly flushes pending input before Save As or changing cells/sheets,
+and preserves styles on value/formula replacement. Applied Grid edits update
+the app-private working copy. See docs/validation-0.13.0.md for current checks
+and limits. The shared panel navigation follows design/INTERACTION_SPEC.md.
 
 The mobile app integrates four independent upstream projects. It is an independent
 Android port, rather than a GitHub fork with a single upstream parent:

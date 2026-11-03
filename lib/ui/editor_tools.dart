@@ -453,9 +453,15 @@ class EditorTextStyleControls extends StatelessWidget {
     this.onItalic,
     this.onUnderline,
     this.onSize,
+    this.bold = false,
+    this.italic = false,
+    this.underline = false,
+    this.fontSize,
   });
   final VoidCallback? onBold, onItalic, onUnderline;
   final ValueChanged<double>? onSize;
+  final bool bold, italic, underline;
+  final double? fontSize;
   @override
   Widget build(BuildContext context) => Column(
     children: [
@@ -468,12 +474,14 @@ class EditorTextStyleControls extends StatelessWidget {
             ),
             DropdownButton<double>(
               hint: const Text('Размер'),
+              value: fontSize,
               onChanged: onSize == null
                   ? null
                   : (v) {
                       if (v != null) onSize!(v);
                     },
-              items: [10.0, 12.0, 14.0, 16.0, 18.0, 24.0, 32.0]
+              items: {?fontSize, 10.0, 12.0, 14.0, 16.0, 18.0, 24.0, 32.0}
+                  .toList()
                   .map(
                     (v) => DropdownMenuItem(
                       value: v,
@@ -496,6 +504,11 @@ class EditorTextStyleControls extends StatelessWidget {
             SizedBox.square(
               dimension: 56,
               child: IconButton(
+                isSelected: command.icon == Icons.format_bold
+                    ? bold
+                    : command.icon == Icons.format_italic
+                    ? italic
+                    : underline,
                 tooltip: command.label,
                 onPressed: command.onPressed,
                 icon: Icon(command.icon, size: 28),

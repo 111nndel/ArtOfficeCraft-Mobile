@@ -89,12 +89,7 @@ Object _nativeCall(
       }
       if (operation == 'create') return engine.create();
       if (operation == 'inspect') return engine.inspect(bytes!);
-      return engine.editCell(
-        bytes!,
-        request['sheet'] as int,
-        request['address'] as String,
-        request['value'] as String,
-      );
+      return engine.edit(bytes!, request);
     case NativeDocumentKind.deck:
       final engine = library == null
           ? DeckCraftBridge.tryOpen()

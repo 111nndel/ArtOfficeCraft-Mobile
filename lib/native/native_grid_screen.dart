@@ -1,3 +1,4 @@
+import 'document_history.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
@@ -38,6 +39,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   int sheetIndex = 0;
   bool modified = false, busy = false;
   final input = TextEditingController();
+  final history = DocumentHistory();
+  bool get inputDirty => input.text != currentInput;
+  Map<String, dynamic> get cellStyle => Map<String, dynamic>.from(
+    (cells[selected] as Map?)?['style'] as Map? ?? {},
+  );
   List<Map<String, dynamic>> sheets = [];
   @override
   void dispose() {
@@ -100,11 +106,12 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       input.text = currentInput;
       if (name != null) filename = name;
       modified = edited;
+      history.clear();
     });
   }
 
   Future<bool> askDiscard() async {
-    if (!modified) return true;
+    if (!modified && !inputDirty) return true;
     final choice = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -178,6 +185,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
   Future<void> save() => run(() async {
     if (book == null) return;
+    await flushInput();
     final name =
         '${filename.replaceFirst(RegExp(r'\.xlsx$', caseSensitive: false), '')}-ArtOfficeCraft.xlsx';
     final path = await FlutterFileDialog.saveFile(
@@ -194,37 +202,95 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await rememberCurrent();
     tip('Сохранена новая копия XLSX');
   });
-  Future<void> commit() => run(() async {
-    if (book == null) return;
-    final before = selected;
-    final idx = sheetIndex;
-    final updated = await bridge!.edit(book!, {
-      'sheet': idx,
-      'address': before,
+  List<Map<String, dynamic>> parsedSheets(Map<String, dynamic> parsed) {
+    final list = parsed['sheets'];
+    if (list is! List || list.isEmpty) {
+      throw const FormatException('Листы не найдены');
+    }
+    return list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
+  }
+
+  void install(Uint8List bytes, List<Map<String, dynamic>> list) {
+    setState(() {
+      book = bytes;
+      sheets = list;
+      sheetIndex = sheetIndex.clamp(0, list.length - 1);
+      refreshCells();
+      input.text = currentInput;
+      modified = true;
+    });
+  }
+
+  Future<void> applyEdit(Map<String, dynamic> request) async {
+    final previous = book!;
+    final updated = await bridge!.edit(previous, request);
+    final parsed = parsedSheets(await bridge!.inspect(updated));
+    if (!mounted) return;
+    history.push(previous);
+    install(updated, parsed);
+    await rememberCurrent();
+  }
+
+  Future<void> flushInput() async {
+    if (book == null || !inputDirty) return;
+    await applyEdit({
+      'sheet': sheetIndex,
+      'address': selected,
       'value': input.text,
     });
-    final parsed = await bridge!.inspect(updated);
+  }
+
+  Future<void> commit() => run(() async {
+    await flushInput();
+    inputFocus.unfocus();
+  });
+  Future<void> selectCell(String address) => run(() async {
+    if (address == selected) return;
+    await flushInput();
     if (!mounted) return;
-    final list = parsed['sheets'] as List;
     setState(() {
-      book = updated;
-      sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
-      modified = true;
+      selected = address;
+      input.text = currentInput;
+    });
+  });
+  Future<void> chooseSheet(int idx) => run(() async {
+    if (idx == sheetIndex) return;
+    await flushInput();
+    if (!mounted) return;
+    setState(() {
+      sheetIndex = idx;
+      selected = 'A1';
       refreshCells();
       input.text = currentInput;
     });
-    FocusManager.instance.primaryFocus?.unfocus();
-    tip('Ячейка $before сохранена в модели XLSX');
   });
-  void selectCell(String a1) => setState(() {
-    selected = a1;
-    input.text = currentInput;
+  Future<void> formatCell(Map<String, dynamic> style) => run(() async {
+    if (book == null) return;
+    await applyEdit({
+      'action': 'format',
+      'sheet': sheetIndex,
+      'address': selected,
+      if (inputDirty) 'value': input.text,
+      'style': style,
+    });
   });
-  void chooseSheet(int idx) => setState(() {
-    sheetIndex = idx;
-    selected = 'A1';
-    refreshCells();
-    input.text = currentInput;
+  Future<void> restore(bool undo) => run(() async {
+    if (book == null) return;
+    if (inputDirty) {
+      if (undo) setState(() => input.text = currentInput);
+      return;
+    }
+    final target = undo ? history.undoTarget : history.redoTarget;
+    if (target == null) return;
+    final parsed = parsedSheets(await bridge!.inspect(target));
+    if (!mounted) return;
+    if (undo) {
+      history.undo(book!);
+    } else {
+      history.redo(book!);
+    }
+    install(target, parsed);
+    await rememberCurrent();
   });
   final inputFocus = FocusNode();
   Widget header(String text) => Container(
@@ -245,31 +311,81 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   Widget cell(String address) {
     final item = cells[address];
     final value = item is Map ? item['display']?.toString() ?? '' : '';
+    final style = Map<String, dynamic>.from(
+      item is Map ? item['style'] as Map? ?? {} : {},
+    );
+    final numeric = item is Map && item['numeric'] == true;
+    final fill = rgb(style['fill']) ?? Colors.white;
     return InkWell(
       key: ValueKey('grid-cell-$address'),
       onTap: busy ? null : () => selectCell(address),
       child: Container(
         height: 56,
-        alignment: double.tryParse(value.replaceAll(' ', '')) != null
-            ? Alignment.centerRight
-            : Alignment.centerLeft,
+        alignment: switch (style['align']) {
+          'left' => Alignment.centerLeft,
+          'center' => Alignment.center,
+          'right' => Alignment.centerRight,
+          _ =>
+            numeric || double.tryParse(value.replaceAll(' ', '')) != null
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
+        },
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: address == selected ? const Color(0xffe3f2ea) : Colors.white,
+          color: address == selected
+              ? Color.alphaBlend(const Color(0x16188458), fill)
+              : fill,
           border: address == selected
               ? Border.all(color: const Color(0xff188458), width: 2)
-              : const Border(
-                  right: BorderSide(color: Color(0xffe5e9ef)),
-                  bottom: BorderSide(color: Color(0xffe5e9ef)),
+              : Border(
+                  left: cellBorder(style, 'left'),
+                  right: cellBorder(style, 'right'),
+                  top: cellBorder(style, 'top'),
+                  bottom: cellBorder(style, 'bottom'),
                 ),
         ),
         child: Text(
           value,
-          style: const TextStyle(color: Color(0xff172634), fontSize: 16),
-          maxLines: 1,
+          textAlign: switch (style['align']) {
+            'center' => TextAlign.center,
+            'right' => TextAlign.right,
+            _ => TextAlign.left,
+          },
+          style: TextStyle(
+            color: rgb(style['color']) ?? const Color(0xff172634),
+            fontSize: ((style['fontSize'] as num?)?.toDouble() ?? 12) * 1.33,
+            fontWeight: style['bold'] == true
+                ? FontWeight.bold
+                : FontWeight.normal,
+            fontStyle: style['italic'] == true
+                ? FontStyle.italic
+                : FontStyle.normal,
+            decoration: style['underline'] == true
+                ? TextDecoration.underline
+                : TextDecoration.none,
+          ),
+          maxLines: style['wrap'] == true ? 3 : 1,
           overflow: TextOverflow.clip,
         ),
       ),
+    );
+  }
+
+  static Color? rgb(dynamic value) {
+    if (value is! String || !RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(value)) {
+      return null;
+    }
+    return Color(0xff000000 | int.parse(value.substring(1), radix: 16));
+  }
+
+  BorderSide cellBorder(Map<String, dynamic> style, String side) {
+    final border = (style['borders'] as Map?)?[side] as Map?;
+    final width = (border?['width'] as num?)?.toDouble() ?? 0;
+    return BorderSide(
+      color: width > 0
+          ? rgb(border?['color']) ?? Colors.black
+          : const Color(0xffe5e9ef),
+      width: width > 0 ? width.clamp(1, 3).toDouble() : .7,
     );
   }
 
@@ -328,6 +444,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   @override
   void initState() {
     super.initState();
+    input.addListener(() {
+      if (mounted) setState(() {});
+    });
     inputFocus.addListener(() {
       if (mounted) setState(() {});
     });
@@ -359,43 +478,153 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
   }
 
-  Widget editorPanel() => EditorToolPanel(
-    key: toolPanel,
-    color: const Color(0xff17815c),
-    onExpandedChanged: (value) => setState(() => toolsExpanded = value),
-    sections: officeSections(
-      'grid',
-      exclude: {'Ж'},
-      leading: {
-        'Главная': [
-          const EditorTool(
-            'Стиль',
-            Icons.text_fields,
-            inline: true,
-            builder: _gridStyles,
-          ),
-        ],
-      },
-      overrides: {
-        'Управление листами': EditorTool(
-          'Управление листами',
-          Icons.tab,
+  Widget editorPanel() {
+    EditorTool action(
+      String label,
+      IconData icon,
+      Map<String, dynamic> patch,
+    ) => EditorTool(
+      label,
+      icon,
+      onPressed: busy ? null : () => formatCell(patch),
+    );
+    EditorTool colors(String title, String property, IconData icon) =>
+        EditorTool(
+          title,
+          icon,
           children: [
-            for (var i = 0; i < sheets.length; i++)
-              EditorTool(
-                sheets[i]['name']?.toString() ?? 'Лист',
-                i == sheetIndex
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                onPressed: busy ? null : () => chooseSheet(i),
-              ),
+            action(
+              property == 'fill' ? 'Без заливки' : 'Автоматический',
+              icon,
+              {property: null},
+            ),
+            for (final color in [
+              ('Чёрный', '#202938'),
+              ('Белый', '#FFFFFF'),
+              ('Синий', '#3565CA'),
+              ('Зелёный', '#147553'),
+              ('Красный', '#C64246'),
+              ('Жёлтый', '#FFF2CC'),
+              ('Светло-зелёный', '#E2F0D9'),
+            ])
+              action(color.$1, icon, {property: color.$2}),
           ],
-        ),
-      },
-    ),
-  );
-  static Widget _gridStyles(BuildContext context) =>
-      const EditorTextStyleControls();
+        );
+    return EditorToolPanel(
+      key: toolPanel,
+      color: const Color(0xff17815c),
+      onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+      undo: !busy && (inputDirty || history.canUndo)
+          ? () => restore(true)
+          : null,
+      redo: !busy && !inputDirty && history.canRedo
+          ? () => restore(false)
+          : null,
+      sections: officeSections(
+        'grid',
+        exclude: {'Ж'},
+        leading: {
+          'Главная': [
+            EditorTool(
+              'Стиль',
+              Icons.text_fields,
+              inline: true,
+              builder: (_) => EditorTextStyleControls(
+                bold: cellStyle['bold'] == true,
+                italic: cellStyle['italic'] == true,
+                underline: cellStyle['underline'] == true,
+                fontSize: (cellStyle['fontSize'] as num?)?.toDouble(),
+                onBold: busy
+                    ? null
+                    : () => formatCell({'bold': cellStyle['bold'] != true}),
+                onItalic: busy
+                    ? null
+                    : () => formatCell({'italic': cellStyle['italic'] != true}),
+                onUnderline: busy
+                    ? null
+                    : () => formatCell({
+                        'underline': cellStyle['underline'] != true,
+                      }),
+                onSize: busy ? null : (v) => formatCell({'fontSize': v}),
+              ),
+            ),
+          ],
+        },
+        overrides: {
+          'Формат ячейки': EditorTool(
+            'Формат ячейки',
+            Icons.numbers,
+            children: [
+              EditorTool(
+                'Числовой формат',
+                Icons.numbers,
+                children: [
+                  for (final format in [
+                    ('Общий', 'General'),
+                    ('Целое число', '0'),
+                    ('Числовой', '#,##0.00'),
+                    ('Денежный (₽)', '#,##0.00 "₽"'),
+                    ('Процентный', '0.00%'),
+                    ('Дата', 'dd.mm.yyyy'),
+                    ('Время', 'hh:mm'),
+                    ('Текстовый', '@'),
+                  ])
+                    action(format.$1, Icons.numbers, {'numFmt': format.$2}),
+                ],
+              ),
+              EditorTool(
+                'Выравнивание',
+                Icons.format_align_left,
+                children: [
+                  action('По значению', Icons.align_horizontal_left, {
+                    'align': 'general',
+                  }),
+                  action('Слева', Icons.format_align_left, {'align': 'left'}),
+                  action('По центру', Icons.format_align_center, {
+                    'align': 'center',
+                  }),
+                  action('Справа', Icons.format_align_right, {
+                    'align': 'right',
+                  }),
+                ],
+              ),
+              action(
+                cellStyle['wrap'] == true
+                    ? 'Выключить перенос текста'
+                    : 'Перенос текста',
+                Icons.wrap_text,
+                {'wrap': cellStyle['wrap'] != true},
+              ),
+              colors('Цвет текста', 'color', Icons.format_color_text),
+            ],
+          ),
+          'Заливка': colors('Заливка', 'fill', Icons.format_color_fill),
+          'Границы': EditorTool(
+            'Границы',
+            Icons.border_all,
+            children: [
+              action('Все границы', Icons.border_all, {'borders': 'all'}),
+              action('Без границ', Icons.border_clear, {'borders': 'none'}),
+            ],
+          ),
+          'Управление листами': EditorTool(
+            'Управление листами',
+            Icons.tab,
+            children: [
+              for (var i = 0; i < sheets.length; i++)
+                EditorTool(
+                  sheets[i]['name']?.toString() ?? 'Лист',
+                  i == sheetIndex
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  onPressed: busy ? null : () => chooseSheet(i),
+                ),
+            ],
+          ),
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -403,7 +632,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return UnsavedChangesGuard(
       interceptBack: toolsExpanded,
       onInterceptBack: () => toolPanel.currentState?.handleBack(),
-      dirty: modified,
+      dirty: modified || inputDirty,
       busy: busy,
       child: Scaffold(
         bottomNavigationBar: book != null
@@ -424,7 +653,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 title: EditorFileTitle(
                   filename: filename,
                   status: online
-                      ? (modified
+                      ? (modified || inputDirty
                             ? 'XLSX · есть изменения'
                             : 'XLSX · на устройстве')
                       : 'Rust недоступен',
@@ -500,6 +729,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                           Expanded(
                             key: const ValueKey('formula-input'),
                             child: TextField(
+                              readOnly: busy,
                               controller: input,
                               focusNode: inputFocus,
                               minLines: 1,
