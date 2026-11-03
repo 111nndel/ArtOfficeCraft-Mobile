@@ -39,7 +39,7 @@ class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        const Text('0.11.0 · тестовая версия'),
+        const Text('0.12.0 · тестовая версия'),
         const SizedBox(height: 20),
         const Text(
           'Независимый Android-порт с использованием четырёх открытых движков. '
@@ -89,7 +89,7 @@ class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
           onPressed: () => showLicensePage(
             context: context,
             applicationName: 'ArtOfficeCraft Mobile',
-            applicationVersion: '0.11.0',
+            applicationVersion: '0.12.0',
           ),
           icon: const Icon(Icons.description_outlined),
           label: const Text('Лицензии и авторские права'),

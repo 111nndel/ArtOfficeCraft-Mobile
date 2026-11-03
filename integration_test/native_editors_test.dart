@@ -1,3 +1,5 @@
+import 'package:artofficecraft_mobile/main.dart' show ArtOfficeCraftApp;
+
 import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
@@ -14,10 +16,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  Future<void> capture(WidgetTester tester, String name) async {
+    await tester.pumpAndSettle();
+    final bytes = await binding.takeScreenshot(name);
+    final path = '${Directory.systemTemp.path}/aoc-$name.png';
+    await File(path).writeAsBytes(bytes, flush: true);
+    debugPrint('DESIGN_SCREENSHOT $path');
+  }
+
   testWidgets(
     'Actual Android Rust engines: create, edit, reopen, native views',
     (tester) async {
+      await tester.pumpWidget(const ArtOfficeCraftApp());
+      await tester.pumpAndSettle();
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpAndSettle();
+      await capture(tester, 'home');
       final word = NativeDocumentBackend.tryOpen(NativeDocumentKind.word)!;
       var doc = await word.create('Нативный тест Android');
       doc = await word.edit(doc, {
@@ -55,17 +70,39 @@ void main() {
         extentOffset: 8,
       );
       await tester.pump();
-      await tester.ensureVisible(find.text('Курсив'));
+      await tester.tap(find.byTooltip('Развернуть инструменты'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Курсив'));
+      await capture(tester, 'word-tools');
+      await tester.ensureVisible(find.byTooltip('Курсив'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Курсив'));
+      await tester.pumpAndSettle();
+      for (
+        var i = 0;
+        i < 100 &&
+            tester
+                .widget<TextField>(find.byKey(const Key('word-inline-input')))
+                .readOnly;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('word-inline-input')))
+            .readOnly,
+        isFalse,
+      );
       expect(find.byKey(const Key('word-inline-input')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('word-inline-input')));
+      await tester.pumpAndSettle();
       const finalText = 'Проверка клавиатуры Android 😀 сохранено';
       await tester.enterText(
         find.byKey(const Key('word-inline-input')),
         finalText,
       );
       await tester.pump();
+      expect(field.controller!.text, finalText, reason: 'before collapse');
       final saveDirectory = await Directory.systemTemp.createTemp(
         'aoc-inline-save-',
       );
@@ -81,7 +118,13 @@ void main() {
             return savedFile.path;
           });
       try {
-        await tester.tap(find.byTooltip('Сохранить как DOCX'));
+        await tester.tap(find.byTooltip('Свернуть инструменты'));
+        await tester.pumpAndSettle();
+        expect(field.controller!.text, finalText, reason: 'after collapse');
+        await tester.tap(find.byTooltip('Меню файла'));
+        await tester.pumpAndSettle();
+        expect(field.controller!.text, finalText, reason: 'after file menu');
+        await tester.tap(find.text('Сохранить как DOCX'));
         await tester.pumpAndSettle();
         final saved = await word.inspect(await savedFile.readAsBytes());
         expect(saved['paragraphs'], contains(finalText));
@@ -93,24 +136,10 @@ void main() {
       }
       expect(find.text(finalText), findsWidgets);
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Главная'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(
-          of: find.byType(BottomSheet),
-          matching: find.text('Отменить'),
-        ),
-      );
+      await tester.tap(find.byTooltip('Отменить'));
       await tester.pumpAndSettle();
       expect(find.text('Проверка клавиатуры Android'), findsWidgets);
-      await tester.tap(find.text('Главная'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(
-          of: find.byType(BottomSheet),
-          matching: find.text('Повторить'),
-        ),
-      );
+      await tester.tap(find.byTooltip('Повторить'));
       await tester.pumpAndSettle();
       expect(find.text(finalText), findsWidgets);
 
@@ -139,6 +168,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await capture(tester, 'grid-collapsed');
+      await tester.tap(find.text('Главная'));
+      await tester.pumpAndSettle();
+      await capture(tester, 'grid-section-menu');
+      await tester.tap(find.text('Данные'));
+      await tester.pumpAndSettle();
+      await capture(tester, 'grid-data');
+      await tester.tap(find.byTooltip('Свернуть инструменты'));
+      await tester.pumpAndSettle();
       expect(find.text('20'), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.tap(find.byKey(const ValueKey('grid-cell-A1')));
@@ -165,6 +203,23 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Настоящий PPTX'), findsWidgets);
+      await tester.tap(find.text('Главная'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вставка'));
+      await tester.pumpAndSettle();
+      await capture(tester, 'deck-insert');
+      await tester.tap(find.text('Текстовый блок'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('deck-text-input')),
+        'Прямо в плашке',
+      );
+      await tester.pumpAndSettle();
+      await capture(tester, 'deck-text-form');
+      await tester.ensureVisible(find.text('Применить'));
+      await tester.tap(find.text('Применить'));
+      await tester.pumpAndSettle();
+      expect(find.text('Прямо в плашке'), findsWidgets);
       expect(tester.takeException(), isNull);
 
       final pdf = NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf)!;
@@ -181,6 +236,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Страница 1 из 2'), findsWidgets);
+      await tester.tap(find.text('Чтение'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Страницы'));
+      await tester.pumpAndSettle();
+      await capture(tester, 'pdf-pages');
       expect(tester.takeException(), isNull);
 
       final info = await readNativeBuildInfo();

@@ -1,8 +1,8 @@
+import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
-import 'format_limits_notice.dart';
 
 import 'dart:io';
 import 'dart:isolate';
@@ -14,7 +14,6 @@ import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
 import 'deckcraft_bridge.dart';
-import 'deck_text_dialog.dart';
 
 class NativeDeckScreen extends StatefulWidget {
   const NativeDeckScreen({
@@ -31,6 +30,8 @@ class NativeDeckScreen extends StatefulWidget {
 }
 
 class _NativeDeckScreenState extends State<NativeDeckScreen> {
+  final toolPanel = GlobalKey<EditorToolPanelState>();
+  bool toolsExpanded = false;
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.deck);
   Uint8List? data;
@@ -84,12 +85,15 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       pageH = (report['height'] as num?)?.toDouble() ?? 540;
       index = selected.clamp(0, next.length - 1);
       modified = changed;
-      if (name != null) filename = name;
+      if (name != null) {
+        filename = name;
+        textEdit = null;
+      }
     });
   }
 
   Future<bool> discard() async {
-    if (!modified) return true;
+    if (!modified && !textDraftDirty) return true;
     return await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
@@ -152,6 +156,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   });
   Future<void> save() => action(() async {
     if (!loaded) return;
+    if (textDraftDirty) await applyTextDraft();
     final saveName =
         '${filename.replaceFirst(RegExp(r'\.pptx$', caseSensitive: false), '')}-ArtOfficeCraft.pptx';
     final destination = await FlutterFileDialog.saveFile(
@@ -168,52 +173,74 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     await rememberCurrent();
     message('Копия PPTX сохранена. Исходник не изменён.');
   });
-  Future<String?> ask(String heading, {String initial = ''}) =>
-      showDeckTextDialog(context, heading, initial: initial);
+  final deckText = TextEditingController();
+  Map<String, dynamic>? textEdit;
+  String textHeading = 'Текст', textInitial = '';
+  bool get textDraftDirty => textEdit != null && deckText.text != textInitial;
+  void beginText(
+    String heading,
+    Map<String, dynamic> request, {
+    String initial = '',
+  }) {
+    if (busy) return;
+    if (textDraftDirty) {
+      message('Сначала примените или отмените введённый текст.');
+      toolPanel.currentState?.openTool(0, [0]);
+      return;
+    }
+    setState(() {
+      textEdit = request;
+      textHeading = heading;
+      textInitial = initial;
+      deckText.text = initial;
+    });
+    toolPanel.currentState?.openTool(0, [0]);
+  }
 
-  Future<void> newSlide() => action(() async {
-    final title = await ask('Заголовок нового слайда');
-    if (title == null) return;
+  void finishText(bool apply) {
+    final request = textEdit;
+    if (!apply || request == null) {
+      setState(() => textEdit = null);
+      toolPanel.currentState?.back();
+      return;
+    }
+    action(applyTextDraft);
+  }
+
+  Future<void> applyTextDraft() async {
+    final request = textEdit;
+    if (request == null) return;
+    final text = deckText.text;
+    if (request['action'] == 'add_text' && text.trim().isEmpty) return;
+    final selected = request['action'] == 'add_slide'
+        ? slides.length
+        : (request['slide'] as int? ?? index);
     await load(
-      await engine!.edit(data!, {'action': 'add_slide', 'text': title}),
-      selected: slides.length,
+      await engine!.edit(data!, {...request, 'text': text}),
+      selected: selected,
       changed: true,
     );
-    message('Слайд добавлен');
-  });
-  Future<void> insertText() => action(() async {
-    final value = await ask('Новый текстовый блок');
-    if (value == null || value.trim().isEmpty) return;
-    await load(
-      await engine!.edit(data!, {
-        'action': 'add_text',
-        'slide': index,
-        'text': value,
-      }),
-      selected: index,
-      changed: true,
-    );
-    message('Текст сохранён в PPTX');
-  });
-  Future<void> changeText(Map<String, dynamic> shape) => action(() async {
-    if (shape['editableText'] != true) return;
-    final value = await ask(
-      'Изменить текст',
-      initial: shape['text']?.toString() ?? '',
-    );
-    if (value == null) return;
-    await load(
-      await engine!.edit(data!, {
-        'action': 'edit_text',
-        'slide': index,
-        'shape': shape['id'],
-        'text': value,
-      }),
-      selected: index,
-      changed: true,
-    );
-    message('Текст изменён');
-  });
+    if (mounted) {
+      setState(() => textEdit = null);
+      toolPanel.currentState?.back();
+    }
+  }
+
+  @override
+  void dispose() {
+    deckText.dispose();
+    super.dispose();
+  }
+
+  void newSlide() =>
+      beginText('Заголовок нового слайда', {'action': 'add_slide'});
+  void insertText() =>
+      beginText('Новый текстовый блок', {'action': 'add_text', 'slide': index});
+  void changeText(Map<String, dynamic> shape) => beginText('Изменить текст', {
+    'action': 'edit_text',
+    'slide': index,
+    'shape': shape['id'],
+  }, initial: shape['text']?.toString() ?? '');
   Future<void> removeSlide() => action(() async {
     if (slides.length <= 1) {
       message('Нельзя удалить последний слайд');
@@ -243,77 +270,6 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     );
     message('Слайд удалён');
   });
-  Future<void> chooseTextObject() async {
-    final shapes = (slides[index]['shapes'] as List? ?? [])
-        .where((x) => x['editableText'] == true)
-        .toList();
-    final shape = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * .7,
-          ),
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.all(16),
-            children: [
-              const Text(
-                'Текстовые объекты',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-              ),
-              for (final shape in shapes)
-                ListTile(
-                  minTileHeight: 60,
-                  leading: const Icon(Icons.text_fields),
-                  title: Text(
-                    shape['text']?.toString() ?? '',
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onTap: () => Navigator.pop(
-                    context,
-                    Map<String, dynamic>.from(shape as Map),
-                  ),
-                ),
-              if (shapes.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('Текстовых объектов пока нет. Добавьте текст.'),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (shape != null && mounted) await changeText(shape);
-  }
-
-  List<EditorCommand> get commands => [
-    EditorCommand(
-      'Текстовые объекты',
-      Icons.list_alt,
-      loaded && !busy ? chooseTextObject : null,
-    ),
-    EditorCommand('Новый слайд', Icons.add, loaded && !busy ? newSlide : null),
-    EditorCommand(
-      'Добавить текст',
-      Icons.text_fields,
-      loaded && !busy ? insertText : null,
-    ),
-    EditorCommand(
-      'Удалить слайд',
-      Icons.delete_outline,
-      loaded && !busy && slides.length > 1 ? removeSlide : null,
-    ),
-    EditorCommand(
-      'Сохранить копию',
-      Icons.save_outlined,
-      loaded && !busy ? save : null,
-    ),
-  ];
   Widget slideCanvas({int? slideIndex}) {
     final slideNumber = slideIndex ?? index;
     final current = slides[slideNumber];
@@ -490,6 +446,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   @override
   void initState() {
     super.initState();
+    deckText.addListener(() {
+      if (mounted) setState(() {});
+    });
     final request = widget.launch;
     if (request != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -518,65 +477,149 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     }
   }
 
+  Widget editorPanel() => EditorToolPanel(
+    key: toolPanel,
+    color: const Color(0xffcc6243),
+    onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+    sections: officeSections(
+      'deck',
+      leading: {
+        'Главная': [
+          EditorTool(
+            'Текст',
+            Icons.text_fields,
+            builder: (_) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  textHeading,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('deck-text-input'),
+                  controller: deckText,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                    hintText: 'Текст на слайде',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton(
+                      onPressed: () => finishText(false),
+                      child: const Text('Отмена'),
+                    ),
+                    FilledButton(
+                      onPressed: textEdit != null && !busy
+                          ? () => finishText(true)
+                          : null,
+                      child: const Text('Применить'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          EditorTool(
+            'Текстовые объекты',
+            Icons.list_alt,
+            children: [
+              for (final shape
+                  in (slides[index]['shapes'] as List? ?? []).where(
+                    (x) => x['editableText'] == true,
+                  ))
+                EditorTool(
+                  shape['text']?.toString() ?? 'Текст',
+                  Icons.text_fields,
+                  onPressed: busy
+                      ? null
+                      : () =>
+                            changeText(Map<String, dynamic>.from(shape as Map)),
+                ),
+            ],
+          ),
+          EditorTool(
+            'Удалить слайд',
+            Icons.delete_outline,
+            onPressed: !busy && slides.length > 1 ? removeSlide : null,
+          ),
+        ],
+      },
+      exclude: {'Текст'},
+      overrides: {
+        'Новый слайд': EditorTool(
+          'Новый слайд',
+          Icons.add,
+          onPressed: busy ? null : newSlide,
+        ),
+        'Текстовый блок': EditorTool(
+          'Текстовый блок',
+          Icons.text_fields,
+          onPressed: busy ? null : insertText,
+        ),
+      },
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final enabled = engine != null;
     final compact = MediaQuery.sizeOf(context).height < 650;
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return UnsavedChangesGuard(
-      dirty: modified,
+      interceptBack: toolsExpanded,
+      onInterceptBack: () => toolPanel.currentState?.handleBack(),
+      dirty: modified || textDraftDirty,
       busy: busy,
       child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
-              .clamp(72.0, 144.0)
-              .toDouble(),
-          title: EditorFileTitle(
-            filename: filename,
-            status: enabled ? 'DeckCraft Rust · PPTX' : 'Rust недоступен',
-            color: const Color(0xffcc6243),
-          ),
-          bottom: keyboardOpen
-              ? null
-              : EditorSectionTabs(
+        bottomNavigationBar: loaded
+            ? Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: editorPanel(),
+              )
+            : null,
+        appBar: toolsExpanded
+            ? null
+            : AppBar(
+                toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+                    .clamp(72.0, 144.0)
+                    .toDouble(),
+                title: EditorFileTitle(
+                  filename: filename,
+                  status: enabled
+                      ? (modified
+                            ? 'PPTX · есть изменения'
+                            : 'PPTX · на устройстве')
+                      : 'Rust недоступен',
                   color: const Color(0xffcc6243),
-                  height: (MediaQuery.textScalerOf(context).scale(16) + 30)
-                      .clamp(56.0, 90.0),
-                  sections: [
-                    EditorToolSection('Главная', commands),
-                    EditorToolSection('Вставка', commands),
-                    EditorToolSection('Файл', [
+                ),
+                actions: [
+                  EditorFileMenu(
+                    commands: [
                       EditorCommand(
                         'Открыть PPTX',
-                        Icons.folder_open,
+                        Icons.folder_open_outlined,
                         enabled && !busy ? open : null,
                       ),
-                      commands.last,
-                    ]),
-                  ],
-                ),
-          actions: [
-            IconButton(
-              tooltip: 'Открыть PPTX',
-              onPressed: enabled && !busy ? open : null,
-              icon: const Icon(Icons.folder_open_outlined),
-            ),
-            IconButton(
-              tooltip: 'Сохранить копию PPTX',
-              onPressed: loaded && !busy ? save : null,
-              icon: const Icon(Icons.save_outlined),
-            ),
-            PopupMenuButton<String>(
-              enabled: loaded && !busy,
-              onSelected: (v) {
-                if (v == 'delete') removeSlide();
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Text('Удалить слайд')),
-              ],
-            ),
-          ],
-        ),
+                      EditorCommand(
+                        'Сохранить копию PPTX',
+                        Icons.save_outlined,
+                        loaded && !busy ? save : null,
+                      ),
+                      EditorCommand(
+                        'Новый файл',
+                        Icons.note_add_outlined,
+                        enabled && !busy ? create : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
         body: !enabled
             ? const Center(
                 child: Text('DeckCraft Rust недоступен на этом устройстве'),
@@ -593,15 +636,6 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
               )
             : Column(
                 children: [
-                  if (!compact)
-                    const FormatLimitsNotice(
-                      summary: 'PPTX · упрощённый предпросмотр',
-                      details:
-                          'Встроенные PNG/JPEG/WebP и простые фигуры '
-                          'отображаются; темы, сложные эффекты, группы и '
-                          'анимации пока поддерживаются не полностью. '
-                          'Нажмите текст на слайде для редактирования.',
-                    ),
                   Expanded(
                     child: Center(
                       child: SingleChildScrollView(
@@ -622,7 +656,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                       ),
                     ),
                   ),
-                  if (!compact)
+                  if (!compact && !toolsExpanded)
                     Container(
                       height: 112,
                       color: Theme.of(context).colorScheme.surfaceContainer,
@@ -673,10 +707,6 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                         },
                       ),
                     ),
-                  EditorCommandBar(
-                    commands: commands,
-                    color: const Color(0xffcc6243),
-                  ),
                   if (busy) const LinearProgressIndicator(),
                 ],
               ),

@@ -7,143 +7,390 @@ class EditorCommand {
   final VoidCallback? onPressed;
 }
 
-class EditorToolSection {
-  const EditorToolSection(this.label, this.commands);
+/// A leaf command, a nested list, or an inline form within the same tool slab.
+class EditorTool {
+  const EditorTool(
+    this.label,
+    this.icon, {
+    this.onPressed,
+    this.children,
+    this.builder,
+    this.pending = false,
+    this.inline = false,
+  });
   final String label;
-  final List<EditorCommand> commands;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final List<EditorTool>? children;
+  final WidgetBuilder? builder;
+  final bool pending, inline;
 }
 
-/// The same thumb-sized commands on phones and tablets. No fixed text clipping.
-class EditorCommandBar extends StatelessWidget {
-  const EditorCommandBar({super.key, required this.commands, this.color});
-  final List<EditorCommand> commands;
-  final Color? color;
-  @override
-  Widget build(BuildContext context) {
-    final height = (MediaQuery.textScalerOf(context).scale(15) * 1.5 + 30)
-        .clamp(68.0, 150.0);
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: height,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            children: [
-              for (final command in commands)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: OutlinedButton.icon(
-                    onPressed: command.onPressed,
-                    icon: Icon(command.icon, color: color),
-                    label: Text(command.label),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(52, 52),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+class EditorSection {
+  const EditorSection(this.label, this.tools);
+  final String label;
+  final List<EditorTool> tools;
 }
 
-class EditorSectionTabs extends StatefulWidget implements PreferredSizeWidget {
-  const EditorSectionTabs({
+class EditorToolPanel extends StatefulWidget {
+  const EditorToolPanel({
     super.key,
     required this.sections,
     required this.color,
-    this.height = 56,
+    this.onExpandedChanged,
+    this.undo,
+    this.redo,
   });
-  final List<EditorToolSection> sections;
+  final List<EditorSection> sections;
   final Color color;
-  final double height;
+  final ValueChanged<bool>? onExpandedChanged;
+  final VoidCallback? undo, redo;
   @override
-  Size get preferredSize => Size.fromHeight(height);
-  @override
-  State<EditorSectionTabs> createState() => _EditorSectionTabsState();
+  State<EditorToolPanel> createState() => EditorToolPanelState();
 }
 
-class _EditorSectionTabsState extends State<EditorSectionTabs> {
-  int selected = 0;
-  Future<void> showCommands(int index) async {
-    setState(() => selected = index);
-    final section = widget.sections[index];
-    final command = await showModalBottomSheet<EditorCommand>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (context) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * .75,
+class EditorToolPanelState extends State<EditorToolPanel> {
+  final _link = LayerLink();
+  final _overlay = OverlayPortalController();
+  final _anchor = GlobalKey();
+  final Map<String, ScrollController> _scroll = {};
+  final Map<String, List<int>> _visited = {'0': []};
+  int _section = 0;
+  List<int> _path = [];
+  bool expanded = false;
+  String get _id => '$_section${_path.map((i) => '/$i').join()}';
+  void setExpanded(bool value) {
+    if (_overlay.isShowing) _overlay.hide();
+    setState(() => expanded = value);
+    widget.onExpandedChanged?.call(value);
+    if (value) FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void openTool(int section, List<int> path) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _section = section;
+      _path = path;
+      _visited[_id] = List.of(path);
+      expanded = true;
+    });
+    if (_overlay.isShowing) _overlay.hide();
+    widget.onExpandedChanged?.call(true);
+  }
+
+  void back() {
+    if (_path.isEmpty) return;
+    openTool(_section, _path.sublist(0, _path.length - 1));
+  }
+
+  void handleBack() {
+    if (_overlay.isShowing) {
+      _overlay.hide();
+    } else if (_path.isNotEmpty) {
+      back();
+    } else if (expanded) {
+      setExpanded(false);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _scroll.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  EditorTool? _tool(int section, List<int> path) {
+    var tools = widget.sections[section].tools;
+    EditorTool? result;
+    for (final i in path) {
+      if (i >= tools.length) return null;
+      result = tools[i];
+      tools = result.children ?? [];
+    }
+    return result;
+  }
+
+  Widget _button(String label, IconData icon, VoidCallback? action) =>
+      SizedBox.square(
+        dimension: 52,
+        child: IconButton(
+          tooltip: label,
+          onPressed: action,
+          icon: Icon(icon, size: 26),
+          style: IconButton.styleFrom(
+            minimumSize: const Size(52, 52),
+            padding: const EdgeInsets.all(12),
+          ),
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                section.label,
-                style: Theme.of(context).textTheme.titleLarge,
+      );
+  Widget _menu() {
+    final box = _anchor.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return const SizedBox.shrink();
+    final top = box.localToGlobal(Offset.zero).dy;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _overlay.hide,
+          ),
+        ),
+        CompositedTransformFollower(
+          link: _link,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.topLeft,
+          followerAnchor: Alignment.bottomLeft,
+          child: SizedBox(
+            width: (MediaQuery.sizeOf(context).width - 16).clamp(240.0, 300.0),
+            child: Material(
+              elevation: 10,
+              borderRadius: BorderRadius.circular(10),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: (top - MediaQuery.paddingOf(context).top - 8)
+                      .clamp(100.0, 520.0),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < widget.sections.length; i++)
+                        ListTile(
+                          key: ValueKey('section-menu-$i'),
+                          minTileHeight: 52,
+                          selected: i == _section,
+                          selectedTileColor: widget.color.withValues(
+                            alpha: .09,
+                          ),
+                          selectedColor: widget.color,
+                          title: Text(widget.sections[i].label),
+                          onTap: () => openTool(i, []),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              for (final action in section.commands)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: OutlinedButton.icon(
-                    onPressed: action.onPressed == null
-                        ? null
-                        : () => Navigator.pop(context, action),
-                    icon: Icon(action.icon, color: widget.color),
-                    label: Text(action.label),
-                    style: OutlinedButton.styleFrom(
-                      alignment: Alignment.centerLeft,
-                      minimumSize: const Size(52, 56),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pane(int section, List<int> path, String id) {
+    final tool = _tool(section, path);
+    final tools = path.isEmpty
+        ? widget.sections[section].tools
+        : tool?.children ?? [];
+    return SingleChildScrollView(
+      key: ValueKey('pane-$id'),
+      controller: _scroll.putIfAbsent(id, ScrollController.new),
+      child: tool?.builder != null
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: tool!.builder!(context),
+            )
+          : Column(
+              children: [
+                for (var i = 0; i < tools.length; i++)
+                  if (tools[i].inline && tools[i].builder != null)
+                    tools[i].builder!(context)
+                  else
+                    ListTile(
+                      minTileHeight: 56,
+                      leading: Icon(
+                        tools[i].icon,
+                        color: tools[i].pending
+                            ? Theme.of(context).disabledColor
+                            : widget.color,
+                      ),
+                      title: Text(tools[i].label),
+                      subtitle: tools[i].pending
+                          ? const Text(
+                              'Ещё не подключено',
+                              style: TextStyle(fontSize: 13),
+                            )
+                          : null,
+                      enabled:
+                          !tools[i].pending &&
+                          (tools[i].onPressed != null ||
+                              tools[i].children != null ||
+                              tools[i].builder != null),
+                      trailing:
+                          tools[i].children != null || tools[i].builder != null
+                          ? const Icon(Icons.chevron_right)
+                          : null,
+                      onTap:
+                          tools[i].children != null || tools[i].builder != null
+                          ? () => openTool(section, [...path, i])
+                          : tools[i].onPressed,
+                    ),
+              ],
+            ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = expanded && _path.isNotEmpty
+        ? _tool(_section, _path)?.label ?? widget.sections[_section].label
+        : widget.sections[_section].label;
+    final media = MediaQuery.of(context);
+    // Remain usable in landscape and with the keyboard, retaining the canvas.
+    final height =
+        ((media.size.height -
+                    media.viewInsets.bottom -
+                    media.padding.vertical) *
+                .36)
+            .clamp(90.0, 290.0);
+    final ids = _visited.keys.toList();
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+          primary: widget.color,
+          primaryContainer: widget.color.withValues(alpha: .12),
+        ),
+      ),
+      child: OverlayPortal(
+        controller: _overlay,
+        overlayChildBuilder: (_) => _menu(),
+        child: Material(
+          color: Theme.of(context).colorScheme.surface,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CompositedTransformTarget(
+                  link: _link,
+                  child: Container(
+                    key: _anchor,
+                    margin: EdgeInsets.fromLTRB(
+                      expanded ? 0 : 8,
+                      0,
+                      expanded ? 0 : 8,
+                      0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.color.withValues(alpha: .09),
+                      borderRadius: BorderRadius.circular(expanded ? 0 : 16),
+                    ),
+                    child: Row(
+                      children: [
+                        if (expanded && _path.isNotEmpty)
+                          _button(
+                            'Назад к инструментам',
+                            Icons.arrow_back,
+                            back,
+                          ),
+                        Expanded(
+                          child: InkWell(
+                            key: const Key('tool-section-caption'),
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () {
+                              if (_overlay.isShowing) {
+                                _overlay.hide();
+                              } else {
+                                if (!expanded) setExpanded(true);
+                                _overlay.show();
+                              }
+                            },
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 56),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(Icons.unfold_more, size: 20),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_path.isEmpty || !expanded) ...[
+                          _button('Отменить', Icons.undo, widget.undo),
+                          _button('Повторить', Icons.redo, widget.redo),
+                        ],
+                        _button(
+                          expanded
+                              ? 'Свернуть инструменты'
+                              : 'Развернуть инструменты',
+                          expanded
+                              ? Icons.keyboard_arrow_down
+                              : Icons.keyboard_arrow_up,
+                          () => setExpanded(!expanded),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-            ],
+                Offstage(
+                  offstage: !expanded,
+                  child: SizedBox(
+                    height: height,
+                    child: IndexedStack(
+                      index: ids.indexOf(_id).clamp(0, ids.length - 1),
+                      children: [
+                        for (final id in ids)
+                          _pane(
+                            int.parse(id.split('/').first),
+                            _visited[id]!,
+                            id,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-    if (mounted) command?.onPressed?.call();
   }
+}
 
+/// File commands are separate from document tools; no duplicate Save row.
+class EditorFileMenu extends StatelessWidget {
+  const EditorFileMenu({super.key, required this.commands});
+  final List<EditorCommand> commands;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: widget.height,
-    child: ListView(
-      scrollDirection: Axis.horizontal,
-      children: [
-        for (var i = 0; i < widget.sections.length; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7),
-            child: TextButton(
-              onPressed: () => showCommands(i),
-              style: TextButton.styleFrom(
-                foregroundColor: selected == i
-                    ? widget.color
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                shape: const RoundedRectangleBorder(),
-                minimumSize: const Size(52, 52),
-                side: selected == i
-                    ? BorderSide(color: widget.color, width: 1)
-                    : BorderSide.none,
-              ),
-              child: Text(
-                widget.sections[i].label,
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
+  Widget build(BuildContext context) => PopupMenuButton<int>(
+    tooltip: 'Меню файла',
+    icon: const Icon(Icons.more_horiz),
+    onSelected: (i) => commands[i].onPressed?.call(),
+    itemBuilder: (_) => [
+      for (var i = 0; i < commands.length; i++)
+        PopupMenuItem(
+          value: i,
+          enabled: commands[i].onPressed != null,
+          height: 56,
+          child: Row(
+            children: [
+              Icon(commands[i].icon),
+              const SizedBox(width: 12),
+              Expanded(child: Text(commands[i].label)),
+            ],
           ),
-      ],
-    ),
+        ),
+    ],
   );
 }
 
@@ -196,5 +443,67 @@ class EditorWelcome extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+class EditorTextStyleControls extends StatelessWidget {
+  const EditorTextStyleControls({
+    super.key,
+    this.onBold,
+    this.onItalic,
+    this.onUnderline,
+    this.onSize,
+  });
+  final VoidCallback? onBold, onItalic, onUnderline;
+  final ValueChanged<double>? onSize;
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text('Шрифт и стиль', style: TextStyle(fontSize: 16)),
+            ),
+            DropdownButton<double>(
+              hint: const Text('Размер'),
+              onChanged: onSize == null
+                  ? null
+                  : (v) {
+                      if (v != null) onSize!(v);
+                    },
+              items: [10.0, 12.0, 14.0, 16.0, 18.0, 24.0, 32.0]
+                  .map(
+                    (v) => DropdownMenuItem(
+                      value: v,
+                      child: Text(v.toInt().toString()),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          for (final command in [
+            EditorCommand('Жирный', Icons.format_bold, onBold),
+            EditorCommand('Курсив', Icons.format_italic, onItalic),
+            EditorCommand('Подчеркнуть', Icons.format_underlined, onUnderline),
+          ])
+            SizedBox.square(
+              dimension: 56,
+              child: IconButton(
+                tooltip: command.label,
+                onPressed: command.onPressed,
+                icon: Icon(command.icon, size: 28),
+              ),
+            ),
+        ],
+      ),
+      const Divider(height: 1),
+    ],
   );
 }

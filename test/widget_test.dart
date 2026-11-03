@@ -10,6 +10,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Книга.xlsx'), findsOneWidget);
     expect(find.text('Rust недоступен'), findsOneWidget);
-    expect(find.byTooltip('Открыть XLSX'), findsOneWidget);
+    expect(find.byTooltip('Меню файла'), findsOneWidget);
   });
 }

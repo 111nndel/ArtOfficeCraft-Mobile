@@ -1,3 +1,5 @@
+import 'package:artofficecraft_mobile/ui/editor_tools.dart';
+
 import 'dart:convert';
 import 'dart:async';
 
@@ -136,7 +138,7 @@ void main() {
         'Текст с клавиатурой',
       );
       await tester.pump();
-      expect(find.text('Готово'), findsOneWidget);
+      expect(find.byKey(const Key('tool-section-caption')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -168,6 +170,7 @@ void main() {
         await setup(tester, size, 1.6, screen);
         expect(tester.takeException(), isNull);
         expect(find.text('Главная'), findsOneWidget);
+        expect(find.byTooltip('Меню файла'), findsOneWidget);
       });
     }
   }
@@ -189,6 +192,8 @@ void main() {
       'Отредактированный текст',
     );
     await tester.pump();
+    await tester.tap(find.byTooltip('Развернуть инструменты'));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Готово'));
     await tester.tap(find.text('Готово'));
     await tester.pumpAndSettle();
@@ -231,6 +236,9 @@ void main() {
           launch: const EditorLaunch(create: true),
         ),
       );
+      await tester.tap(find.byTooltip('Развернуть инструменты'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Текстовые объекты'));
       await tester.tap(find.text('Текстовые объекты'));
       await tester.pumpAndSettle();
       expect(find.text('Проверяемый абзац'), findsWidgets);
@@ -271,7 +279,9 @@ void main() {
       );
       await tester.pump();
       expect(backend.calls, 0);
-      await tester.tap(find.byTooltip('Сохранить как DOCX'));
+      await tester.tap(find.byTooltip('Меню файла'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить как DOCX'));
       await tester.pumpAndSettle();
       expect(backend.calls, 1);
       expect(
@@ -282,6 +292,57 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('Word draft survives tools, formatting, collapse and file menu', (
+    tester,
+  ) async {
+    final backend = FakeDocumentBackend(NativeDocumentKind.word);
+    Uint8List? exported;
+    const files = MethodChannel('flutter_file_dialog');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(files, (call) async {
+          exported = (call.arguments as Map)['data'] as Uint8List;
+          return '/test/saved.docx';
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(files, null),
+    );
+    await setup(
+      tester,
+      const Size(393, 873),
+      1,
+      NativeWordScreen(
+        backend: backend,
+        launch: const EditorLaunch(create: true),
+      ),
+    );
+    await tester.tap(find.text('Проверяемый абзац'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Развернуть инструменты'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Курсив'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('word-inline-input')),
+      'Новый текст после оформления 😀',
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Свернуть инструменты'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('word-inline-input')))
+          .controller!
+          .text,
+      'Новый текст после оформления 😀',
+    );
+    await tester.tap(find.byTooltip('Меню файла'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить как DOCX'));
+    await tester.pumpAndSettle();
+    expect(utf8.decode(exported!), contains('Новый текст после оформления 😀'));
+  });
+
   testWidgets('Word retains a failed draft and never exports stale bytes', (
     tester,
   ) async {
@@ -314,7 +375,9 @@ void main() {
       'Не терять этот текст',
     );
     await tester.pump();
-    await tester.tap(find.byTooltip('Сохранить как DOCX'));
+    await tester.tap(find.byTooltip('Меню файла'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить как DOCX'));
     await tester.pumpAndSettle();
     expect(exports, 0);
     expect(
@@ -325,7 +388,9 @@ void main() {
       'Не терять этот текст',
     );
     backend.failEdits = false;
-    await tester.tap(find.byTooltip('Сохранить как DOCX'));
+    await tester.tap(find.byTooltip('Меню файла'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Сохранить как DOCX'));
     await tester.pumpAndSettle();
     expect(exports, 1);
     expect(tester.takeException(), isNull);
@@ -356,12 +421,9 @@ void main() {
       ),
     );
     final action = tester
-        .widget<IconButton>(
-          find.byWidgetPredicate(
-            (widget) =>
-                widget is IconButton && widget.tooltip == 'Сохранить как DOCX',
-          ),
-        )
+        .widget<EditorFileMenu>(find.byType(EditorFileMenu))
+        .commands
+        .firstWhere((c) => c.label == 'Сохранить как DOCX')
         .onPressed!;
     action();
     action();

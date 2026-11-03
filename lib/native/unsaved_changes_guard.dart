@@ -8,11 +8,15 @@ class UnsavedChangesGuard extends StatefulWidget {
     required this.dirty,
     required this.busy,
     required this.child,
+    this.interceptBack = false,
+    this.onInterceptBack,
   });
 
   final bool dirty;
   final bool busy;
   final Widget child;
+  final bool interceptBack;
+  final VoidCallback? onInterceptBack;
 
   @override
   State<UnsavedChangesGuard> createState() => _UnsavedChangesGuardState();
@@ -24,6 +28,10 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
 
   Future<void> _onPop(bool didPop) async {
     if (didPop || !mounted || _dialogOpen || _allowExit) return;
+    if (widget.interceptBack) {
+      widget.onInterceptBack?.call();
+      return;
+    }
     if (widget.busy) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('Дождитесь завершения операции с файлом')),
@@ -66,7 +74,9 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
   @override
   Widget build(BuildContext context) {
     return PopScope<Object?>(
-      canPop: _allowExit || (!widget.dirty && !widget.busy),
+      canPop:
+          _allowExit ||
+          (!widget.dirty && !widget.busy && !widget.interceptBack),
       onPopInvokedWithResult: (didPop, _) => _onPop(didPop),
       child: widget.child,
     );

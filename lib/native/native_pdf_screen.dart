@@ -1,8 +1,8 @@
+import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
-import 'format_limits_notice.dart';
 
 import 'dart:async';
 import 'dart:io';
@@ -33,6 +33,8 @@ class NativePdfScreen extends StatefulWidget {
 }
 
 class _NativePdfScreenState extends State<NativePdfScreen> {
+  final toolPanel = GlobalKey<EditorToolPanelState>();
+  bool toolsExpanded = false;
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf);
   Uint8List? contents;
@@ -216,50 +218,6 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     }
   });
 
-  List<EditorCommand> get commands => [
-    EditorCommand(
-      'Предыдущая',
-      Icons.chevron_left,
-      selected > 0 && !busy ? () => selectPage(selected - 1) : null,
-    ),
-    EditorCommand(
-      'Следующая',
-      Icons.chevron_right,
-      selected + 1 < pages.length && !busy
-          ? () => selectPage(selected + 1)
-          : null,
-    ),
-    EditorCommand(
-      'Повернуть влево',
-      Icons.rotate_left,
-      contents != null && !busy ? () => edit('rotate_ccw') : null,
-    ),
-    EditorCommand(
-      'Повернуть вправо',
-      Icons.rotate_right,
-      contents != null && !busy ? () => edit('rotate_cw') : null,
-    ),
-    EditorCommand(
-      'Копировать страницу',
-      Icons.copy,
-      contents != null && !busy ? () => edit('duplicate') : null,
-    ),
-    EditorCommand(
-      'Вставить страницу',
-      Icons.note_add_outlined,
-      contents != null && !busy ? () => edit('insert_blank') : null,
-    ),
-    EditorCommand(
-      'Удалить страницу',
-      Icons.delete_outline,
-      pages.length > 1 && !busy ? () => edit('delete') : null,
-    ),
-    EditorCommand(
-      'Сохранить копию',
-      Icons.save_outlined,
-      contents != null && !busy ? save : null,
-    ),
-  ];
   Future<Uint8List> thumbnailFor(int index) {
     final old = _thumbnailImages[index];
     if (old != null) return old;
@@ -357,58 +315,123 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     }
   }
 
+  Widget editorPanel() => EditorToolPanel(
+    key: toolPanel,
+    color: const Color(0xffc94e59),
+    onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+    sections: officeSections(
+      'pdf',
+      leading: {
+        'Чтение': [
+          EditorTool(
+            'Предыдущая',
+            Icons.chevron_left,
+            onPressed: selected > 0 && !busy
+                ? () => selectPage(selected - 1)
+                : null,
+          ),
+          EditorTool(
+            'Следующая',
+            Icons.chevron_right,
+            onPressed: selected + 1 < pages.length && !busy
+                ? () => selectPage(selected + 1)
+                : null,
+          ),
+        ],
+        'Страницы': [
+          EditorTool(
+            'Вставить страницу',
+            Icons.note_add_outlined,
+            onPressed: busy ? null : () => edit('insert_blank'),
+          ),
+        ],
+      },
+      overrides: {
+        'Повернуть': EditorTool(
+          'Повернуть',
+          Icons.rotate_right,
+          children: [
+            EditorTool(
+              'Повернуть влево',
+              Icons.rotate_left,
+              onPressed: busy ? null : () => edit('rotate_ccw'),
+            ),
+            EditorTool(
+              'Повернуть вправо',
+              Icons.rotate_right,
+              onPressed: busy ? null : () => edit('rotate_cw'),
+            ),
+          ],
+        ),
+        'Дублировать': EditorTool(
+          'Дублировать',
+          Icons.copy,
+          onPressed: busy ? null : () => edit('duplicate'),
+        ),
+        'Удалить': EditorTool(
+          'Удалить',
+          Icons.delete_outline,
+          onPressed: pages.length > 1 && !busy ? () => edit('delete') : null,
+        ),
+      },
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final available = engine != null;
     final compact = MediaQuery.sizeOf(context).height < 650;
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return UnsavedChangesGuard(
+      interceptBack: toolsExpanded,
+      onInterceptBack: () => toolPanel.currentState?.handleBack(),
       dirty: changed,
       busy: busy,
       child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
-              .clamp(72.0, 144.0)
-              .toDouble(),
-          title: EditorFileTitle(
-            filename: filename,
-            status: available
-                ? 'PDFCraft Rust + Android PDF'
-                : 'Rust недоступен',
-            color: const Color(0xffc94e59),
-          ),
-          bottom: keyboardOpen
-              ? null
-              : EditorSectionTabs(
+        bottomNavigationBar: contents != null
+            ? Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: editorPanel(),
+              )
+            : null,
+        appBar: toolsExpanded
+            ? null
+            : AppBar(
+                toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+                    .clamp(72.0, 144.0)
+                    .toDouble(),
+                title: EditorFileTitle(
+                  filename: filename,
+                  status: available
+                      ? (changed
+                            ? 'PDF · есть изменения'
+                            : 'PDF · на устройстве')
+                      : 'Rust недоступен',
                   color: const Color(0xffc94e59),
-                  height: (MediaQuery.textScalerOf(context).scale(16) + 30)
-                      .clamp(56.0, 90.0),
-                  sections: [
-                    EditorToolSection('Главная', commands),
-                    EditorToolSection('Страницы', commands),
-                    EditorToolSection('Файл', [
+                ),
+                actions: [
+                  EditorFileMenu(
+                    commands: [
                       EditorCommand(
                         'Открыть PDF',
-                        Icons.folder_open,
+                        Icons.folder_open_outlined,
                         available && !busy ? open : null,
                       ),
-                      commands.last,
-                    ]),
-                  ],
-                ),
-          actions: [
-            IconButton(
-              tooltip: 'Открыть PDF',
-              onPressed: available && !busy ? open : null,
-              icon: const Icon(Icons.folder_open_outlined),
-            ),
-            IconButton(
-              tooltip: 'Сохранить PDF',
-              onPressed: contents != null && !busy ? save : null,
-              icon: const Icon(Icons.save_outlined),
-            ),
-          ],
-        ),
+                      EditorCommand(
+                        'Сохранить PDF',
+                        Icons.save_outlined,
+                        contents != null && !busy ? save : null,
+                      ),
+                      EditorCommand(
+                        'Новый файл',
+                        Icons.note_add_outlined,
+                        available && !busy ? create : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
         body: !available
             ? const Center(child: Text('PDFCraft Rust недоступен'))
             : contents == null
@@ -423,14 +446,6 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
               )
             : Column(
                 children: [
-                  if (!compact)
-                    const FormatLimitsNotice(
-                      summary: 'PDF · возможности редактора',
-                      details:
-                          'PDFCraft изменяет структуру страниц; '
-                          'Android отображает содержимое. Формы, сложные '
-                          'ссылки и цифровые подписи требуют отдельной проверки.',
-                    ),
                   Expanded(
                     child: Center(
                       child: Padding(
@@ -488,7 +503,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                       ),
                     ),
                   ),
-                  if (!compact)
+                  if (!compact && !toolsExpanded)
                     SizedBox(
                       height: 136,
                       child: ListView.builder(
@@ -506,10 +521,6 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                       'Страница ${selected + 1} из ${pages.length}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                  ),
-                  EditorCommandBar(
-                    commands: commands,
-                    color: const Color(0xffc94e59),
                   ),
                   if (busy) const LinearProgressIndicator(),
                 ],

@@ -1,8 +1,8 @@
+import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
-import 'format_limits_notice.dart';
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -28,12 +28,15 @@ class NativeGridScreen extends StatefulWidget {
 }
 
 class _NativeGridScreenState extends State<NativeGridScreen> {
+  final toolPanel = GlobalKey<EditorToolPanelState>();
+  bool toolsExpanded = false;
+  bool formulaExpanded = false;
   late final DocumentBackend? bridge =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.grid);
   Uint8List? book;
   String filename = 'Книга.xlsx', selected = 'A1';
   int sheetIndex = 0;
-  bool modified = false, busy = false, showTabs = true;
+  bool modified = false, busy = false;
   final input = TextEditingController();
   List<Map<String, dynamic>> sheets = [];
   @override
@@ -223,36 +226,20 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     refreshCells();
     input.text = currentInput;
   });
-  List<EditorCommand> get commands => [
-    EditorCommand(
-      'Ввести значение',
-      Icons.edit_outlined,
-      book != null && !busy ? () => inputFocus.requestFocus() : null,
-    ),
-    EditorCommand(
-      'Применить',
-      Icons.check,
-      book != null && !busy ? commit : null,
-    ),
-    EditorCommand(
-      'Скрыть / показать листы',
-      Icons.tab,
-      book != null && !busy ? () => setState(() => showTabs = !showTabs) : null,
-    ),
-    EditorCommand(
-      'Сохранить копию',
-      Icons.save_outlined,
-      book != null && !busy ? save : null,
-    ),
-  ];
   final inputFocus = FocusNode();
   Widget header(String text) => Container(
     height: 56,
     alignment: Alignment.center,
-    color: const Color(0xff223039),
+    decoration: const BoxDecoration(
+      color: Color(0xfff5f7fa),
+      border: Border(
+        right: BorderSide(color: Color(0xffe5e9ef)),
+        bottom: BorderSide(color: Color(0xffe5e9ef)),
+      ),
+    ),
     child: Text(
       text,
-      style: const TextStyle(color: Colors.white70, fontSize: 14),
+      style: const TextStyle(color: Color(0xff7c8694), fontSize: 14),
     ),
   );
   Widget cell(String address) {
@@ -263,13 +250,18 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       onTap: busy ? null : () => selectCell(address),
       child: Container(
         height: 56,
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 5),
+        alignment: double.tryParse(value.replaceAll(' ', '')) != null
+            ? Alignment.centerRight
+            : Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           color: address == selected ? const Color(0xffe3f2ea) : Colors.white,
           border: address == selected
               ? Border.all(color: const Color(0xff188458), width: 2)
-              : null,
+              : const Border(
+                  right: BorderSide(color: Color(0xffe5e9ef)),
+                  bottom: BorderSide(color: Color(0xffe5e9ef)),
+                ),
         ),
         child: Text(
           value,
@@ -336,6 +328,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   @override
   void initState() {
     super.initState();
+    inputFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
     final request = widget.launch;
     if (request != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -364,57 +359,99 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
   }
 
+  Widget editorPanel() => EditorToolPanel(
+    key: toolPanel,
+    color: const Color(0xff17815c),
+    onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+    sections: officeSections(
+      'grid',
+      exclude: {'Ж'},
+      leading: {
+        'Главная': [
+          const EditorTool(
+            'Стиль',
+            Icons.text_fields,
+            inline: true,
+            builder: _gridStyles,
+          ),
+        ],
+      },
+      overrides: {
+        'Управление листами': EditorTool(
+          'Управление листами',
+          Icons.tab,
+          children: [
+            for (var i = 0; i < sheets.length; i++)
+              EditorTool(
+                sheets[i]['name']?.toString() ?? 'Лист',
+                i == sheetIndex
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                onPressed: busy ? null : () => chooseSheet(i),
+              ),
+          ],
+        ),
+      },
+    ),
+  );
+  static Widget _gridStyles(BuildContext context) =>
+      const EditorTextStyleControls();
+
   @override
   Widget build(BuildContext context) {
     final online = bridge != null;
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final compact = MediaQuery.sizeOf(context).height < 650;
     return UnsavedChangesGuard(
+      interceptBack: toolsExpanded,
+      onInterceptBack: () => toolPanel.currentState?.handleBack(),
       dirty: modified,
       busy: busy,
       child: Scaffold(
+        bottomNavigationBar: book != null
+            ? Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: editorPanel(),
+              )
+            : null,
         resizeToAvoidBottomInset: true,
-        appBar: AppBar(
-          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
-              .clamp(72.0, 144.0)
-              .toDouble(),
-          title: EditorFileTitle(
-            filename: filename,
-            status: online ? 'GridCraft Rust · XLSX' : 'Rust недоступен',
-            color: const Color(0xff17815c),
-          ),
-          bottom: keyboardOpen
-              ? null
-              : EditorSectionTabs(
+        appBar: toolsExpanded
+            ? null
+            : AppBar(
+                toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+                    .clamp(72.0, 144.0)
+                    .toDouble(),
+                title: EditorFileTitle(
+                  filename: filename,
+                  status: online
+                      ? (modified
+                            ? 'XLSX · есть изменения'
+                            : 'XLSX · на устройстве')
+                      : 'Rust недоступен',
                   color: const Color(0xff17815c),
-                  height: (MediaQuery.textScalerOf(context).scale(16) + 30)
-                      .clamp(56.0, 90.0),
-                  sections: [
-                    EditorToolSection('Главная', commands),
-                    EditorToolSection('Формулы', commands),
-                    EditorToolSection('Файл', [
+                ),
+                actions: [
+                  EditorFileMenu(
+                    commands: [
                       EditorCommand(
                         'Открыть XLSX',
-                        Icons.folder_open,
+                        Icons.folder_open_outlined,
                         online && !busy ? open : null,
                       ),
-                      commands.last,
-                    ]),
-                  ],
-                ),
-          actions: [
-            IconButton(
-              tooltip: 'Открыть XLSX',
-              onPressed: online && !busy ? open : null,
-              icon: const Icon(Icons.folder_open_outlined),
-            ),
-            IconButton(
-              tooltip: 'Сохранить копию',
-              onPressed: book != null && !busy ? save : null,
-              icon: const Icon(Icons.save_outlined),
-            ),
-          ],
-        ),
+                      EditorCommand(
+                        'Сохранить копию',
+                        Icons.save_outlined,
+                        book != null && !busy ? save : null,
+                      ),
+                      EditorCommand(
+                        'Новый файл',
+                        Icons.note_add_outlined,
+                        online && !busy ? create : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
         body: !online
             ? const Center(
                 child: Text(
@@ -433,82 +470,104 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
               )
             : Column(
                 children: [
-                  if (!keyboardOpen && !compact)
-                    const FormatLimitsNotice(
-                      summary: 'XLSX · ограничения просмотра',
-                      details:
-                          'Показаны 55 строк и 12 столбцов. Сложное '
-                          'оформление и диаграммы пока не отображаются.',
-                    ),
                   Expanded(child: grid()),
-                  Row(
-                    children: [
-                      const Tooltip(
-                        message: 'Число, текст или формула со знака =',
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Text('ƒₓ', style: TextStyle(fontSize: 20)),
-                        ),
+                  Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                      Text(
-                        selected,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: input,
-                          focusNode: inputFocus,
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            hintText: 'Введите…',
-                          ),
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => commit(),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Отменить ввод',
-                        onPressed: busy
-                            ? null
-                            : () => setState(() => input.text = currentInput),
-                        icon: const Icon(Icons.close),
-                      ),
-                      IconButton(
-                        tooltip: 'Применить',
-                        onPressed: busy ? null : commit,
-                        icon: const Icon(Icons.check, color: Colors.green),
-                      ),
-                    ],
-                  ),
-                  if (showTabs && !keyboardOpen && !compact)
-                    SizedBox(
-                      height: 56,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
+                      child: Row(
                         children: [
-                          for (int i = 0; i < sheets.length; i++)
-                            TextButton(
-                              onPressed: busy ? null : () => chooseSheet(i),
-                              child: Text(
-                                sheets[i]['name']?.toString() ?? 'Лист',
-                                style: TextStyle(
-                                  fontWeight: i == sheetIndex
-                                      ? FontWeight.bold
-                                      : null,
-                                ),
+                          SizedBox(
+                            width: 52,
+                            child: Text(
+                              selected,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xff17815c),
+                              ),
+                            ),
+                          ),
+                          if (!inputFocus.hasFocus)
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('ƒₓ', style: TextStyle(fontSize: 24)),
+                            ),
+                          Expanded(
+                            key: const ValueKey('formula-input'),
+                            child: TextField(
+                              controller: input,
+                              focusNode: inputFocus,
+                              minLines: 1,
+                              maxLines: formulaExpanded ? 4 : 1,
+                              decoration: const InputDecoration(
+                                hintText: 'Введите…',
+                                contentPadding: EdgeInsets.all(12),
+                              ),
+                              textInputAction: TextInputAction.done,
+                              onSubmitted: (_) => commit(),
+                            ),
+                          ),
+                          if (inputFocus.hasFocus) ...[
+                            IconButton(
+                              tooltip: 'Отменить ввод',
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      setState(() => input.text = currentInput);
+                                      inputFocus.unfocus();
+                                    },
+                              icon: const Icon(Icons.close),
+                            ),
+                            IconButton(
+                              tooltip: 'Применить',
+                              onPressed: busy ? null : commit,
+                              icon: const Icon(
+                                Icons.check,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ] else
+                            IconButton(
+                              tooltip: formulaExpanded
+                                  ? 'Свернуть формулу'
+                                  : 'Развернуть формулу',
+                              onPressed: () => setState(
+                                () => formulaExpanded = !formulaExpanded,
+                              ),
+                              icon: Icon(
+                                formulaExpanded
+                                    ? Icons.keyboard_arrow_down
+                                    : Icons.keyboard_arrow_up,
                               ),
                             ),
                         ],
                       ),
                     ),
-                  if (!keyboardOpen)
-                    EditorCommandBar(
-                      commands: commands,
-                      color: const Color(0xff17815c),
+                  ),
+                  if (!toolsExpanded)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < sheets.length; i++)
+                            TextButton(
+                              onPressed: busy ? null : () => chooseSheet(i),
+                              style: TextButton.styleFrom(
+                                foregroundColor: i == sheetIndex
+                                    ? const Color(0xff17815c)
+                                    : null,
+                              ),
+                              child: Text(
+                                sheets[i]['name']?.toString() ?? 'Лист',
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   if (busy) const LinearProgressIndicator(),
                 ],

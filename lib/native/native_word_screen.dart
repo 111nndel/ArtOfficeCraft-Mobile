@@ -1,11 +1,10 @@
+import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'word_inline_controller.dart';
-import 'word_paragraph_editor.dart';
 import 'document_history.dart';
 import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
-import 'format_limits_notice.dart';
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -32,6 +31,8 @@ class NativeWordScreen extends StatefulWidget {
 }
 
 class _NativeWordScreenState extends State<NativeWordScreen> {
+  final toolPanel = GlobalKey<EditorToolPanelState>();
+  bool toolsExpanded = false;
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.word);
   final history = DocumentHistory();
@@ -135,55 +136,6 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       },
     );
   }
-
-  Future<void> formatAdvanced() async {
-    if (busy || operationPending || activeBlock == null) return;
-    setState(() => operationPending = true);
-    try {
-      if (!await commitInline() || !mounted) return;
-      final block = blocks.firstWhere((b) => b['block'] == activeBlock);
-      final request = await showWordParagraphEditor(
-        context,
-        block: block,
-        formatOnly: true,
-        initialSelection: inline.selection,
-      );
-      if (request != null && mounted && await commitInline(patch: request)) {
-        inlineFocus.requestFocus();
-      }
-    } finally {
-      if (mounted) setState(() => operationPending = false);
-    }
-  }
-
-  List<EditorCommand> get inlineCommands => [
-    EditorCommand('Готово', Icons.check, busy ? null : finishInline),
-    EditorCommand(
-      inline.selection.isCollapsed ? 'Жирный абзац' : 'Жирный',
-      Icons.format_bold,
-      busy || inline.text.isEmpty ? null : () => formatInline('bold'),
-    ),
-    EditorCommand(
-      inline.selection.isCollapsed ? 'Курсив абзаца' : 'Курсив',
-      Icons.format_italic,
-      busy || inline.text.isEmpty ? null : () => formatInline('italic'),
-    ),
-    EditorCommand(
-      inline.selection.isCollapsed ? 'Подчеркнуть абзац' : 'Подчеркнуть',
-      Icons.format_underlined,
-      busy || inline.text.isEmpty ? null : () => formatInline('underline'),
-    ),
-    EditorCommand(
-      'Оформление',
-      Icons.format_size,
-      busy ? null : formatAdvanced,
-    ),
-    EditorCommand(
-      'По ширине',
-      Icons.format_align_justify,
-      busy ? null : () => commitInline(patch: {'align': 'justify'}),
-    ),
-  ];
 
   @override
   void dispose() {
@@ -346,40 +298,6 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     await updatePreview(bytes);
     setState(() => changed = true);
   });
-  List<EditorCommand> get commands => [
-    EditorCommand(
-      'Новый абзац',
-      Icons.add,
-      document != null && !busy ? appendParagraph : null,
-    ),
-    EditorCommand(
-      'Изменить текст',
-      Icons.edit_outlined,
-      !busy && selectedBlock != null
-          ? () => editParagraph(
-              blocks.firstWhere((b) => b['block'] == selectedBlock),
-            )
-          : null,
-    ),
-    EditorCommand(
-      'Отменить',
-      Icons.undo,
-      !busy && (history.canUndo || inlineDirty)
-          ? () => restoreHistory(true)
-          : null,
-    ),
-    EditorCommand(
-      'Повторить',
-      Icons.redo,
-      !busy && history.canRedo ? () => restoreHistory(false) : null,
-    ),
-    EditorCommand(
-      'Сохранить копию',
-      Icons.save_outlined,
-      document != null && !busy ? saveAs : null,
-    ),
-  ];
-
   Future<void> saveAs() => guarded(() async {
     if (document == null) return;
     final bytes = document!;
@@ -437,59 +355,144 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     }
   }
 
+  Widget editorPanel() {
+    final editing = activeBlock != null && !busy && !operationPending;
+    EditorTool alignment(String name, String value, IconData icon) =>
+        EditorTool(
+          name,
+          icon,
+          onPressed: editing
+              ? () => commitInline(patch: {'align': value})
+              : null,
+        );
+    return EditorToolPanel(
+      key: toolPanel,
+      color: const Color(0xff3565ca),
+      onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+      undo: !busy && (history.canUndo || inlineDirty)
+          ? () => restoreHistory(true)
+          : null,
+      redo: !busy && history.canRedo ? () => restoreHistory(false) : null,
+      sections: officeSections(
+        'word',
+        exclude: {'Шрифт и стиль', 'Ж', 'К', 'Ч'},
+        leading: {
+          'Главная': [
+            EditorTool(
+              'Стиль',
+              Icons.text_fields,
+              inline: true,
+              builder: (_) => EditorTextStyleControls(
+                onBold: editing ? () => formatInline('bold') : null,
+                onItalic: editing ? () => formatInline('italic') : null,
+                onUnderline: editing ? () => formatInline('underline') : null,
+                onSize: editing
+                    ? (v) => commitInline(
+                        patch: {
+                          'char': {'size': v},
+                        },
+                      )
+                    : null,
+              ),
+            ),
+            EditorTool(
+              'Готово',
+              Icons.check,
+              onPressed: activeBlock == null || busy ? null : finishInline,
+            ),
+          ],
+          'Вставка': [
+            EditorTool(
+              'Новый абзац',
+              Icons.add,
+              onPressed: busy ? null : appendParagraph,
+            ),
+          ],
+        },
+        overrides: {
+          'Абзац': EditorTool(
+            'Абзац',
+            Icons.format_align_justify,
+            children: [
+              alignment('Слева', 'left', Icons.format_align_left),
+              alignment('По центру', 'center', Icons.format_align_center),
+              alignment('Справа', 'right', Icons.format_align_right),
+              alignment('По ширине', 'justify', Icons.format_align_justify),
+              EditorTool(
+                'Межстрочный интервал',
+                Icons.format_line_spacing,
+                children: [
+                  for (final v in [1.0, 1.15, 1.5, 2.0])
+                    EditorTool(
+                      '$v',
+                      Icons.format_line_spacing,
+                      onPressed: editing
+                          ? () => commitInline(patch: {'lineSpacing': v})
+                          : null,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final enabled = engine != null;
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return UnsavedChangesGuard(
+      interceptBack: toolsExpanded,
+      onInterceptBack: () => toolPanel.currentState?.handleBack(),
       dirty: changed || inlineDirty,
       busy: busy || operationPending,
       child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
-              .clamp(72.0, 144.0)
-              .toDouble(),
-          title: EditorFileTitle(
-            filename: filename,
-            status: enabled
-                ? (changed || inlineDirty
-                      ? 'DOCX · есть изменения'
-                      : 'DOCX · на устройстве')
-                : 'Rust недоступен',
-            color: const Color(0xff3565ca),
-          ),
-          bottom: keyboardOpen
-              ? null
-              : EditorSectionTabs(
+        bottomNavigationBar: document != null
+            ? Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: editorPanel(),
+              )
+            : null,
+        appBar: toolsExpanded
+            ? null
+            : AppBar(
+                toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+                    .clamp(72.0, 144.0)
+                    .toDouble(),
+                title: EditorFileTitle(
+                  filename: filename,
+                  status: enabled
+                      ? (changed || inlineDirty
+                            ? 'DOCX · есть изменения'
+                            : 'DOCX · на устройстве')
+                      : 'Rust недоступен',
                   color: const Color(0xff3565ca),
-                  height: (MediaQuery.textScalerOf(context).scale(16) + 30)
-                      .clamp(56.0, 90.0),
-                  sections: [
-                    EditorToolSection('Главная', commands),
-                    EditorToolSection('Вставка', [commands.first]),
-                    EditorToolSection('Файл', [
+                ),
+                actions: [
+                  EditorFileMenu(
+                    commands: [
                       EditorCommand(
                         'Открыть DOCX',
-                        Icons.folder_open,
+                        Icons.folder_open_outlined,
                         enabled && !busy ? openDocument : null,
                       ),
-                      commands.last,
-                    ]),
-                  ],
-                ),
-          actions: [
-            IconButton(
-              tooltip: 'Открыть DOCX',
-              onPressed: enabled && !busy ? openDocument : null,
-              icon: const Icon(Icons.folder_open_outlined),
-            ),
-            IconButton(
-              tooltip: 'Сохранить как DOCX',
-              onPressed: enabled && !busy && document != null ? saveAs : null,
-              icon: const Icon(Icons.save_outlined),
-            ),
-          ],
-        ),
+                      EditorCommand(
+                        'Сохранить как DOCX',
+                        Icons.save_outlined,
+                        document != null && !busy ? saveAs : null,
+                      ),
+                      EditorCommand(
+                        'Новый файл',
+                        Icons.note_add_outlined,
+                        enabled && !busy ? createNew : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
         body: Column(
           children: [
             if (!enabled)
@@ -513,15 +516,6 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                 ),
               )
             else if (document != null) ...[
-              if (!keyboardOpen)
-                FormatLimitsNotice(
-                  summary: 'DOCX · возможности просмотра',
-                  details:
-                      'Текстовый предпросмотр: таблицы ($tables), '
-                      'изображения и точная вёрстка пока не отображаются. '
-                      'Коснитесь абзаца: ввод и выделение работают прямо на странице. '
-                      'Абзацы с объектами и исправлениями доступны для чтения.',
-                ),
               Expanded(
                 child: Container(
                   color: const Color(0xffdce1e8),
@@ -659,11 +653,6 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   ),
                 ),
               ),
-              if (activeBlock != null || !keyboardOpen)
-                EditorCommandBar(
-                  commands: activeBlock != null ? inlineCommands : commands,
-                  color: const Color(0xff3565ca),
-                ),
             ],
             if (busy) const LinearProgressIndicator(),
           ],

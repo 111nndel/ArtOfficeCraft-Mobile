@@ -197,15 +197,39 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,
-        title: const Text(
-          'ArtOfficeCraft',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -.5,
-          ),
+        title: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: OfficeTheme.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'a',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 27,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'ArtOfficeCraft',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -.5,
+                ),
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -313,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 12),
                       Text(
                         section == 3
-                            ? 'Заготовки создаются локальными движками в настоящих офисных форматах.'
+                            ? 'Продуманные заготовки для ваших задач.'
                             : 'Документы, расчёты и большие замыслы.\nВсё в одном пространстве.',
                         style: TextStyle(
                           fontSize: 16,
@@ -325,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                     if (!searching && section != 2 && section != 3) ...[
                       const Text(
-                        'Открыть редактор',
+                        'Создать файл',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
@@ -356,7 +380,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: _EditorCard(
                                     kind: kind,
                                     enabled: !opening,
-                                    onTap: () => open(kind),
+                                    onTap: () => open(
+                                      kind,
+                                      launch: const EditorLaunch(create: true),
+                                    ),
                                   ),
                                 ),
                             ],
