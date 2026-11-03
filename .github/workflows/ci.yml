@@ -1,0 +1,183 @@
+name: Mobile checks and APK
+
+on:
+  push:
+    branches: [main, 'codex/**']
+    tags: ['v*-alpha.*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+  DART_SUPPRESS_ANALYTICS: 'true'
+  CARGO_TERM_COLOR: always
+
+jobs:
+  flutter:
+    name: Flutter and updater tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Flutter
+        run: bash tools/ci/install_flutter.sh
+      - run: python -m unittest discover -s tools -p 'test_*.py' -v
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
+
+  native:
+    name: Rust tests and ARM64 core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Test approved sources and compile native core
+        run: bash tools/ci/build_native.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-arm64
+          path: build/native-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    name: Offline ARM64 APK
+    needs: [flutter, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install pinned Flutter
+        run: bash tools/ci/install_flutter.sh
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: native-arm64
+          path: build/native-candidate/
+      - name: Install Android components and native core
+        run: |
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          cp build/native-candidate/libartoffice_core.so android/app/src/main/jniLibs/arm64-v8a/
+          cp build/native-candidate/rust-licenses.json assets/legal/rust-licenses.json
+          cmp build/native-candidate/engines.lock.json upstream/engines.lock.json
+      - name: Build ordinary application
+        run: flutter build apk --profile --split-per-abi --target-platform android-arm64
+      - name: Verify and package candidate
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: python tools/ci/package_candidate.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: apk-candidate
+          path: build/apk-candidate/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Sign and publish tagged preview
+    needs: android
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.repository == '111nndel/ArtOfficeCraft-Mobile'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: android-preview
+    permissions:
+      contents: write
+    steps:
+      # This job never checks out or executes project/PR source. Only Android
+      # tools sign the APK data produced by the successful build in this run.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: apk-candidate
+          path: candidate/
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install signing tools
+        run: sdkmanager --install 'build-tools;36.0.0'
+      - name: Sign with the existing preview certificate
+        env:
+          PREVIEW_KEYSTORE: ${{ secrets.AOC_PREVIEW_KEYSTORE_BASE64 }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -n "$PREVIEW_KEYSTORE" || { echo 'Preview signing secret is missing'; exit 1; }
+          key="$RUNNER_TEMP/aoc-preview.keystore"
+          trap 'rm -f "$key"' EXIT
+          umask 077
+          printf '%s' "$PREVIEW_KEYSTORE" | base64 --decode > "$key"
+          unset PREVIEW_KEYSTORE
+          version="$(python -c 'import json; print(json.load(open("candidate/build-info.json"))["version"])')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          python - <<'PY'
+          import hashlib, json, os, re
+          from pathlib import Path
+          j = json.load(open('candidate/build-info.json'))
+          if not re.fullmatch('v' + re.escape(j['version']) + r'-alpha\.[0-9]+', os.environ['RELEASE_TAG']):
+              raise ValueError('Tag does not match app version')
+          if j['sourceCommit'] != os.environ['SOURCE_COMMIT']:
+              raise ValueError('Source commit mismatch')
+          if j['sha256BeforeSigning'] != hashlib.sha256(Path('candidate/app-arm64-v8a-profile.apk').read_bytes()).hexdigest():
+              raise ValueError('Candidate hash mismatch')
+          PY
+          mkdir -p deliver
+          apk="deliver/ArtOfficeCraft-Mobile-$version-arm64-preview.apk"
+          bt="$ANDROID_HOME/build-tools/36.0.0"
+          "$bt/apksigner" sign --ks "$key" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out "$apk" candidate/app-arm64-v8a-profile.apk
+          "$bt/apksigner" verify --verbose --print-certs "$apk" > deliver/signature.txt
+          grep -F 'Signer #1 certificate SHA-256 digest: 4e16cc21d19cdcde840361cd34fbdcfbf901b48c6f8ff66ef473e7ddf4a05005' deliver/signature.txt
+          "$bt/zipalign" -c -P 16 4 "$apk"
+          "$bt/aapt" dump permissions "$apk" > deliver/permissions.txt
+          if grep -Eq 'android.permission.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)' deliver/permissions.txt; then exit 1; fi
+          python - <<'PY'
+          import hashlib, json, os, zipfile
+          from pathlib import Path
+          j = json.load(open('candidate/build-info.json'))
+          apk = next(Path('deliver').glob('*.apk'))
+          with zipfile.ZipFile(apk) as z:
+              assert z.testzip() is None
+          j.update(sha256=hashlib.sha256(apk.read_bytes()).hexdigest(), apk=apk.name,
+                   signing='existing development certificate', tag=os.environ['RELEASE_TAG'],
+                   signingCertificateSha256='4e16cc21d19cdcde840361cd34fbdcfbf901b48c6f8ff66ef473e7ddf4a05005')
+          Path('deliver/build-info.json').write_text(json.dumps(j, indent=2) + '\n')
+          Path('deliver/SHA256SUMS.txt').write_text(f'{j["sha256"]}  {apk.name}\n')
+          PY
+          cp candidate/rust-licenses.json candidate/release-notes.md deliver/
+      - name: Publish verified preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --json isDraft > "$RUNNER_TEMP/release-state.json" 2>/dev/null; then
+            python -c 'import json,sys; assert json.load(open(sys.argv[1]))["isDraft"], "Refusing to overwrite a published release"' "$RUNNER_TEMP/release-state.json"
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --target "$SOURCE_COMMIT" --draft --prerelease --title "ArtOfficeCraft Mobile $RELEASE_TAG" --notes-file deliver/release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" deliver/*.apk deliver/SHA256SUMS.txt deliver/build-info.json deliver/rust-licenses.json deliver/signature.txt --clobber
+          gh release edit "$RELEASE_TAG" --draft=false
+          gh release view "$RELEASE_TAG" --json url,assets

@@ -91,7 +91,11 @@ For one-command Windows debug build: run build_native_preview.ps1. Debug APK is 
 - stage-rust-engines.ps1 -Latest — download new stable source revisions into ignored staging folders.
 - Update the pinned commit only after reviewing licenses and API compatibility, building and testing all document formats.
 
-Automated GitHub Actions checks are not yet enabled in this public repository. Local scripts can check and stage upstream releases without publishing executable binaries.
+GitHub Actions now defines Flutter/Python checks, Rust tests and an offline ARM64
+APK build. Version tags additionally use an isolated signing job with the existing
+preview certificate, then publish through GitHub CLI. See
+[CI and signing](docs/CI_AND_SIGNING.md) for setup, provenance and remaining manual
+Android QA requirements. Engine pins are never automatically advanced.
 
 ### Offline permission policy
 
