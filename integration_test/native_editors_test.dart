@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
@@ -10,6 +9,7 @@ import 'package:artofficecraft_mobile/native/native_build_info.dart';
 import 'package:artofficecraft_mobile/ui/office_theme.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -43,14 +43,55 @@ void main() {
       await tester.tap(find.text('Изменено на Android'));
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.byKey(const Key('word-paragraph-input')),
+        find.byKey(const Key('word-inline-input')),
         'Проверка клавиатуры Android',
       );
       await tester.pump();
-      await tester.ensureVisible(find.text('Применить к документу'));
-      await tester.tap(find.text('Применить к документу'));
+      final field = tester.widget<TextField>(
+        find.byKey(const Key('word-inline-input')),
+      );
+      field.controller!.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 8,
+      );
+      await tester.pump();
+      await tester.ensureVisible(find.text('Курсив'));
       await tester.pumpAndSettle();
-      expect(find.text('Проверка клавиатуры Android'), findsWidgets);
+      await tester.tap(find.text('Курсив'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('word-inline-input')), findsOneWidget);
+      const finalText = 'Проверка клавиатуры Android 😀 сохранено';
+      await tester.enterText(
+        find.byKey(const Key('word-inline-input')),
+        finalText,
+      );
+      await tester.pump();
+      final saveDirectory = await Directory.systemTemp.createTemp(
+        'aoc-inline-save-',
+      );
+      final savedFile = File('${saveDirectory.path}/edited.docx');
+      const files = MethodChannel('flutter_file_dialog');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(files, (call) async {
+            expect(call.method, 'saveFile');
+            await savedFile.writeAsBytes(
+              (call.arguments as Map)['data'] as Uint8List,
+              flush: true,
+            );
+            return savedFile.path;
+          });
+      try {
+        await tester.tap(find.byTooltip('Сохранить как DOCX'));
+        await tester.pumpAndSettle();
+        final saved = await word.inspect(await savedFile.readAsBytes());
+        expect(saved['paragraphs'], contains(finalText));
+        expect((saved['blocks'] as List).first['runs'][0]['italic'], isTrue);
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(files, null);
+        await saveDirectory.delete(recursive: true);
+      }
+      expect(find.text(finalText), findsWidgets);
       expect(tester.takeException(), isNull);
       await tester.tap(find.text('Главная'));
       await tester.pumpAndSettle();
@@ -61,7 +102,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Изменено на Android'), findsWidgets);
+      expect(find.text('Проверка клавиатуры Android'), findsWidgets);
       await tester.tap(find.text('Главная'));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -71,7 +112,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Проверка клавиатуры Android'), findsWidgets);
+      expect(find.text(finalText), findsWidgets);
 
       final grid = NativeDocumentBackend.tryOpen(NativeDocumentKind.grid)!;
       var book = await grid.create();

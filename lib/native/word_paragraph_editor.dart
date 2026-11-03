@@ -4,18 +4,32 @@ Future<Map<String, dynamic>?> showWordParagraphEditor(
   BuildContext context, {
   required Map<String, dynamic> block,
   bool insert = false,
+  bool formatOnly = false,
+  TextSelection? initialSelection,
 }) => showModalBottomSheet<Map<String, dynamic>>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
   showDragHandle: true,
-  builder: (_) => _ParagraphEditor(block: block, insert: insert),
+  builder: (_) => _ParagraphEditor(
+    block: block,
+    insert: insert,
+    formatOnly: formatOnly,
+    initialSelection: initialSelection,
+  ),
 );
 
 class _ParagraphEditor extends StatefulWidget {
-  const _ParagraphEditor({required this.block, required this.insert});
+  const _ParagraphEditor({
+    required this.block,
+    required this.insert,
+    required this.formatOnly,
+    this.initialSelection,
+  });
   final Map<String, dynamic> block;
   final bool insert;
+  final bool formatOnly;
+  final TextSelection? initialSelection;
   @override
   State<_ParagraphEditor> createState() => _ParagraphEditorState();
 }
@@ -28,6 +42,12 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
   @override
   void initState() {
     super.initState();
+    final selection = widget.initialSelection;
+    if (selection != null &&
+        selection.isValid &&
+        selection.end <= text.text.length) {
+      text.selection = selection;
+    }
     text.addListener(refresh);
   }
 
@@ -49,12 +69,22 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
   bool active(String key) {
     if (char[key] is bool) return char[key] as bool;
     final runs = widget.block['runs'];
-    return runs is List && runs.isNotEmpty && (runs.first as Map)[key] == true;
+    if (runs is! List || runs.isEmpty) return false;
+    final selection = widget.initialSelection ?? text.selection;
+    final offset = selection.isValid ? selection.start : 0;
+    var start = 0;
+    for (final run in runs) {
+      start += (run['text']?.toString() ?? '').length;
+      if (offset < start) return run[key] == true;
+    }
+    return (runs.last as Map)[key] == true;
   }
 
   void apply() {
     if (!dirty || (widget.insert && text.text.trim().isEmpty)) return;
-    final selection = text.selection;
+    final selection = widget.formatOnly
+        ? widget.initialSelection ?? text.selection
+        : text.selection;
     final selected = selection.isValid && !selection.isCollapsed;
     Navigator.pop(context, <String, dynamic>{
       'text': text.text,
@@ -85,22 +115,27 @@ class _ParagraphEditorState extends State<_ParagraphEditor> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                widget.insert ? 'Новый абзац' : 'Редактировать абзац',
+                widget.formatOnly
+                    ? 'Оформление текста и абзаца'
+                    : widget.insert
+                    ? 'Новый абзац'
+                    : 'Редактировать абзац',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              TextField(
-                key: const Key('word-paragraph-input'),
-                controller: text,
-                minLines: 3,
-                maxLines: 6,
-                autofocus: true,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Текст абзаца',
-                  alignLabelWithHint: true,
+              if (!widget.formatOnly)
+                TextField(
+                  key: const Key('word-paragraph-input'),
+                  controller: text,
+                  minLines: 3,
+                  maxLines: 6,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Текст абзаца',
+                    alignLabelWithHint: true,
+                  ),
                 ),
-              ),
               if (!widget.insert) ...[
                 const SizedBox(height: 14),
                 Text(

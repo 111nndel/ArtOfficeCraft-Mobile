@@ -1,4 +1,5 @@
 import '../ui/editor_tools.dart';
+import 'word_inline_controller.dart';
 import 'word_paragraph_editor.dart';
 import 'document_history.dart';
 import 'document_backend.dart';
@@ -42,10 +43,153 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   int tables = 0;
   bool changed = false;
   bool busy = false;
-  bool waitingForText = false;
+  final inline = WordInlineController();
+  final inlineFocus = FocusNode();
+  int? activeBlock;
+  bool inlineDirty = false;
+  bool operationPending = false;
+
+  void selectionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void startInline(Map<String, dynamic> block) {
+    inline.load(block);
+    setState(() {
+      activeBlock = block['block'] as int;
+      selectedBlock = activeBlock;
+      inlineDirty = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && activeBlock != null) inlineFocus.requestFocus();
+    });
+  }
+
+  Future<bool> commitInline({
+    Map<String, dynamic> patch = const {},
+    bool finish = false,
+  }) async {
+    if (activeBlock == null) return true;
+    if (busy || document == null) return false;
+    final id = activeBlock!;
+    if (inlineDirty || patch.isNotEmpty) {
+      final previous = document!;
+      final selection = inline.selection;
+      setState(() => busy = true);
+      try {
+        final updated = await engine!.edit(previous, {
+          'action': 'paragraph',
+          'block': id,
+          'text': inline.text,
+          if (patch.containsKey('char')) ...{
+            'start': selection.isValid && !selection.isCollapsed
+                ? selection.start
+                : 0,
+            'end': selection.isValid && !selection.isCollapsed
+                ? selection.end
+                : inline.text.length,
+          },
+          ...patch,
+        });
+        await updatePreview(updated);
+        if (!mounted) return false;
+        history.push(previous);
+        inline.load(
+          blocks.firstWhere((b) => b['block'] == id),
+          selection: selection,
+        );
+        setState(() {
+          changed = true;
+          inlineDirty = false;
+          selectedBlock = id;
+        });
+      } catch (error) {
+        inform(
+          'Не удалось применить изменения. Введённый текст оставлен на экране: $error',
+        );
+        return false;
+      } finally {
+        if (mounted) setState(() => busy = false);
+      }
+    }
+    if (mounted && finish) {
+      inlineFocus.unfocus();
+      setState(() {
+        activeBlock = null;
+        inlineDirty = false;
+      });
+    }
+    return true;
+  }
+
+  Future<void> finishInline() async {
+    if (operationPending) return;
+    await commitInline(finish: true);
+  }
+
+  Future<void> formatInline(String property) async {
+    if (operationPending) return;
+    await commitInline(
+      patch: {
+        'char': {property: !inline.propertyAtSelection(property)},
+      },
+    );
+  }
+
+  Future<void> formatAdvanced() async {
+    if (busy || operationPending || activeBlock == null) return;
+    setState(() => operationPending = true);
+    try {
+      if (!await commitInline() || !mounted) return;
+      final block = blocks.firstWhere((b) => b['block'] == activeBlock);
+      final request = await showWordParagraphEditor(
+        context,
+        block: block,
+        formatOnly: true,
+        initialSelection: inline.selection,
+      );
+      if (request != null && mounted && await commitInline(patch: request)) {
+        inlineFocus.requestFocus();
+      }
+    } finally {
+      if (mounted) setState(() => operationPending = false);
+    }
+  }
+
+  List<EditorCommand> get inlineCommands => [
+    EditorCommand('Готово', Icons.check, busy ? null : finishInline),
+    EditorCommand(
+      inline.selection.isCollapsed ? 'Жирный абзац' : 'Жирный',
+      Icons.format_bold,
+      busy || inline.text.isEmpty ? null : () => formatInline('bold'),
+    ),
+    EditorCommand(
+      inline.selection.isCollapsed ? 'Курсив абзаца' : 'Курсив',
+      Icons.format_italic,
+      busy || inline.text.isEmpty ? null : () => formatInline('italic'),
+    ),
+    EditorCommand(
+      inline.selection.isCollapsed ? 'Подчеркнуть абзац' : 'Подчеркнуть',
+      Icons.format_underlined,
+      busy || inline.text.isEmpty ? null : () => formatInline('underline'),
+    ),
+    EditorCommand(
+      'Оформление',
+      Icons.format_size,
+      busy ? null : formatAdvanced,
+    ),
+    EditorCommand(
+      'По ширине',
+      Icons.format_align_justify,
+      busy ? null : () => commitInline(patch: {'align': 'justify'}),
+    ),
+  ];
 
   @override
   void dispose() {
+    inline.removeListener(selectionChanged);
+    inline.dispose();
+    inlineFocus.dispose();
     super.dispose();
   }
 
@@ -77,13 +221,16 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   }
 
   Future<void> guarded(Future<void> Function() action) async {
-    if (busy || engine == null) return;
-    setState(() => busy = true);
+    if (busy || operationPending || engine == null) return;
+    operationPending = true;
     try {
+      if (!await commitInline(finish: true) || !mounted) return;
+      setState(() => busy = true);
       await action();
     } catch (error) {
       inform('Операция не выполнена: $error');
     } finally {
+      operationPending = false;
       if (mounted) setState(() => busy = false);
     }
   }
@@ -162,48 +309,32 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
 
   Future<void> appendParagraph() => guarded(() async {
     if (document == null) return;
-    final request = await paragraphRequest(const {'text': ''}, insert: true);
-    if (request == null || !mounted) return;
     final previous = document!;
-    final bytes = await engine!.edit(previous, {
+    final updated = await engine!.edit(previous, {
       'action': 'append',
-      'text': request['text'],
+      'text': '',
     });
-    await updatePreview(bytes);
+    await updatePreview(updated);
+    if (!mounted) return;
     history.push(previous);
     setState(() => changed = true);
+    startInline(blocks.last);
   });
 
-  Future<void> editParagraph(Map<String, dynamic> block) => guarded(() async {
-    if (document == null || block['editable'] != true) return;
-    final request = await paragraphRequest(block);
-    if (request == null || !mounted) return;
-    final previous = document!;
-    final bytes = await engine!.edit(previous, {
-      'action': 'paragraph',
-      'block': block['block'],
-      ...request,
-    });
-    await updatePreview(bytes);
-    history.push(previous);
-    setState(() {
-      changed = true;
-      selectedBlock = block['block'] as int;
-    });
-  });
-  Future<Map<String, dynamic>?> paragraphRequest(
-    Map<String, dynamic> block, {
-    bool insert = false,
-  }) async {
-    setState(() => waitingForText = true);
+  Future<void> editParagraph(Map<String, dynamic> block) async {
+    if (busy ||
+        operationPending ||
+        block['editable'] != true ||
+        activeBlock == block['block']) {
+      return;
+    }
+    final id = block['block'];
+    operationPending = true;
     try {
-      return await showWordParagraphEditor(
-        context,
-        block: block,
-        insert: insert,
-      );
+      if (!await commitInline(finish: true) || !mounted) return;
+      startInline(blocks.firstWhere((b) => b['block'] == id));
     } finally {
-      if (mounted) setState(() => waitingForText = false);
+      operationPending = false;
     }
   }
 
@@ -233,7 +364,9 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     EditorCommand(
       'Отменить',
       Icons.undo,
-      !busy && history.canUndo ? () => restoreHistory(true) : null,
+      !busy && (history.canUndo || inlineDirty)
+          ? () => restoreHistory(true)
+          : null,
     ),
     EditorCommand(
       'Повторить',
@@ -271,6 +404,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   @override
   void initState() {
     super.initState();
+    inline.addListener(selectionChanged);
     final request = widget.launch;
     if (request != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -308,8 +442,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     final enabled = engine != null;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return UnsavedChangesGuard(
-      dirty: changed,
-      busy: busy,
+      dirty: changed || inlineDirty,
+      busy: busy || operationPending,
       child: Scaffold(
         appBar: AppBar(
           toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
@@ -317,7 +451,11 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
               .toDouble(),
           title: EditorFileTitle(
             filename: filename,
-            status: enabled ? 'WordCraft Rust · DOCX' : 'Rust недоступен',
+            status: enabled
+                ? (changed || inlineDirty
+                      ? 'DOCX · есть изменения'
+                      : 'DOCX · на устройстве')
+                : 'Rust недоступен',
             color: const Color(0xff3565ca),
           ),
           bottom: keyboardOpen
@@ -381,7 +519,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   details:
                       'Текстовый предпросмотр: таблицы ($tables), '
                       'изображения и точная вёрстка пока не отображаются. '
-                      'Коснитесь обычного абзаца для изменения текста и оформления. '
+                      'Коснитесь абзаца: ввод и выделение работают прямо на странице. '
                       'Абзацы с объектами и исправлениями доступны для чтения.',
                 ),
               Expanded(
@@ -397,100 +535,137 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                           vertical: 32,
                         ),
                         color: Colors.white,
-                        child: SelectionArea(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              for (final block in blocks)
-                                Padding(
-                                  padding: EdgeInsets.only(
-                                    bottom:
-                                        (block['spaceAfter'] as num?)
-                                            ?.toDouble() ??
-                                        12,
-                                  ),
-                                  child: InkWell(
-                                    onTap: busy || block['editable'] != true
-                                        ? null
-                                        : () => editParagraph(block),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 7,
-                                      ),
-                                      child: Text.rich(
-                                        TextSpan(
-                                          children: [
-                                            for (final run
-                                                in (block['runs'] as List? ??
-                                                    []))
-                                              TextSpan(
-                                                text:
-                                                    run['text']?.toString() ??
-                                                    '',
-                                                style: TextStyle(
-                                                  fontWeight:
-                                                      run['bold'] == true
-                                                      ? FontWeight.bold
-                                                      : FontWeight.normal,
-                                                  fontStyle:
-                                                      run['italic'] == true
-                                                      ? FontStyle.italic
-                                                      : FontStyle.normal,
-                                                  decoration:
-                                                      run['underline'] == true
-                                                      ? TextDecoration.underline
-                                                      : TextDecoration.none,
-                                                  fontSize:
-                                                      ((run['size'] as num?)
-                                                              ?.toDouble() ??
-                                                          12) *
-                                                      1.33,
-                                                ),
-                                              ),
-                                            if ((block['runs'] as List? ?? [])
-                                                .isEmpty)
-                                              TextSpan(
-                                                text:
-                                                    block['text']
-                                                            ?.toString()
-                                                            .isNotEmpty ==
-                                                        true
-                                                    ? block['text'].toString()
-                                                    : 'Коснитесь, чтобы начать писать',
-                                              ),
-                                          ],
-                                        ),
-                                        textAlign: switch (block['align']) {
-                                          'left' => TextAlign.left,
-                                          'center' => TextAlign.center,
-                                          'right' => TextAlign.right,
-                                          _ => TextAlign.justify,
-                                        },
-                                        style: const TextStyle(
-                                          fontFamily: 'serif',
-                                          color: Color(0xff27313d),
-                                          fontSize: 17,
-                                          height: 1.5,
-                                        ),
-                                      ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final block in blocks)
+                              Padding(
+                                padding: EdgeInsets.only(
+                                  bottom:
+                                      (block['spaceAfter'] as num?)
+                                          ?.toDouble() ??
+                                      12,
+                                ),
+                                child: InkWell(
+                                  onTap: busy || block['editable'] != true
+                                      ? null
+                                      : () => editParagraph(block),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 7,
                                     ),
+                                    child: activeBlock == block['block']
+                                        ? TextField(
+                                            key: const Key('word-inline-input'),
+                                            controller: inline,
+                                            focusNode: inlineFocus,
+                                            readOnly: busy,
+                                            minLines: 1,
+                                            maxLines: null,
+                                            keyboardType:
+                                                TextInputType.multiline,
+                                            textCapitalization:
+                                                TextCapitalization.sentences,
+                                            onChanged: (_) => setState(
+                                              () => inlineDirty =
+                                                  inline.text != block['text'],
+                                            ),
+                                            textAlign: switch (block['align']) {
+                                              'left' => TextAlign.left,
+                                              'center' => TextAlign.center,
+                                              'right' => TextAlign.right,
+                                              _ => TextAlign.justify,
+                                            },
+                                            style: const TextStyle(
+                                              fontFamily: 'serif',
+                                              color: Color(0xff27313d),
+                                              fontSize: 17,
+                                              height: 1.5,
+                                            ),
+                                            decoration:
+                                                const InputDecoration.collapsed(
+                                                  hintText: 'Начните писать',
+                                                ),
+                                          )
+                                        : Text.rich(
+                                            TextSpan(
+                                              children: [
+                                                for (final run
+                                                    in (block['runs']
+                                                            as List? ??
+                                                        []))
+                                                  TextSpan(
+                                                    text:
+                                                        run['text']
+                                                            ?.toString() ??
+                                                        '',
+                                                    style: TextStyle(
+                                                      fontWeight:
+                                                          run['bold'] == true
+                                                          ? FontWeight.bold
+                                                          : FontWeight.normal,
+                                                      fontStyle:
+                                                          run['italic'] == true
+                                                          ? FontStyle.italic
+                                                          : FontStyle.normal,
+                                                      decoration:
+                                                          run['underline'] ==
+                                                              true
+                                                          ? TextDecoration
+                                                                .underline
+                                                          : TextDecoration.none,
+                                                      fontSize:
+                                                          ((run['size'] as num?)
+                                                                  ?.toDouble() ??
+                                                              12) *
+                                                          1.33,
+                                                    ),
+                                                  ),
+                                                if ((block['runs'] as List? ??
+                                                        [])
+                                                    .isEmpty)
+                                                  TextSpan(
+                                                    text:
+                                                        block['text']
+                                                                ?.toString()
+                                                                .isNotEmpty ==
+                                                            true
+                                                        ? block['text']
+                                                              .toString()
+                                                        : 'Коснитесь, чтобы начать писать',
+                                                  ),
+                                              ],
+                                            ),
+                                            textAlign: switch (block['align']) {
+                                              'left' => TextAlign.left,
+                                              'center' => TextAlign.center,
+                                              'right' => TextAlign.right,
+                                              _ => TextAlign.justify,
+                                            },
+                                            style: const TextStyle(
+                                              fontFamily: 'serif',
+                                              color: Color(0xff27313d),
+                                              fontSize: 17,
+                                              height: 1.5,
+                                            ),
+                                          ),
                                   ),
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              if (!keyboardOpen)
+              if (activeBlock != null || !keyboardOpen)
                 EditorCommandBar(
-                  commands: commands,
+                  commands: activeBlock != null ? inlineCommands : commands,
                   color: const Color(0xff3565ca),
                 ),
             ],
-            if (busy && !waitingForText) const LinearProgressIndicator(),
+            if (busy) const LinearProgressIndicator(),
           ],
         ),
       ),
