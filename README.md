@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.8.3 — not a finished office suite.**
+**Status: alpha 0.9.0 — not a finished office suite.**
 
 | Format | Current capability |
 | --- | --- |
@@ -183,3 +183,39 @@ XLSX now uses native GridCraft for actual file operations, but has a limited 55-
 Never publish personal documents in issues, secret keys, signing files, source caches, third-party branding or third-party installers. Read NATIVE_INTEGRATION_STATUS.md for the exact integration status.
 
 Contributions are welcome subject to license notices and safe source review.
+
+
+### Approved mobile workspace design (0.9.0)
+
+The Flutter home screen now follows `design/ArtOfficeCraft_Mobile.html`:
+light workspace, four format colors, search, recent files, favorites,
+format filters, templates, and bottom navigation. This HTML is a design
+reference, never the running editor. The unused in-memory demo editor
+has been removed; every document card opens the existing native screen.
+
+Primary controls use 52 dp touch targets with 14–18 sp labels. Cards
+switch between one, two and four columns; large system text causes
+reflow rather than forced font shrinking. Spreadsheet cells are now
+56 dp high with 16 sp values. All four native headers share a readable
+filename and status. Native file editing capabilities remain limited
+as described above; this is not the complete HTML feature catalog.
+
+Successfully opened files and successful Save As results receive an
+app-private local copy. The file list, search and favorites use this
+persistent index and reopen the private copy through the native engine.
+Unsaved edits are **not** silently autosaved; the existing exit guard
+and explicit Save As workflow remain. Clearing app data/uninstalling
+removes private copies. Export important files through Save copy.
+The storage channel requests no broad storage or network permissions.
+
+Plan document, team budget and idea presentation starters are created
+through WordCraft, GridCraft and DeckCraft. Their content is basic and
+not an exact reproduction of the HTML formatting.
+
+Validation: Flutter analyze reports no issues; all 33 Flutter tests pass.
+New checks cover 320/360/393 dp at 100%/200% text, editor navigation,
+search/favorites, storage restart, concurrent imports and corrupt-index
+handling. ARM64 and x86_64 debug APKs compile with the existing pinned
+native libraries; aapt confirms no INTERNET/Wi-Fi permission in ARM64.
+This iteration has not completed a physical Android phone / TalkBack /
+keyboard-and-SAF end-to-end test. Full Office fidelity remains unverified.

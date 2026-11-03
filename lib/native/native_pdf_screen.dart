@@ -1,3 +1,5 @@
+import '../ui/editor_file_title.dart';
+import '../workspace/editor_launch.dart';
 import 'format_limits_notice.dart';
 
 import 'dart:async';
@@ -14,7 +16,9 @@ import 'pdf_page_renderer.dart';
 import 'pdf_page_action_bar.dart';
 
 class NativePdfScreen extends StatefulWidget {
-  const NativePdfScreen({super.key});
+  const NativePdfScreen({super.key, this.launch, this.onRemember});
+  final EditorLaunch? launch;
+  final RememberFile? onRemember;
   @override
   State<NativePdfScreen> createState() => _NativePdfScreenState();
 }
@@ -132,6 +136,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       throw const FormatException('Слишком большой PDF (>64 МБ)');
     }
     await load(await f.readAsBytes(), name: importedFilename(path, 'pdf'));
+    await rememberCurrent();
     tip('Структура PDF прочитана');
   });
   Future<void> save() => execute(() async {
@@ -147,6 +152,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     );
     if (path == null) return;
     setState(() => changed = false);
+    await rememberCurrent();
     tip('Копия PDF сохранена. Подписи могут стать недействительными.');
   });
   Future<void> edit(String action) async {
@@ -251,13 +257,44 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
             ),
             Text(
               'Стр. ${i + 1} · ${p['rotation']}°',
-              style: const TextStyle(fontSize: 10),
+              style: const TextStyle(fontSize: 14),
               maxLines: 1,
             ),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final request = widget.launch;
+    if (request != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (request.bytes != null) {
+          execute(() async {
+            await load(request.bytes!, name: request.name);
+            await rememberCurrent();
+          });
+        } else if (request.create) {
+          create();
+        }
+      });
+    }
+  }
+
+  Future<void> rememberCurrent() async {
+    final bytes = contents;
+    if (bytes == null || widget.onRemember == null) return;
+    try {
+      await widget.onRemember!(bytes, filename);
+    } catch (_) {
+      tip(
+        'Рабочая копия не добавлена в историю. Файл можно сохранить через «Сохранить копию».',
+      );
+    }
   }
 
   @override
@@ -268,23 +305,15 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       busy: busy,
       child: Scaffold(
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                filename,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                available ? 'PDFCraft Rust + Android PDF' : 'Rust недоступен',
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-            ],
+          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+              .clamp(72.0, 144.0)
+              .toDouble(),
+          title: EditorFileTitle(
+            filename: filename,
+            status: available
+                ? 'PDFCraft Rust + Android PDF'
+                : 'Rust недоступен',
+            color: const Color(0xffc94e59),
           ),
           actions: [
             IconButton(
@@ -390,7 +419,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                     ),
                   ),
                   SizedBox(
-                    height: 114,
+                    height: 136,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       itemCount: pages.length,

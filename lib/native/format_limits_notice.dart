@@ -53,7 +53,7 @@ class FormatLimitsNotice extends StatelessWidget {
                   child: FilledButton(
                     onPressed: () => Navigator.pop(sheetContext),
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 48),
+                      minimumSize: const Size(0, 52),
                     ),
                     child: const Text('Закрыть'),
                   ),
@@ -71,14 +71,14 @@ class FormatLimitsNotice extends StatelessWidget {
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainer,
       child: ListTile(
-        minTileHeight: 48,
+        minTileHeight: 52,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
         title: Text(
           summary,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 15,
             fontWeight: FontWeight.w500,
             color: Theme.of(context).colorScheme.onSurface,
           ),

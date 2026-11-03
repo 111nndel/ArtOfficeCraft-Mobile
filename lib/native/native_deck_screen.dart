@@ -1,3 +1,5 @@
+import '../ui/editor_file_title.dart';
+import '../workspace/editor_launch.dart';
 import 'format_limits_notice.dart';
 
 import 'dart:io';
@@ -13,7 +15,9 @@ import 'deckcraft_bridge.dart';
 import 'deck_text_dialog.dart';
 
 class NativeDeckScreen extends StatefulWidget {
-  const NativeDeckScreen({super.key});
+  const NativeDeckScreen({super.key, this.launch, this.onRemember});
+  final EditorLaunch? launch;
+  final RememberFile? onRemember;
   @override
   State<NativeDeckScreen> createState() => _NativeDeckScreenState();
 }
@@ -100,7 +104,29 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
 
   Future<void> create() => action(() async {
     if (!await discard()) return;
-    load(engine!.create(), name: 'Новая презентация.pptx', changed: true);
+    var bytes = engine!.create();
+    if (widget.launch?.template == true) {
+      bytes = engine!.edit(bytes, {
+        'action': 'add_text',
+        'slide': 0,
+        'text': 'Идея, которая объединяет.',
+      });
+      bytes = engine!.edit(bytes, {
+        'action': 'add_slide',
+        'text': 'От идеи — к действию',
+      });
+      bytes = engine!.edit(bytes, {
+        'action': 'add_slide',
+        'text': 'Следующий шаг',
+      });
+    }
+    load(
+      bytes,
+      name: widget.launch?.template == true
+          ? 'Презентация идеи.pptx'
+          : 'Новая презентация.pptx',
+      changed: true,
+    );
     message('PPTX создан через DeckCraft');
   });
   Future<void> open() => action(() async {
@@ -112,6 +138,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       throw const FormatException('Файл больше 64 МБ');
     }
     load(await file.readAsBytes(), name: importedFilename(path, 'pptx'));
+    await rememberCurrent();
     message('PPTX открыт через DeckCraft');
   });
   Future<void> save() => action(() async {
@@ -129,6 +156,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     );
     if (destination == null) return;
     setState(() => modified = false);
+    await rememberCurrent();
     message('Копия PPTX сохранена. Исходник не изменён.');
   });
   Future<String?> ask(String heading, {String initial = ''}) =>
@@ -380,6 +408,37 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    final request = widget.launch;
+    if (request != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (request.bytes != null) {
+          action(() async {
+            load(request.bytes!, name: request.name);
+            await rememberCurrent();
+          });
+        } else if (request.create) {
+          create();
+        }
+      });
+    }
+  }
+
+  Future<void> rememberCurrent() async {
+    final bytes = data;
+    if (bytes == null || widget.onRemember == null) return;
+    try {
+      await widget.onRemember!(bytes, filename);
+    } catch (_) {
+      message(
+        'Рабочая копия не добавлена в историю. Файл можно сохранить через «Сохранить копию».',
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final enabled = engine != null;
     return UnsavedChangesGuard(
@@ -387,23 +446,13 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       busy: busy,
       child: Scaffold(
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                filename,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                enabled ? 'DeckCraft Rust · PPTX' : 'Rust недоступен',
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-            ],
+          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+              .clamp(72.0, 144.0)
+              .toDouble(),
+          title: EditorFileTitle(
+            filename: filename,
+            status: enabled ? 'DeckCraft Rust · PPTX' : 'Rust недоступен',
+            color: const Color(0xffcc6243),
           ),
           actions: [
             IconButton(
@@ -480,7 +529,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                     ),
                   ),
                   Container(
-                    height: 90,
+                    height: 112,
                     color: Theme.of(context).colorScheme.surfaceContainer,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
@@ -518,7 +567,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                                 ),
                                 Text(
                                   (i + 1).toString(),
-                                  style: const TextStyle(fontSize: 10),
+                                  style: const TextStyle(fontSize: 14),
                                 ),
                               ],
                             ),
@@ -530,7 +579,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   SafeArea(
                     top: false,
                     child: SizedBox(
-                      height: 60,
+                      height: 68,
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(
@@ -543,7 +592,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                             icon: const Icon(Icons.add),
                             label: const Text('Новый слайд'),
                             style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 48),
+                              minimumSize: const Size(0, 52),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -552,7 +601,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                             icon: const Icon(Icons.text_fields),
                             label: const Text('Добавить текст'),
                             style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 48),
+                              minimumSize: const Size(0, 52),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -561,7 +610,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                             icon: const Icon(Icons.save_outlined),
                             label: const Text('Сохранить копию'),
                             style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 48),
+                              minimumSize: const Size(0, 52),
                             ),
                           ),
                         ],

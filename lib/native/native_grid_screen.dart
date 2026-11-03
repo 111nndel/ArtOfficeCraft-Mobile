@@ -1,3 +1,5 @@
+import '../ui/editor_file_title.dart';
+import '../workspace/editor_launch.dart';
 import 'format_limits_notice.dart';
 
 import 'dart:io';
@@ -11,7 +13,9 @@ import 'unsaved_changes_guard.dart';
 import 'gridcraft_bridge.dart';
 
 class NativeGridScreen extends StatefulWidget {
-  const NativeGridScreen({super.key});
+  const NativeGridScreen({super.key, this.launch, this.onRemember});
+  final EditorLaunch? launch;
+  final RememberFile? onRemember;
   @override
   State<NativeGridScreen> createState() => _NativeGridScreenState();
 }
@@ -104,7 +108,37 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
 
   Future<void> create() => run(() async {
     if (!await askDiscard()) return;
-    setBook(bridge!.create(), name: 'Новая книга.xlsx', edited: true);
+    var bytes = bridge!.create();
+    if (widget.launch?.template == true) {
+      const values = {
+        'A1': 'Статья',
+        'B1': 'План',
+        'C1': 'Факт',
+        'D1': 'Разница',
+        'A2': 'Дизайн',
+        'B2': '85000',
+        'C2': '78000',
+        'D2': '=B2-C2',
+        'A3': 'Разработка',
+        'B3': '160000',
+        'C3': '142000',
+        'D3': '=B3-C3',
+        'A5': 'Итого',
+        'B5': '=SUM(B2:B3)',
+        'C5': '=SUM(C2:C3)',
+        'D5': '=SUM(D2:D3)',
+      };
+      for (final entry in values.entries) {
+        bytes = bridge!.editCell(bytes, 0, entry.key, entry.value);
+      }
+    }
+    setBook(
+      bytes,
+      name: widget.launch?.template == true
+          ? 'Бюджет команды.xlsx'
+          : 'Новая книга.xlsx',
+      edited: true,
+    );
     tip('XLSX создан через GridCraft');
   });
   Future<void> open() => run(() async {
@@ -117,6 +151,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     final name = importedFilename(path, 'xlsx');
     setBook(await file.readAsBytes(), name: name);
+    await rememberCurrent();
     tip('XLSX прочитан GridCraft');
   });
   Future<void> save() => run(() async {
@@ -134,6 +169,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     );
     if (path == null) return;
     setState(() => modified = false);
+    await rememberCurrent();
     tip('Сохранена новая копия XLSX');
   });
   Future<void> commit() => run(() async {
@@ -162,12 +198,12 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     input.text = currentInput;
   });
   Widget header(String text) => Container(
-    height: 48,
+    height: 56,
     alignment: Alignment.center,
     color: const Color(0xff223039),
     child: Text(
       text,
-      style: const TextStyle(color: Colors.white70, fontSize: 11),
+      style: const TextStyle(color: Colors.white70, fontSize: 14),
     ),
   );
   Widget cell(String address) {
@@ -176,7 +212,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return InkWell(
       onTap: () => selectCell(address),
       child: Container(
-        height: 48,
+        height: 56,
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.symmetric(horizontal: 5),
         decoration: BoxDecoration(
@@ -187,7 +223,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         ),
         child: Text(
           value,
-          style: const TextStyle(color: Color(0xff172634), fontSize: 13),
+          style: const TextStyle(color: Color(0xff172634), fontSize: 16),
           maxLines: 1,
           overflow: TextOverflow.clip,
         ),
@@ -201,7 +237,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
         child: Table(
-          defaultColumnWidth: const FixedColumnWidth(92),
+          defaultColumnWidth: const FixedColumnWidth(116),
           border: TableBorder.all(color: const Color(0xffd5dde1), width: .7),
           children: [
             TableRow(
@@ -225,6 +261,37 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     ),
   );
   @override
+  void initState() {
+    super.initState();
+    final request = widget.launch;
+    if (request != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (request.bytes != null) {
+          run(() async {
+            setBook(request.bytes!, name: request.name);
+            await rememberCurrent();
+          });
+        } else if (request.create) {
+          create();
+        }
+      });
+    }
+  }
+
+  Future<void> rememberCurrent() async {
+    final bytes = book;
+    if (bytes == null || widget.onRemember == null) return;
+    try {
+      await widget.onRemember!(bytes, filename);
+    } catch (_) {
+      tip(
+        'Рабочая копия не добавлена в историю. Файл можно сохранить через «Сохранить копию».',
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final online = bridge != null;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -234,23 +301,13 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       child: Scaffold(
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                filename,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                online ? 'GridCraft Rust · XLSX' : 'Rust недоступен',
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-            ],
+          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+              .clamp(72.0, 144.0)
+              .toDouble(),
+          title: EditorFileTitle(
+            filename: filename,
+            status: online ? 'GridCraft Rust · XLSX' : 'Rust недоступен',
+            color: const Color(0xff17815c),
           ),
           actions: [
             IconButton(
@@ -315,7 +372,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                       Text(
                         selected,
                         style: const TextStyle(
-                          fontSize: 11,
+                          fontSize: 14,
                           color: Colors.grey,
                         ),
                       ),
@@ -347,7 +404,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   ),
                   if (showTabs && !keyboardOpen)
                     SizedBox(
-                      height: 48,
+                      height: 56,
                       child: ListView(
                         scrollDirection: Axis.horizontal,
                         children: [
@@ -370,7 +427,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     SafeArea(
                       top: false,
                       child: SizedBox(
-                        height: 60,
+                        height: 68,
                         child: ListView(
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.symmetric(
@@ -386,7 +443,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                                 showTabs ? 'Скрыть листы' : 'Показать листы',
                               ),
                               style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 48),
+                                minimumSize: const Size(0, 52),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -395,7 +452,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                               icon: const Icon(Icons.add),
                               label: const Text('Новая книга'),
                               style: OutlinedButton.styleFrom(
-                                minimumSize: const Size(0, 48),
+                                minimumSize: const Size(0, 52),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -404,7 +461,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                               icon: const Icon(Icons.save_outlined),
                               label: const Text('Сохранить копию'),
                               style: FilledButton.styleFrom(
-                                minimumSize: const Size(0, 48),
+                                minimumSize: const Size(0, 52),
                               ),
                             ),
                           ],

@@ -1,3 +1,5 @@
+import '../ui/editor_file_title.dart';
+import '../workspace/editor_launch.dart';
 import 'format_limits_notice.dart';
 
 import 'dart:io';
@@ -12,7 +14,9 @@ import 'wordcraft_bridge.dart';
 
 /// Real DOCX read/append/save path, not a full Word layout renderer.
 class NativeWordScreen extends StatefulWidget {
-  const NativeWordScreen({super.key});
+  const NativeWordScreen({super.key, this.launch, this.onRemember});
+  final EditorLaunch? launch;
+  final RememberFile? onRemember;
   @override
   State<NativeWordScreen> createState() => _NativeWordScreenState();
 }
@@ -66,10 +70,26 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   }
 
   Future<void> createNew() => guarded(() async {
-    final bytes = engine!.create('');
+    var bytes = engine!.create(
+      widget.launch?.template == true ? 'План проекта' : '',
+    );
+    if (widget.launch?.template == true) {
+      for (final text in [
+        'Цель проекта',
+        'Опишите результат, который хотите получить.',
+        'Этапы и сроки',
+        '1. Исследование\n2. Проектирование\n3. Проверка',
+        'Следующий шаг',
+        'Определите ближайшую задачу и ответственного.',
+      ]) {
+        bytes = engine!.appendParagraph(bytes, text);
+      }
+    }
     updatePreview(bytes);
     setState(() {
-      filename = 'Новый документ.docx';
+      filename = widget.launch?.template == true
+          ? 'План проекта.docx'
+          : 'Новый документ.docx';
       changed = true;
     });
     inform('Новый DOCX создан в WordCraft. Сохраните копию на устройство.');
@@ -116,6 +136,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       }
       changed = false;
     });
+    await rememberCurrent();
     inform('Файл открыт локальным движком WordCraft');
   });
 
@@ -154,8 +175,44 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     );
     if (path == null) return;
     setState(() => changed = false);
+    await rememberCurrent();
     inform('DOCX сохранён в выбранное место');
   });
+
+  @override
+  void initState() {
+    super.initState();
+    final request = widget.launch;
+    if (request != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (request.bytes != null) {
+          guarded(() async {
+            updatePreview(request.bytes!);
+            setState(() {
+              filename = request.name ?? filename;
+              changed = false;
+            });
+            await rememberCurrent();
+          });
+        } else if (request.create) {
+          createNew();
+        }
+      });
+    }
+  }
+
+  Future<void> rememberCurrent() async {
+    final bytes = document;
+    if (bytes == null || widget.onRemember == null) return;
+    try {
+      await widget.onRemember!(bytes, filename);
+    } catch (_) {
+      inform(
+        'Рабочая копия не добавлена в историю. Файл можно сохранить через «Сохранить копию».',
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -166,23 +223,13 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       busy: busy,
       child: Scaffold(
         appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                filename,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                enabled ? 'WordCraft Rust · DOCX' : 'Rust недоступен',
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
-              ),
-            ],
+          toolbarHeight: (MediaQuery.textScalerOf(context).scale(31) + 12)
+              .clamp(72.0, 144.0)
+              .toDouble(),
+          title: EditorFileTitle(
+            filename: filename,
+            status: enabled ? 'WordCraft Rust · DOCX' : 'Rust недоступен',
+            color: const Color(0xff3565ca),
           ),
           actions: [
             IconButton(
@@ -266,7 +313,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                                     style: const TextStyle(
                                       fontFamily: 'serif',
                                       color: Color(0xff27313d),
-                                      fontSize: 15,
+                                      fontSize: 17,
                                       height: 1.5,
                                     ),
                                   ),
@@ -305,7 +352,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                             icon: const Icon(Icons.add),
                             label: const Text('Добавить абзац'),
                             style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 48),
+                              minimumSize: const Size(0, 52),
                             ),
                           );
                           final save = OutlinedButton.icon(
@@ -313,7 +360,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                             icon: const Icon(Icons.save_outlined),
                             label: const Text('Сохранить копию'),
                             style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 48),
+                              minimumSize: const Size(0, 52),
                             ),
                           );
                           if (keyboardOpen) {

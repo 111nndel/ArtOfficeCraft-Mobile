@@ -41,6 +41,19 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/workspace")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "directory") {
+                    try {
+                        val directory = File(filesDir, "workspace")
+                        check(directory.isDirectory || directory.mkdirs()) { "Workspace unavailable" }
+                        result.success(directory.absolutePath)
+                    } catch (_: Exception) {
+                        result.error("WORKSPACE_UNAVAILABLE", "Cannot open private workspace", null)
+                    }
+                } else result.notImplemented()
+            }
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "artofficecraft/pdf_renderer",
