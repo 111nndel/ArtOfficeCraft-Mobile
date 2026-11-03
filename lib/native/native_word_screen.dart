@@ -588,175 +588,188 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   ),
                 ],
               ),
-        body: Column(
-          children: [
-            if (!enabled)
-              const Padding(
-                padding: EdgeInsets.all(22),
-                child: UiText(
-                  'Нативная библиотека libartoffice_core.so недоступна. '
-                  'Для реального DOCX требуется Android ARM64.',
-                ),
-              ),
-            if (enabled && document == null)
-              Expanded(
-                child: EditorWelcome(
-                  icon: Icons.description_outlined,
-                  title: 'Документы',
-                  openLabel: 'Открыть DOCX',
-                  createLabel: 'Новый DOCX',
-                  onOpen: openDocument,
-                  onCreate: createNew,
-                  busy: busy,
-                ),
-              )
-            else if (document != null) ...[
-              Expanded(
-                child: Container(
-                  color: const Color(0xffdce1e8),
-                  child: ListView(
-                    padding: const EdgeInsets.all(14),
-                    children: [
-                      Container(
-                        constraints: const BoxConstraints(minHeight: 480),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 26,
-                          vertical: 32,
-                        ),
-                        color: Colors.white,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (final block in blocks)
-                              Padding(
-                                padding: EdgeInsets.only(
-                                  bottom:
-                                      (block['spaceAfter'] as num?)
-                                          ?.toDouble() ??
-                                      12,
-                                ),
-                                child: InkWell(
-                                  onTap: busy || block['editable'] != true
-                                      ? null
-                                      : () => editParagraph(block),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 7,
-                                    ),
-                                    child: activeBlock == block['block']
-                                        ? TextField(
-                                            key: const Key('word-inline-input'),
-                                            controller: inline,
-                                            focusNode: inlineFocus,
-                                            readOnly: busy,
-                                            minLines: 1,
-                                            maxLines: null,
-                                            keyboardType:
-                                                TextInputType.multiline,
-                                            textCapitalization:
-                                                TextCapitalization.sentences,
-                                            onChanged: (_) => setState(
-                                              () => inlineDirty =
-                                                  inline.text != block['text'],
-                                            ),
-                                            textAlign: switch (block['align']) {
-                                              'left' => TextAlign.left,
-                                              'center' => TextAlign.center,
-                                              'right' => TextAlign.right,
-                                              _ => TextAlign.justify,
-                                            },
-                                            style: const TextStyle(
-                                              fontFamily: 'serif',
-                                              color: Color(0xff27313d),
-                                              fontSize: 17,
-                                              height: 1.5,
-                                            ),
-                                            decoration:
-                                                InputDecoration.collapsed(
-                                                  hintText: tr(
-                                                    context,
-                                                    'Начните писать',
-                                                  ),
-                                                ),
-                                          )
-                                        : Text.rich(
-                                            TextSpan(
-                                              children: [
-                                                for (final run
-                                                    in (block['runs']
-                                                            as List? ??
-                                                        []))
-                                                  TextSpan(
-                                                    text:
-                                                        run['text']
-                                                            ?.toString() ??
-                                                        '',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          run['bold'] == true
-                                                          ? FontWeight.bold
-                                                          : FontWeight.normal,
-                                                      fontStyle:
-                                                          run['italic'] == true
-                                                          ? FontStyle.italic
-                                                          : FontStyle.normal,
-                                                      decoration:
-                                                          run['underline'] ==
-                                                              true
-                                                          ? TextDecoration
-                                                                .underline
-                                                          : TextDecoration.none,
-                                                      fontSize:
-                                                          ((run['size'] as num?)
-                                                                  ?.toDouble() ??
-                                                              12) *
-                                                          1.33,
-                                                    ),
-                                                  ),
-                                                if ((block['runs'] as List? ??
-                                                        [])
-                                                    .isEmpty)
-                                                  TextSpan(
-                                                    text:
-                                                        block['text']
-                                                                ?.toString()
-                                                                .isNotEmpty ==
-                                                            true
-                                                        ? block['text']
-                                                              .toString()
-                                                        : tr(
-                                                            context,
-                                                            'Коснитесь, чтобы начать писать',
-                                                          ),
-                                                  ),
-                                              ],
-                                            ),
-                                            textAlign: switch (block['align']) {
-                                              'left' => TextAlign.left,
-                                              'center' => TextAlign.center,
-                                              'right' => TextAlign.right,
-                                              _ => TextAlign.justify,
-                                            },
-                                            style: const TextStyle(
-                                              fontFamily: 'serif',
-                                              color: Color(0xff27313d),
-                                              fontSize: 17,
-                                              height: 1.5,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              if (!enabled)
+                const Padding(
+                  padding: EdgeInsets.all(22),
+                  child: UiText(
+                    'Нативная библиотека libartoffice_core.so недоступна. '
+                    'Для реального DOCX требуется Android ARM64.',
                   ),
                 ),
-              ),
+              if (enabled && document == null)
+                Expanded(
+                  child: EditorWelcome(
+                    icon: Icons.description_outlined,
+                    title: 'Документы',
+                    openLabel: 'Открыть DOCX',
+                    createLabel: 'Новый DOCX',
+                    onOpen: openDocument,
+                    onCreate: createNew,
+                    busy: busy,
+                  ),
+                )
+              else if (document != null) ...[
+                Expanded(
+                  child: Container(
+                    color: const Color(0xffdce1e8),
+                    child: ListView(
+                      padding: const EdgeInsets.all(14),
+                      children: [
+                        Container(
+                          constraints: const BoxConstraints(minHeight: 480),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 26,
+                            vertical: 32,
+                          ),
+                          color: Colors.white,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final block in blocks)
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom:
+                                        (block['spaceAfter'] as num?)
+                                            ?.toDouble() ??
+                                        12,
+                                  ),
+                                  child: InkWell(
+                                    onTap: busy || block['editable'] != true
+                                        ? null
+                                        : () => editParagraph(block),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 7,
+                                      ),
+                                      child: activeBlock == block['block']
+                                          ? TextField(
+                                              key: const Key(
+                                                'word-inline-input',
+                                              ),
+                                              controller: inline,
+                                              focusNode: inlineFocus,
+                                              readOnly: busy,
+                                              minLines: 1,
+                                              maxLines: null,
+                                              keyboardType:
+                                                  TextInputType.multiline,
+                                              textCapitalization:
+                                                  TextCapitalization.sentences,
+                                              onChanged: (_) => setState(
+                                                () => inlineDirty =
+                                                    inline.text !=
+                                                    block['text'],
+                                              ),
+                                              textAlign:
+                                                  switch (block['align']) {
+                                                    'left' => TextAlign.left,
+                                                    'center' =>
+                                                      TextAlign.center,
+                                                    'right' => TextAlign.right,
+                                                    _ => TextAlign.justify,
+                                                  },
+                                              style: const TextStyle(
+                                                fontFamily: 'serif',
+                                                color: Color(0xff27313d),
+                                                fontSize: 17,
+                                                height: 1.5,
+                                              ),
+                                              decoration:
+                                                  InputDecoration.collapsed(
+                                                    hintText: tr(
+                                                      context,
+                                                      'Начните писать',
+                                                    ),
+                                                  ),
+                                            )
+                                          : Text.rich(
+                                              TextSpan(
+                                                children: [
+                                                  for (final run
+                                                      in (block['runs']
+                                                              as List? ??
+                                                          []))
+                                                    TextSpan(
+                                                      text:
+                                                          run['text']
+                                                              ?.toString() ??
+                                                          '',
+                                                      style: TextStyle(
+                                                        fontWeight:
+                                                            run['bold'] == true
+                                                            ? FontWeight.bold
+                                                            : FontWeight.normal,
+                                                        fontStyle:
+                                                            run['italic'] ==
+                                                                true
+                                                            ? FontStyle.italic
+                                                            : FontStyle.normal,
+                                                        decoration:
+                                                            run['underline'] ==
+                                                                true
+                                                            ? TextDecoration
+                                                                  .underline
+                                                            : TextDecoration
+                                                                  .none,
+                                                        fontSize:
+                                                            ((run['size']
+                                                                        as num?)
+                                                                    ?.toDouble() ??
+                                                                12) *
+                                                            1.33,
+                                                      ),
+                                                    ),
+                                                  if ((block['runs'] as List? ??
+                                                          [])
+                                                      .isEmpty)
+                                                    TextSpan(
+                                                      text:
+                                                          block['text']
+                                                                  ?.toString()
+                                                                  .isNotEmpty ==
+                                                              true
+                                                          ? block['text']
+                                                                .toString()
+                                                          : tr(
+                                                              context,
+                                                              'Коснитесь, чтобы начать писать',
+                                                            ),
+                                                    ),
+                                                ],
+                                              ),
+                                              textAlign:
+                                                  switch (block['align']) {
+                                                    'left' => TextAlign.left,
+                                                    'center' =>
+                                                      TextAlign.center,
+                                                    'right' => TextAlign.right,
+                                                    _ => TextAlign.justify,
+                                                  },
+                                              style: const TextStyle(
+                                                fontFamily: 'serif',
+                                                color: Color(0xff27313d),
+                                                fontSize: 17,
+                                                height: 1.5,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (busy) const LinearProgressIndicator(),
             ],
-            if (busy) const LinearProgressIndicator(),
-          ],
+          ),
         ),
       ),
     );

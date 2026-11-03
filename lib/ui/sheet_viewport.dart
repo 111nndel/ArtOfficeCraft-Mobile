@@ -28,7 +28,8 @@ class SheetViewportState extends State<SheetViewport> {
   void reset() => transform.value = Matrix4.identity();
   void setZoom(double value) {
     final scale = value.clamp(.5, 3.0).toDouble();
-    final focal = _size.center(Offset.zero);
+    // Presets keep the visible top-left cell stable; pinch uses its own focal point.
+    const focal = Offset.zero;
     final scene = transform.toScene(focal);
     final height = (widget.rowCount + 1) * widget.rowExtent;
     final x = (focal.dx - scene.dx * scale).clamp(
@@ -42,6 +43,7 @@ class SheetViewportState extends State<SheetViewport> {
     transform.value = Matrix4.identity()
       ..setEntry(0, 0, scale)
       ..setEntry(1, 1, scale)
+      ..setEntry(2, 2, scale)
       ..setTranslationRaw(x.toDouble(), y.toDouble(), 0);
   }
 
@@ -56,59 +58,59 @@ class SheetViewportState extends State<SheetViewport> {
     builder: (context, box) {
       _size = box.biggest;
       return ColoredBox(
-          color: Colors.white,
-          child: InteractiveViewer.builder(
-            key: const Key('sheet-viewport'),
-            transformationController: transform,
-            minScale: .5,
-            maxScale: 3,
-            builder: (context, viewport) {
-              final top = [
-                viewport.point0.y,
-                viewport.point1.y,
-                viewport.point2.y,
-                viewport.point3.y,
-              ].reduce(math.min);
-              final bottom = [
-                viewport.point0.y,
-                viewport.point1.y,
-                viewport.point2.y,
-                viewport.point3.y,
-              ].reduce(math.max);
-              final first = (top / widget.rowExtent - 2).floor().clamp(
-                0,
-                widget.rowCount - 1,
-              );
-              final last = (bottom / widget.rowExtent + 1).ceil().clamp(
-                first,
-                widget.rowCount - 1,
-              );
-              return SizedBox(
-                width: widget.width,
-                height: (widget.rowCount + 1) * widget.rowExtent,
-                child: Stack(
-                  key: const Key('grid-rows'),
-                  children: [
-                    for (var row = first; row <= last; row++)
-                      Positioned(
-                        top: (row + 1) * widget.rowExtent,
-                        left: 0,
-                        width: widget.width,
-                        height: widget.rowExtent,
-                        child: widget.rowBuilder(context, row),
-                      ),
+        color: Colors.white,
+        child: InteractiveViewer.builder(
+          key: const Key('sheet-viewport'),
+          transformationController: transform,
+          minScale: .5,
+          maxScale: 3,
+          builder: (context, viewport) {
+            final top = [
+              viewport.point0.y,
+              viewport.point1.y,
+              viewport.point2.y,
+              viewport.point3.y,
+            ].reduce(math.min);
+            final bottom = [
+              viewport.point0.y,
+              viewport.point1.y,
+              viewport.point2.y,
+              viewport.point3.y,
+            ].reduce(math.max);
+            final first = (top / widget.rowExtent - 2).floor().clamp(
+              0,
+              widget.rowCount - 1,
+            );
+            final last = (bottom / widget.rowExtent + 1).ceil().clamp(
+              first,
+              widget.rowCount - 1,
+            );
+            return SizedBox(
+              width: widget.width,
+              height: (widget.rowCount + 1) * widget.rowExtent,
+              child: Stack(
+                key: const Key('grid-rows'),
+                children: [
+                  for (var row = first; row <= last; row++)
                     Positioned(
-                      top: math.max(0, top),
+                      top: (row + 1) * widget.rowExtent,
                       left: 0,
                       width: widget.width,
                       height: widget.rowExtent,
-                      child: widget.header,
+                      child: widget.rowBuilder(context, row),
                     ),
-                  ],
-                ),
-              );
-            },
-          ),
+                  Positioned(
+                    top: math.max(0, top),
+                    left: 0,
+                    width: widget.width,
+                    height: widget.rowExtent,
+                    child: widget.header,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       );
     },
   );

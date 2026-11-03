@@ -509,74 +509,80 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                   ),
                 ],
               ),
-        body: !available
-            ? const Center(child: UiText('PDFCraft Rust недоступен'))
-            : contents == null
-            ? EditorWelcome(
-                icon: Icons.picture_as_pdf_outlined,
-                title: 'PDF',
-                openLabel: 'Открыть PDF',
-                createLabel: 'Новый PDF',
-                onOpen: open,
-                onCreate: create,
-                busy: busy,
-              )
-            : Column(
-                children: [
-                  Expanded(
-                    child: PdfViewport(
-                      key: pdfViewport,
-                      image: _pageImage,
-                      pageWidth:
-                          (((pages[selected]['rotation'] as num? ?? 0).toInt() %
-                                              180 ==
-                                          0
-                                      ? pages[selected]['width']
-                                      : pages[selected]['height'])
-                                  as num)
-                              .toDouble(),
-                      pageHeight:
-                          (((pages[selected]['rotation'] as num? ?? 0).toInt() %
-                                              180 ==
-                                          0
-                                      ? pages[selected]['height']
-                                      : pages[selected]['width'])
-                                  as num)
-                              .toDouble(),
-                    ),
-                  ),
-                  if (showThumbnails && !toolsExpanded)
-                    SizedBox(
-                      height: 136,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: pages.length,
-                        itemBuilder: (c, i) => pageThumb(i),
+        body: SafeArea(
+          bottom: false,
+          child: !available
+              ? const Center(child: UiText('PDFCraft Rust недоступен'))
+              : contents == null
+              ? EditorWelcome(
+                  icon: Icons.picture_as_pdf_outlined,
+                  title: 'PDF',
+                  openLabel: 'Открыть PDF',
+                  createLabel: 'Новый PDF',
+                  onOpen: open,
+                  onCreate: create,
+                  busy: busy,
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: PdfViewport(
+                        key: pdfViewport,
+                        image: _pageImage,
+                        pageWidth:
+                            (((pages[selected]['rotation'] as num? ?? 0)
+                                                    .toInt() %
+                                                180 ==
+                                            0
+                                        ? pages[selected]['width']
+                                        : pages[selected]['height'])
+                                    as num)
+                                .toDouble(),
+                        pageHeight:
+                            (((pages[selected]['rotation'] as num? ?? 0)
+                                                    .toInt() %
+                                                180 ==
+                                            0
+                                        ? pages[selected]['height']
+                                        : pages[selected]['width'])
+                                    as num)
+                                .toDouble(),
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: UiText(
-                            'Страница ${selected + 1} из ${pages.length}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                    if (showThumbnails && !toolsExpanded)
+                      SizedBox(
+                        height: 136,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: pages.length,
+                          itemBuilder: (c, i) => pageThumb(i),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: UiText(
+                              'Страница ${selected + 1} из ${pages.length}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: tr(context, 'Миниатюры страниц'),
-                          isSelected: showThumbnails,
-                          onPressed: () =>
-                              setState(() => showThumbnails = !showThumbnails),
-                          icon: const Icon(Icons.view_carousel_outlined),
-                        ),
-                      ],
+                          IconButton(
+                            tooltip: tr(context, 'Миниатюры страниц'),
+                            isSelected: showThumbnails,
+                            onPressed: () => setState(
+                              () => showThumbnails = !showThumbnails,
+                            ),
+                            icon: const Icon(Icons.view_carousel_outlined),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (busy) const LinearProgressIndicator(),
-                ],
-              ),
+                    if (busy) const LinearProgressIndicator(),
+                  ],
+                ),
+        ),
       ),
     );
   }

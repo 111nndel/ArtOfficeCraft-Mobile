@@ -2,14 +2,16 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Latest validated release: alpha 0.14.0 — not a finished office suite.**
+**Latest validated release: alpha 0.15.0 — not a finished office suite.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
 
-The current development branch contains **unreleased 0.15.0 work** on English UI,
-spreadsheet gestures and a full-area PDF viewport. Final tests/build are pending;
-see [the explicit validation status](docs/mobile-ux-0.15.0-wip.md).
+English and Russian UI follow the Android language, with a persisted override in
+About. Spreadsheets support pinch zoom and pan; PDF opens at page width in the
+full available canvas, with optional thumbnails and fit controls. Large editor
+tool targets and the approved nested slab navigation remain unchanged.
+See [0.15.0 validation and limits](docs/validation-0.15.0.md).
 
 | Format | Current capability |
 | --- | --- |
@@ -33,7 +35,7 @@ and preserves styles on value/formula replacement. Applied Grid edits update
 the app-private working copy. Locally written recovery checkpoints retain pending
 Word/Grid/Deck input and modified PDF bytes after process termination; Home offers
 to resume them. Only the last completed checkpoint is recoverable, and undo history
-is session-local. See docs/validation-0.14.0.md for current checks and limits.
+is session-local. See docs/validation-0.15.0.md for current checks and limits.
 The shared panel navigation follows design/INTERACTION_SPEC.md.
 
 The mobile app integrates four independent upstream projects. It is an independent

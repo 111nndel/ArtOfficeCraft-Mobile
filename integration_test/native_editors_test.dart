@@ -500,73 +500,124 @@ void main() {
       }
     },
   );
-  testWidgets('Actual Android: English UI keeps document text and pinch zoom keeps pending input', (tester) async {
-    Widget englishScreen(Widget child) => MaterialApp(
-      locale: const Locale('en'), supportedLocales: const [Locale('en'), Locale('ru')],
-      localizationsDelegates: const [AppStrings.delegate, ...GlobalMaterialLocalizations.delegates],
-      theme: OfficeTheme.build(Brightness.light), home: child);
-    Future<void> pinchCanvas(Finder target) async {
-      final center = tester.getCenter(target);
-      final first = await tester.createGesture(pointer: 1);
-      final second = await tester.createGesture(pointer: 2);
-      await first.down(center - const Offset(35, 0));
-      await second.down(center + const Offset(35, 0));
-      await tester.pump();
-      await first.moveTo(center - const Offset(85, 0));
-      await second.moveTo(center + const Offset(85, 0));
-      await tester.pump();
-      await first.up(); await second.up();
+  testWidgets(
+    'Actual Android: English UI keeps document text and pinch zoom keeps pending input',
+    (tester) async {
+      Widget englishScreen(Widget child) => MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: const [Locale('en'), Locale('ru')],
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        theme: OfficeTheme.build(Brightness.light),
+        home: child,
+      );
+      Future<void> pinchCanvas(Finder target) async {
+        final center = tester.getCenter(target);
+        final first = await tester.createGesture(pointer: 1);
+        final second = await tester.createGesture(pointer: 2);
+        await first.down(center - const Offset(35, 0));
+        await second.down(center + const Offset(35, 0));
+        await tester.pump();
+        for (var step = 1; step <= 5; step++) {
+          final distance = 35.0 + 10 * step;
+          await first.moveTo(center - Offset(distance, 0));
+          await second.moveTo(center + Offset(distance, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await first.up();
+        await second.up();
+        await tester.pumpAndSettle();
+      }
+
+      final word = NativeDocumentBackend.tryOpen(NativeDocumentKind.word)!;
+      final docx = await word.create('Главная');
+      await tester.pumpWidget(
+        englishScreen(
+          NativeWordScreen(
+            backend: word,
+            launch: EditorLaunch(bytes: docx, name: 'Документ.docx'),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
-    }
-    final word = NativeDocumentBackend.tryOpen(NativeDocumentKind.word)!;
-    final docx = await word.create('Главная');
-    await tester.pumpWidget(englishScreen(NativeWordScreen(backend: word,
-      launch: EditorLaunch(bytes: docx, name: 'Документ.docx'))));
-    await tester.pumpAndSettle();
-    expect(find.text('Документ.docx'), findsOneWidget);
-    expect(find.text('Главная'), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpAndSettle();
+      expect(find.text('Документ.docx'), findsOneWidget);
+      expect(find.text('Главная'), findsOneWidget);
+      expect(find.text('Home'), findsOneWidget);
 
-    final grid = NativeDocumentBackend.tryOpen(NativeDocumentKind.grid)!;
-    final xlsx = await grid.create();
-    await tester.pumpWidget(englishScreen(NativeGridScreen(backend: grid,
-      launch: EditorLaunch(bytes: xlsx, name: 'Pinch.xlsx'))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('grid-cell-A1')));
-    await tester.pumpAndSettle();
-    const pending = 'Unapplied 0.15 😀';
-    await tester.enterText(find.byType(TextField), pending);
-    await tester.pump();
-    await pinchCanvas(find.byKey(const Key('sheet-viewport')));
-    expect(tester.state<SheetViewportState>(find.byType(SheetViewport)).zoom, greaterThan(1.2));
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, pending);
-    await tester.tap(find.byKey(const Key('tool-section-caption')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('View')); await tester.pumpAndSettle();
-    await tester.tap(find.text('Zoom')); await tester.pumpAndSettle();
-    await tester.tap(find.text('150%')); await tester.pumpAndSettle();
-    expect(tester.state<SheetViewportState>(find.byType(SheetViewport)).zoom, closeTo(1.5, .001));
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, pending);
-    await capture(tester, 'english-grid-zoom');
+      final grid = NativeDocumentBackend.tryOpen(NativeDocumentKind.grid)!;
+      final xlsx = await grid.create();
+      await tester.pumpWidget(
+        englishScreen(
+          NativeGridScreen(
+            backend: grid,
+            launch: EditorLaunch(bytes: xlsx, name: 'Pinch.xlsx'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('grid-cell-A1')));
+      await tester.pumpAndSettle();
+      const pending = 'Unapplied 0.15 😀';
+      await tester.enterText(find.byType(TextField), pending);
+      await tester.pump();
+      await pinchCanvas(find.byKey(const Key('sheet-viewport')));
+      expect(
+        tester.state<SheetViewportState>(find.byType(SheetViewport)).zoom,
+        greaterThan(1.2),
+      );
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        pending,
+      );
+      await tester.tap(find.byKey(const Key('tool-section-caption')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('View'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Zoom'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('150%'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.state<SheetViewportState>(find.byType(SheetViewport)).zoom,
+        closeTo(1.5, .001),
+      );
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        pending,
+      );
+      await capture(tester, 'english-grid-zoom');
 
-    final pdf = NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf)!;
-    final bytes = await pdf.create();
-    await tester.pumpWidget(englishScreen(NativePdfScreen(backend: pdf,
-      launch: EditorLaunch(bytes: bytes, name: 'Full width.pdf'))));
-    await tester.pumpAndSettle();
-    final page = tester.widget<PdfViewport>(find.byType(PdfViewport));
-    final view = tester.state<PdfViewportState>(find.byType(PdfViewport));
-    final canvas = tester.getSize(find.byKey(const Key('pdf-viewport')));
-    expect(view.transform.value.getMaxScaleOnAxis() * page.pageWidth,
-      closeTo(canvas.width - 16, .01));
-    expect(find.text('Page 1 of 1'), findsOneWidget);
-    await capture(tester, 'english-pdf-width');
-    final before = view.transform.value.getMaxScaleOnAxis();
-    await pinchCanvas(find.byKey(const Key('pdf-viewport')));
-    expect(view.transform.value.getMaxScaleOnAxis(), greaterThan(before));
-    await tester.tap(find.byTooltip('Page thumbnails')); await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
+      final pdf = NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf)!;
+      final bytes = await pdf.create();
+      await tester.pumpWidget(
+        englishScreen(
+          NativePdfScreen(
+            backend: pdf,
+            launch: EditorLaunch(bytes: bytes, name: 'Full width.pdf'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final page = tester.widget<PdfViewport>(find.byType(PdfViewport));
+      final view = tester.state<PdfViewportState>(find.byType(PdfViewport));
+      final canvas = tester.getSize(find.byKey(const Key('pdf-viewport')));
+      expect(
+        view.transform.value.getMaxScaleOnAxis() * page.pageWidth,
+        closeTo(canvas.width - 16, .01),
+      );
+      expect(find.text('Page 1 of 1'), findsOneWidget);
+      await capture(tester, 'english-pdf-width');
+      final before = view.transform.value.getMaxScaleOnAxis();
+      await pinchCanvas(find.byKey(const Key('pdf-viewport')));
+      expect(view.transform.value.getMaxScaleOnAxis(), greaterThan(before));
+      await tester.tap(find.byTooltip('Page thumbnails'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

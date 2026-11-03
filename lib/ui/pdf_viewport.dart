@@ -31,6 +31,7 @@ class PdfViewportState extends State<PdfViewport> {
     transform.value = Matrix4.identity()
       ..setEntry(0, 0, scale)
       ..setEntry(1, 1, scale)
+      ..setEntry(2, 2, scale)
       ..setTranslationRaw((_size.width - widget.pageWidth * scale) / 2, 8, 0);
   }
 

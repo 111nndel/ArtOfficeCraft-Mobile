@@ -8,17 +8,20 @@ class AppStrings {
   const AppStrings(this.locale);
   final Locale locale;
   static const delegate = _StringsDelegate();
-  static final _templates = (english.entries
-      .where((e) => e.key.contains('{0}')).toList()
-      ..sort((a, b) => b.key.length.compareTo(a.key.length)))
-      .map((e) {
-        final pieces = e.key.split(RegExp(r'\{\d+\}'));
-        return (
-          RegExp('^${pieces.map(RegExp.escape).join('(.*?)')}\$', dotAll: true),
-          e.value,
-        );
-      })
-      .toList();
+  static final _templates =
+      (english.entries.where((e) => e.key.contains('{0}')).toList()
+            ..sort((a, b) => b.key.length.compareTo(a.key.length)))
+          .map((e) {
+            final pieces = e.key.split(RegExp(r'\{\d+\}'));
+            return (
+              RegExp(
+                '^${pieces.map(RegExp.escape).join('(.*?)')}\$',
+                dotAll: true,
+              ),
+              e.value,
+            );
+          })
+          .toList();
   String translate(String source) {
     if (locale.languageCode != 'en') return source;
     final exact = english[source];

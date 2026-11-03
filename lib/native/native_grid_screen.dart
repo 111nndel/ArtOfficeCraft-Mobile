@@ -738,134 +738,139 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   ),
                 ],
               ),
-        body: !online
-            ? const Center(
-                child: UiText(
-                  'Нет нативной GridCraft-библиотеки для Android ARM64',
-                ),
-              )
-            : book == null
-            ? EditorWelcome(
-                icon: Icons.grid_on_outlined,
-                title: 'Таблицы',
-                openLabel: 'Открыть XLSX',
-                createLabel: 'Создать XLSX',
-                onOpen: open,
-                onCreate: create,
-                busy: busy,
-              )
-            : Column(
-                children: [
-                  Expanded(child: grid()),
-                  Material(
-                    color: Theme.of(context).colorScheme.surface,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 52,
-                            child: UiText(
-                              selected,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xff17815c),
-                              ),
-                            ),
-                          ),
-                          if (!inputFocus.hasFocus)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12),
-                              child: UiText(
-                                'ƒₓ',
-                                style: TextStyle(fontSize: 24),
-                              ),
-                            ),
-                          Expanded(
-                            key: const ValueKey('formula-input'),
-                            child: TextField(
-                              readOnly: busy,
-                              controller: input,
-                              focusNode: inputFocus,
-                              minLines: 1,
-                              maxLines: formulaExpanded ? 4 : 1,
-                              decoration: InputDecoration(
-                                hintText: tr(context, 'Введите…'),
-                                contentPadding: EdgeInsets.all(12),
-                              ),
-                              textInputAction: TextInputAction.done,
-                              onSubmitted: (_) => commit(),
-                            ),
-                          ),
-                          if (inputFocus.hasFocus) ...[
-                            IconButton(
-                              tooltip: tr(context, 'Отменить ввод'),
-                              onPressed: busy
-                                  ? null
-                                  : () {
-                                      setState(() => input.text = currentInput);
-                                      inputFocus.unfocus();
-                                    },
-                              icon: const Icon(Icons.close),
-                            ),
-                            IconButton(
-                              tooltip: tr(context, 'Применить'),
-                              onPressed: busy ? null : commit,
-                              icon: const Icon(
-                                Icons.check,
-                                color: Colors.green,
-                              ),
-                            ),
-                          ] else
-                            IconButton(
-                              tooltip: tr(
-                                context,
-                                formulaExpanded
-                                    ? 'Свернуть формулу'
-                                    : 'Развернуть формулу',
-                              ),
-                              onPressed: () => setState(
-                                () => formulaExpanded = !formulaExpanded,
-                              ),
-                              icon: Icon(
-                                formulaExpanded
-                                    ? Icons.keyboard_arrow_down
-                                    : Icons.keyboard_arrow_up,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+        body: SafeArea(
+          bottom: false,
+          child: !online
+              ? const Center(
+                  child: UiText(
+                    'Нет нативной GridCraft-библиотеки для Android ARM64',
                   ),
-                  if (!toolsExpanded)
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (var i = 0; i < sheets.length; i++)
-                            TextButton(
-                              onPressed: busy ? null : () => chooseSheet(i),
-                              style: TextButton.styleFrom(
-                                foregroundColor: i == sheetIndex
-                                    ? const Color(0xff17815c)
-                                    : null,
-                              ),
-                              child: Text(
-                                sheets[i]['name']?.toString() ??
-                                    tr(context, 'Лист'),
+                )
+              : book == null
+              ? EditorWelcome(
+                  icon: Icons.grid_on_outlined,
+                  title: 'Таблицы',
+                  openLabel: 'Открыть XLSX',
+                  createLabel: 'Создать XLSX',
+                  onOpen: open,
+                  onCreate: create,
+                  busy: busy,
+                )
+              : Column(
+                  children: [
+                    Expanded(child: grid()),
+                    Material(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 52,
+                              child: UiText(
+                                selected,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xff17815c),
+                                ),
                               ),
                             ),
-                        ],
+                            if (!inputFocus.hasFocus)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: UiText(
+                                  'ƒₓ',
+                                  style: TextStyle(fontSize: 24),
+                                ),
+                              ),
+                            Expanded(
+                              key: const ValueKey('formula-input'),
+                              child: TextField(
+                                readOnly: busy,
+                                controller: input,
+                                focusNode: inputFocus,
+                                minLines: 1,
+                                maxLines: formulaExpanded ? 4 : 1,
+                                decoration: InputDecoration(
+                                  hintText: tr(context, 'Введите…'),
+                                  contentPadding: EdgeInsets.all(12),
+                                ),
+                                textInputAction: TextInputAction.done,
+                                onSubmitted: (_) => commit(),
+                              ),
+                            ),
+                            if (inputFocus.hasFocus) ...[
+                              IconButton(
+                                tooltip: tr(context, 'Отменить ввод'),
+                                onPressed: busy
+                                    ? null
+                                    : () {
+                                        setState(
+                                          () => input.text = currentInput,
+                                        );
+                                        inputFocus.unfocus();
+                                      },
+                                icon: const Icon(Icons.close),
+                              ),
+                              IconButton(
+                                tooltip: tr(context, 'Применить'),
+                                onPressed: busy ? null : commit,
+                                icon: const Icon(
+                                  Icons.check,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ] else
+                              IconButton(
+                                tooltip: tr(
+                                  context,
+                                  formulaExpanded
+                                      ? 'Свернуть формулу'
+                                      : 'Развернуть формулу',
+                                ),
+                                onPressed: () => setState(
+                                  () => formulaExpanded = !formulaExpanded,
+                                ),
+                                icon: Icon(
+                                  formulaExpanded
+                                      ? Icons.keyboard_arrow_down
+                                      : Icons.keyboard_arrow_up,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  if (busy) const LinearProgressIndicator(),
-                ],
-              ),
+                    if (!toolsExpanded)
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (var i = 0; i < sheets.length; i++)
+                              TextButton(
+                                onPressed: busy ? null : () => chooseSheet(i),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: i == sheetIndex
+                                      ? const Color(0xff17815c)
+                                      : null,
+                                ),
+                                child: Text(
+                                  sheets[i]['name']?.toString() ??
+                                      tr(context, 'Лист'),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    if (busy) const LinearProgressIndicator(),
+                  ],
+                ),
+        ),
       ),
     );
   }

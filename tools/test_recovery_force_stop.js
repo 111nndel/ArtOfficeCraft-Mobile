@@ -53,32 +53,32 @@ function screenshot(name) {
   if(Number(command(['shell','getprop','ro.build.version.sdk']).trim())<36) throw new Error('Use Android 16 or later.');
   command(['install','-r',path.resolve(apk)]);
   command(['shell','am','start','-n',pkg+'/.MainActivity']);
-  tap(await waitFor(n=>n.text.startsWith('Документ\n'),'Create document'));
+  tap(await waitFor(n=>(n.text.startsWith('Документ\n') || n.text.startsWith('Document\n')),'Create document'));
   // Android may merge this label into the whole page semantics bounds.
   // Touch the visible first line near the top, rather than the blank page center.
-  tap(await waitFor(n=>(n.text||'').includes('Коснитесь, чтобы начать писать'),'Empty paragraph'),0.1);
+  tap(await waitFor(n=>(n.text.includes('Коснитесь, чтобы начать писать') || n.text.includes('Tap to start writing')),'Empty paragraph'),0.1);
   await waitFor(n=>n.class==='android.widget.EditText','Inline text field');
   const text='RECOVERY_FORCE_STOP_014';
   command(['shell','input','text',text]);
-  await waitFor(n=>(n.text||'').includes('Черновик сохранён'),'Durable draft status');
+  await waitFor(n=>(n.text.includes('Черновик сохранён') || n.text.includes('Draft saved')),'Durable draft status');
   screenshot('before-force-stop');
   command(['shell','am','force-stop',pkg]);
   command(['shell','am','start','-n',pkg+'/.MainActivity']);
-  await waitFor(n=>n.text==='Восстановить работу','Home recovery section');
+  await waitFor(n=>['Восстановить работу','Resume your work'].includes(n.text),'Home recovery section');
   screenshot('home-recovery');
-  tap(await waitFor(n=>n.text.startsWith('Новый документ.docx'),'Recovery document'));
+  tap(await waitFor(n=>(n.text.startsWith('Новый документ.docx') || n.text.startsWith('New document.docx')),'Recovery document'));
   await waitFor(n=>n.class==='android.widget.EditText' && n.text===text,'Recovered unapplied text');
   screenshot('recovered-text');
   command(['shell','input','keyevent','4']);
   // If the system keyboard appeared, the first Back only hides it.
   let all=nodes();
-  if(!all.some(n=>n.text==='Выйти без сохранения')) {
+  if(!all.some(n=>['Выйти без сохранения','Leave without saving'].includes(n.text))) {
     command(['shell','input','keyevent','4']);
   }
-  tap(await waitFor(n=>n.text==='Выйти без сохранения','Explicit discard'));
+  tap(await waitFor(n=>['Выйти без сохранения','Leave without saving'].includes(n.text),'Explicit discard'));
   await waitFor(n=>n.text.includes('ArtOfficeCraft'),'Return to Home');
   const remaining=nodes();
-  if(remaining.some(n=>n.text==='Восстановить работу')) throw new Error('Recovery entry remains after explicit discard.');
+  if(remaining.some(n=>['Восстановить работу','Resume your work'].includes(n.text))) throw new Error('Recovery entry remains after explicit discard.');
   const result={passed:true,device,api:36,text,apkSha256:crypto.createHash('sha256').update(fs.readFileSync(apk)).digest('hex'),checks:['ordinary offline app','unapplied text persisted','force-stop without orderly shutdown','fresh-process recovery UI','exact recovered text','explicit discard retires recovery']};
   fs.writeFileSync(path.join(proof,'result.json'),JSON.stringify(result,null,2)+'\n');
   process.stdout.write(JSON.stringify(result)+'\n');

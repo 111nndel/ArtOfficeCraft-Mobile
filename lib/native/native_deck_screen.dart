@@ -703,96 +703,99 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   ),
                 ],
               ),
-        body: !enabled
-            ? const Center(
-                child: UiText('DeckCraft Rust недоступен на этом устройстве'),
-              )
-            : !loaded
-            ? EditorWelcome(
-                icon: Icons.slideshow_outlined,
-                title: 'Презентации',
-                openLabel: 'Открыть PPTX',
-                createLabel: 'Создать PPTX',
-                onOpen: open,
-                onCreate: create,
-                busy: busy,
-              )
-            : Column(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.black12),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black26, blurRadius: 8),
-                            ],
-                          ),
-                          child: InteractiveViewer(
-                            minScale: .6,
-                            maxScale: 4,
-                            child: slideCanvas(),
+        body: SafeArea(
+          bottom: false,
+          child: !enabled
+              ? const Center(
+                  child: UiText('DeckCraft Rust недоступен на этом устройстве'),
+                )
+              : !loaded
+              ? EditorWelcome(
+                  icon: Icons.slideshow_outlined,
+                  title: 'Презентации',
+                  openLabel: 'Открыть PPTX',
+                  createLabel: 'Создать PPTX',
+                  onOpen: open,
+                  onCreate: create,
+                  busy: busy,
+                )
+              : Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.black12),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 8),
+                              ],
+                            ),
+                            child: InteractiveViewer(
+                              minScale: .6,
+                              maxScale: 4,
+                              child: slideCanvas(),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  if (!compact && !toolsExpanded)
-                    Container(
-                      height: 112,
-                      color: Theme.of(context).colorScheme.surfaceContainer,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: slides.length,
-                        itemBuilder: (c, i) {
-                          final selected = i == index;
-                          return GestureDetector(
-                            onTap: busy
-                                ? null
-                                : () => setState(() => index = i),
-                            child: Container(
-                              width: 138,
-                              margin: const EdgeInsets.all(5),
-                              padding: const EdgeInsets.all(5),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: selected
-                                      ? Colors.deepOrange
-                                      : Colors.grey,
-                                  width: selected ? 2 : 1,
+                    if (!compact && !toolsExpanded)
+                      Container(
+                        height: 112,
+                        color: Theme.of(context).colorScheme.surfaceContainer,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: slides.length,
+                          itemBuilder: (c, i) {
+                            final selected = i == index;
+                            return GestureDetector(
+                              onTap: busy
+                                  ? null
+                                  : () => setState(() => index = i),
+                              child: Container(
+                                width: 138,
+                                margin: const EdgeInsets.all(5),
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: selected
+                                        ? Colors.deepOrange
+                                        : Colors.grey,
+                                    width: selected ? 2 : 1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Column(
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        color: Colors.white,
-                                      ),
-                                      alignment: Alignment.center,
-                                      clipBehavior: Clip.hardEdge,
-                                      child: IgnorePointer(
-                                        child: slideCanvas(slideIndex: i),
+                                child: Column(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          color: Colors.white,
+                                        ),
+                                        alignment: Alignment.center,
+                                        clipBehavior: Clip.hardEdge,
+                                        child: IgnorePointer(
+                                          child: slideCanvas(slideIndex: i),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  UiText(
-                                    (i + 1).toString(),
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                ],
+                                    UiText(
+                                      (i + 1).toString(),
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  if (busy) const LinearProgressIndicator(),
-                ],
-              ),
+                    if (busy) const LinearProgressIndicator(),
+                  ],
+                ),
+        ),
       ),
     );
   }
