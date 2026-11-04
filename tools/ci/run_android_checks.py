@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -98,6 +99,8 @@ def checks(device, output):
             for suite in SUITES:
                 start = time.monotonic()
                 directory = output / 'screenshots' / suite
+                if directory.exists():
+                    shutil.rmtree(directory)
                 env = {**os.environ, 'AOC_SCREENSHOTS': str(directory)}
                 run(['flutter', 'drive', '--debug', '--no-pub', '--disable-dds',
                      '--driver=test_driver/ci_integration.dart',
@@ -108,6 +111,12 @@ def checks(device, output):
                                         'screenshots': screenshot_names(directory)})
         # Rebuild from the real application after manifest restoration. This
         # ordinary APK is used only for QA, not for signed release publication.
+        # Flutter drive may retain test app data, unlike flutter test. Start the
+        # ordinary phase clean; the Node scenarios then test persistence within it.
+        with (output / 'remove-integration-app.log').open('wb') as stream:
+            subprocess.run([*adb, 'uninstall', 'ai.artofficecraft.artofficecraft_mobile'],
+                           stdout=stream, stderr=subprocess.STDOUT,
+                           timeout=30, check=False)
         run(['flutter', 'build', 'apk', '--profile', '--target=lib/main.dart',
              '--target-platform=android-x64', '--split-per-abi', '--no-pub'],
             output / 'ordinary-build.log')
