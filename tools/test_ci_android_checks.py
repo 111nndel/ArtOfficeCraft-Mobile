@@ -34,7 +34,7 @@ class AndroidChecksTests(unittest.TestCase):
             manifest.write_text('<manifest/>')
             logcat = MagicMock()
             with patch.object(qa, 'ROOT', root), \
-                    patch.dict(os.environ, {'ANDROID_HOME': tmp}), \
+                    patch.dict(os.environ, {'ANDROID_HOME': tmp, 'GITHUB_STEP_SUMMARY': ''}), \
                     patch.object(qa, 'capture', side_effect=['36', 'x86_64']), \
                     patch.object(qa.subprocess, 'Popen', return_value=logcat), \
                     patch.object(qa, 'run', side_effect=RuntimeError('native edit failed')) as run:
