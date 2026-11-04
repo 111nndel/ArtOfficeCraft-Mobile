@@ -96,13 +96,27 @@ jobs:
 
   emulator:
     name: Android 16 emulator and editor scenarios
-    needs: flutter
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Enable hardware acceleration
+        run: |
+          mkdir -p build/android-qa
+          { uname -a; id; ls -l /dev/kvm || true; lscpu; } > build/android-qa/hardware.txt
+          if [[ ! -e /dev/kvm ]]; then
+            sudo modprobe kvm
+            if grep -q GenuineIntel /proc/cpuinfo; then sudo modprobe kvm_intel; else sudo modprobe kvm_amd; fi
+          fi
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          sudo chmod a+rw /dev/kvm
+          ls -l /dev/kvm | tee -a build/android-qa/hardware.txt
+          test -r /dev/kvm && test -w /dev/kvm
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -115,12 +129,6 @@ jobs:
           mkdir -p android/app/src/main/jniLibs/x86_64
           cp build/native-candidate/libartoffice_core.so android/app/src/main/jniLibs/x86_64/
           bash tools/ci/install_android.sh 'platforms;android-36' 'build-tools;36.0.0'
-      - name: Enable hardware acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          test -r /dev/kvm && test -w /dev/kvm
       - name: Run real-engine scenarios and ordinary-app checks
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
