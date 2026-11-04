@@ -13,6 +13,9 @@ full available canvas, with optional thumbnails and fit controls. Large editor
 tool targets and the approved nested slab navigation remain unchanged. Light/dark
 appearance is saved locally and restored before the first Flutter frame.
 See [0.23.0 validation and limits](docs/validation-0.23.0.md).
+The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
+future tagged publication requires that job to pass. See
+[Android CI coverage and evidence](docs/android-ci.md).
 
 | Format | Current capability |
 | --- | --- |
