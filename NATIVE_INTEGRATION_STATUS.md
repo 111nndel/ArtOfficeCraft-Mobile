@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.18.0 / core 0.18.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.19.0 / core 0.19.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/validation-0.18.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
+`docs/validation-0.19.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -18,6 +18,12 @@ XLSX imports sparse dimensions, hidden lines, merges and vertical alignment.
 Long-press/drag on headings previews and persists row/column sizes with undo/redo.
 The selected value remains independent of the loaded window. Picker MIME/extension
 filters are shared by Home and all editor open commands.
+0.19.0 reduces heading labels to 11 logical pixels and the column bar to 28;
+row labels remain 46 wide, independent of document zoom and system text scale.
+AutoSum/recalculate use real native workbook operations, checked snapshots and
+existing undo/redo. Imported shrink-to-fit is displayed and can be changed in
+Cell format. Original PDFCraft vendored JBIG2 fixes are preserved by a managed
+root Cargo patch, resolved from the exact reviewed upstream source.
 
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.
@@ -25,10 +31,10 @@ their original limitations; they are not a current capability inventory.
 ## Source and provenance
 
 Pinned upstream repositories:
-- WordCraft v0.14.0, commit `5cd53f184aab11def13b7fced18727159b9bc96a`.
-- GridCraft v0.15.0, commit `30b210b4ef03b30616923465efa70766cefba379`.
-- DeckCraft v0.14.1, commit `ee39ff67816d0039143ec7c98ea604cefe0cd2e5`.
-- PDFCraft v0.17.0, commit `7d78f3e14474b978be014715e0cc64895d77025a`.
+- WordCraft v0.15.0, commit `b47079fc791595fd84bb499d64dcd3f0624ef35a`.
+- GridCraft v0.16.0, commit `85e51e009c24fad47575f04d3c08f12342615d82`.
+- DeckCraft v0.15.0, commit `3e178d8f5a59c787a6a53a7ed0f052b3e4a1489f`.
+- PdfCraft v0.18.0, commit `3936f93a1479366a951206fc6d3094680fe2d3dc`.
 
 All repositories are downloaded and checked against pinned SHAs; original ZIP files untouched.
 

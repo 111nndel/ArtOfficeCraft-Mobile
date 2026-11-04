@@ -1,0 +1,33 @@
+[
+  {
+    "packages": [
+      "ratex-font",
+      "ratex-layout",
+      "ratex-lexer",
+      "ratex-parser",
+      "ratex-types"
+    ],
+    "version": "0.1.14",
+    "repository": "https://github.com/erweixin/RaTeX",
+    "license": "MIT",
+    "commit": "08cae05377938391117913ca4f278e6a3ffb6a8a",
+    "texts": [
+      {
+        "path": "licenses/third-party/ratex-0.1.14/KaTeX-fonts-NOTICE.txt",
+        "sha256": "d6a72bca243df26026696902d865dc3b099222d1da50559fe9e60a3f19973833"
+      },
+      {
+        "path": "licenses/third-party/ratex-0.1.14/LICENSE",
+        "sha256": "f65e10eaa978c50a58c5e792110b4be5014b865edcb2ade49076bfcc98fa92b0"
+      },
+      {
+        "path": "licenses/third-party/ratex-0.1.14/SIL-OFL-1.1.txt",
+        "sha256": "8eea8287e5876b539670cadb82e99f9a7afddec6f6730811be1daf25d2e9bcfd"
+      },
+      {
+        "path": "licenses/third-party/ratex-0.1.14/THIRD_PARTY_NOTICES.txt",
+        "sha256": "e3cf753ddd8012543a3297b62b4cf5450db1d5a3ae7ddd7afae593db927c2980"
+      }
+    ]
+  }
+]

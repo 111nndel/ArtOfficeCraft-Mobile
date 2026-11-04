@@ -1,6 +1,6 @@
 //! ArtOfficeCraft Mobile native bridge (alpha).
 //! FFI is deliberately limited to tested document operations.
-//! Source engine: pinned WordCraft 0.14.0.
+//! Source engines: exact reviewed commits in upstream/engines.lock.json.
 use std::{panic::{catch_unwind, AssertUnwindSafe}, sync::Arc};
 #[cfg(test)]
 use std::ptr;

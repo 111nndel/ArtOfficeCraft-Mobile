@@ -24,6 +24,7 @@ class SheetViewport extends StatefulWidget {
        onWindowChanged = null,
        columnExtent = 116,
        rowHeaderExtent = 52,
+       columnHeaderExtent = rowExtent,
        layout = null,
        onResize = null;
   const SheetViewport.cells({
@@ -40,11 +41,16 @@ class SheetViewport extends StatefulWidget {
     this.rowExtent = 56,
     this.columnExtent = 116,
     this.rowHeaderExtent = 52,
+    this.columnHeaderExtent = 56,
   }) : columnCount = columnCount,
        width = rowHeaderExtent + columnCount * columnExtent,
        rowBuilder = null,
        header = null;
-  final double width, rowExtent, columnExtent, rowHeaderExtent;
+  final double width,
+      rowExtent,
+      columnExtent,
+      rowHeaderExtent,
+      columnHeaderExtent;
   final int rowCount;
   final int? columnCount;
   final IndexedWidgetBuilder? rowBuilder, columnHeaderBuilder, rowHeaderBuilder;
@@ -75,7 +81,7 @@ class SheetViewportState extends State<SheetViewport> {
       widget.layout?.columns ??
       GridAxis(widget.columnCount ?? 1, widget.columnExtent);
   double get zoom => transform.value.getMaxScaleOnAxis();
-  double get _heading => widget.rowExtent;
+  double get _heading => widget.columnHeaderExtent;
   double get _width =>
       widget.cellBuilder == null ? widget.width : columns.total;
   double get _height => widget.cellBuilder == null

@@ -1,4 +1,4 @@
-//! GridCraft 0.15.0: real XLSX create/read/edit/write bridge.
+//! GridCraft: real XLSX create/read/edit/write bridge.
 //! Preview is bounded and does not pretend to render full Excel features.
 use gridcraft_core::{CellRef, Value};
 use gridcraft_model::{Cell, Formula, Workbook};
@@ -43,6 +43,31 @@ fn put(w: &mut Workbook, sheet_index: usize, a1: &str, value: &str) -> Result<()
     }
     Ok(())
 }
+
+/// Insert a SUM only into a vacant, unmerged cell. Prefer the contiguous
+/// numeric range above, then the one to the left; never replace user content.
+fn autosum(w: &mut Workbook, idx: usize, address: &str) -> Result<(),String> {
+    if w.protected_structure {return Err("Workbook is protected".into())}
+    let loc=CellRef::parse(address).ok_or("Invalid A1 reference")?;
+    let sh=w.sheet(idx).ok_or("Sheet index out of bounds")?;
+    if sh.protection.is_some() {return Err("Protected sheet cannot be edited".into())}
+    if sh.merge_at(loc).is_some() {return Err("AutoSum requires an unmerged cell".into())}
+    if sh.cell(loc).is_some_and(|c|c.formula.is_some() || c.py.is_some() || c.value!=Value::Empty) {
+        return Err("AutoSum requires an empty cell below or to the right of numbers".into())
+    }
+    let numeric=|r,c| sh.cell(CellRef::new(r,c)).is_some_and(|cell|matches!(cell.value,Value::Number(v) if v.is_finite()));
+    let mut first=loc;
+    while first.row>0 && numeric(first.row-1,loc.col) {first.row-=1;}
+    let last=if first!=loc {CellRef::new(loc.row-1,loc.col)} else {
+        while first.col>0 && numeric(loc.row,first.col-1) {first.col-=1;}
+        if first==loc {return Err("No adjacent numeric range for AutoSum".into())}
+        CellRef::new(loc.row,loc.col-1)
+    };
+    let formula=Formula::new(&format!("=SUM({}:{})",first.a1(),last.a1()));
+    let style=sh.style_id(loc);
+    w.sheet_mut(idx).unwrap().set_cell(loc,Cell {style,..Cell::formula(formula)});
+    Ok(())
+}
 fn format_cell(w:&mut Workbook, idx:usize, a1:&str, patch:&Json)->Result<(),String> {
     if w.protected_structure {return Err("Workbook is protected".into())}
     let loc=CellRef::parse(a1).ok_or("Invalid A1 reference")?;
@@ -80,6 +105,7 @@ fn format_cell(w:&mut Workbook, idx:usize, a1:&str, patch:&Json)->Result<(),Stri
                 _=>return Err("Unsupported vertical alignment".into())
             },
             "wrap"=>style.align.wrap=value.as_bool().ok_or("wrap must be boolean")?,
+            "shrink"=>style.align.shrink=value.as_bool().ok_or("shrink must be boolean")?,
             "numFmt"=>{
                 let code=value.as_str().filter(|v| !v.is_empty() && v.chars().count()<=255 && !v.contains('\0')).ok_or("Invalid number format")?;
                 style.num_fmt=NumFmt::new(code);
@@ -150,7 +176,18 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
-        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth") {return Err("Unknown cell action".into())}
+        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate") {return Err("Unknown cell action".into())}
+        if matches!(action,"autosum"|"recalculate") && req.get("value").is_some() {
+            return Err("Calculation actions do not accept a cell value".into())
+        }
+        if action=="autosum" {autosum(&mut wb,idx,address)?;}
+        if action=="recalculate" {
+            CellRef::parse(address).ok_or("Invalid A1 reference")?;
+            if wb.protected_structure || wb.sheets.iter().any(|s|s.protection.is_some()) {
+                return Err("Protected workbook cannot be recalculated in this preview".into())
+            }
+            wb.sheet(idx).ok_or("Sheet index out of bounds")?;
+        }
         if action=="rowHeight" || action=="columnWidth" {
             let line=req.get("index").and_then(Json::as_u64).ok_or("Missing line index")?;
             let limit=if action=="rowHeight" {gridcraft_core::MAX_ROWS} else {gridcraft_core::MAX_COLS};
@@ -166,10 +203,10 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         if action=="value" || req.get("value").is_some() {
             let value=req.get("value").and_then(Json::as_str).ok_or("Missing cell value")?;
             put(&mut wb,idx,address,value)?;
+        }
+        if action=="value" || req.get("value").is_some() || matches!(action,"autosum"|"recalculate") {
             gridcraft_calc::Calc::new().recalc_all(&mut wb);
         }
-
-
         write(&wb)
     })
 }
@@ -393,6 +430,58 @@ mod formatting_tests {
         let result=unsafe {std::slice::from_raw_parts(r.ptr,r.len).to_vec()};
         let status=r.status;super::super::ac_result_free(r);
         assert_eq!(status,0,"{}",String::from_utf8_lossy(&result));result
+    }
+    #[test]
+    fn autosum_chooses_vertical_then_horizontal_and_preserves_style() {
+        let mut wb=Workbook::new();
+        for (address,value) in [("A1",12.0),("A2",8.0),("B3",4.0),("C3",6.0)] {
+            wb.sheet_mut(0).unwrap().set_value(CellRef::parse(address).unwrap(),Value::number(value));
+        }
+        let bytes=write(&wb).unwrap();
+        let styled=edit(&bytes,json!({"action":"format","sheet":0,"address":"A3","style":{"numFmt":"0.00","fill":"#E2F0D9"}}));
+        let vertical=edit(&styled,json!({"action":"autosum","sheet":0,"address":"A3"}));
+        let horizontal=edit(&vertical,json!({"action":"autosum","sheet":0,"address":"D3"}));
+        let result=workbook(&horizontal).unwrap();let sh=result.sheet(0).unwrap();
+        assert_eq!(sh.input_text(CellRef::parse("A3").unwrap()),"=SUM(A1:A2)");
+        assert_eq!(sh.cell(CellRef::parse("A3").unwrap()).unwrap().value,Value::number(20.0));
+        assert_eq!(sh.input_text(CellRef::parse("D3").unwrap()),"=SUM(A3:C3)");
+        assert_eq!(sh.cell(CellRef::parse("D3").unwrap()).unwrap().value,Value::number(30.0));
+        let style=result.styles.get(sh.style_id(CellRef::parse("A3").unwrap()));
+        assert_eq!(style.num_fmt.as_str(),"0.00");assert_eq!(style.fill.fg,Color::Rgb(0xE2F0D9));
+        assert!(workbook(&styled).unwrap().sheet(0).unwrap().input_text(CellRef::parse("A3").unwrap()).is_empty());
+    }
+    #[test]
+    fn calculation_actions_reject_nonempty_missing_range_and_protection_without_mutation() {
+        let mut wb=Workbook::new();put(&mut wb,0,"A1","12").unwrap();put(&mut wb,0,"B1","=0").unwrap();
+        let bytes=write(&wb).unwrap();
+        for request in [json!({"action":"autosum","sheet":0,"address":"A1"}),
+            json!({"action":"autosum","sheet":0,"address":"B1"}),
+            json!({"action":"autosum","sheet":0,"address":"Z99"}),
+            json!({"action":"recalculate","sheet":0,"address":"XFE1"}),
+            json!({"action":"autosum","sheet":0,"address":"A2","value":"erase"})] {
+            let req=request.to_string();let r=ac_xlsx_set_cell(bytes.as_ptr(),bytes.len(),req.as_ptr(),req.len());
+            assert_ne!(r.status,0);super::super::ac_result_free(r);
+        }
+        wb.protected_structure=true;
+        for action in ["autosum","recalculate"] {
+            let protected=write(&wb).unwrap();let req=json!({"action":action,"sheet":0,"address":"A2"}).to_string();
+            let r=ac_xlsx_set_cell(protected.as_ptr(),protected.len(),req.as_ptr(),req.len());
+            assert_ne!(r.status,0);super::super::ac_result_free(r);
+        }
+        assert_eq!(workbook(&bytes).unwrap().sheet(0).unwrap().input_text(CellRef::parse("A1").unwrap()),"12");
+    }
+    #[test]
+    fn recalculate_refreshes_imported_stale_formula_and_keeps_geometry() {
+        let mut wb=Workbook::new();put(&mut wb,0,"A1","12").unwrap();put(&mut wb,0,"B1","8").unwrap();
+        let mut stale=Cell::formula(Formula::new("=A1+B1"));stale.value=Value::number(999.0);
+        wb.sheet_mut(0).unwrap().set_cell(CellRef::parse("C1").unwrap(),stale);
+        wb.sheet_mut(0).unwrap().cols.entry(0).or_default().size=Some(193.0);
+        let original=write(&wb).unwrap();
+        let result=edit(&original,json!({"action":"recalculate","sheet":0,"address":"A1"}));
+        let reopened=workbook(&result).unwrap();let sh=reopened.sheet(0).unwrap();
+        assert_eq!(sh.cell(CellRef::parse("C1").unwrap()).unwrap().value,Value::number(20.0));
+        assert_eq!(sh.input_text(CellRef::parse("C1").unwrap()),"=A1+B1");assert_eq!(sh.col_width(0),193.0);
+        assert_eq!(workbook(&original).unwrap().sheet(0).unwrap().cell(CellRef::parse("C1").unwrap()).unwrap().value,Value::number(999.0));
     }
     #[test]
     fn styles_survive_values_formulas_clear_and_xlsx_reopen() {

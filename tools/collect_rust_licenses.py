@@ -1,7 +1,26 @@
 """Collect resolved Rust dependency license texts offline; fail on missing notices."""
-import argparse,json,re,subprocess
+import argparse,hashlib,json,re,subprocess
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
+
+def supplemental_texts(pkg, root, *, project=ROOT):
+    """Exact, reviewed upstream notices for published crates missing license files."""
+    entries=json.loads((project/'licenses/third-party/overrides.json').read_text(encoding='utf-8'))
+    matches=[e for e in entries if pkg['name'] in e['packages'] and pkg['version']==e['version']]
+    if not matches:return []
+    if len(matches)!=1:raise RuntimeError('Ambiguous supplemental license')
+    entry=matches[0]
+    vcs=json.loads((root/'.cargo_vcs_info.json').read_text(encoding='utf-8'))
+    if pkg.get('repository')!=entry['repository'] or pkg.get('license')!=entry['license'] or vcs['git']['sha1']!=entry['commit']:
+        raise RuntimeError('Supplemental license source mismatch')
+    texts=[]
+    for notice in entry['texts']:
+        file=(project/notice['path']).resolve()
+        if not file.is_relative_to(project.resolve()):raise RuntimeError('License path escapes project')
+        data=file.read_bytes()
+        if hashlib.sha256(data).hexdigest()!=notice['sha256']:raise RuntimeError('Supplemental license hash mismatch')
+        texts.append({'name':file.name,'text':data.decode('utf-8')})
+    return texts
 
 def collect(metadata):
     active={node['id'] for node in metadata['resolve']['nodes']}
@@ -24,6 +43,7 @@ def collect(metadata):
             value=file.read_text(encoding='utf-8',errors='replace')
             if value in seen:continue
             seen.add(value);texts.append({'name':file.name,'text':value})
+        if not texts:texts=supplemental_texts(pkg,root)
         if not texts:raise RuntimeError(f"Missing license text: {pkg['name']} {pkg['version']}")
         result.append({'name':pkg['name'],'version':pkg['version'],'license':pkg.get('license'),
             'repository':pkg.get('repository'),'texts':texts})

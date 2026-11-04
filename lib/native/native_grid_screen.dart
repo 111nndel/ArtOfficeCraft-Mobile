@@ -397,6 +397,30 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await flushInput();
     inputFocus.unfocus();
   });
+  Future<void> autoSum() => run(() async {
+    if (book == null) return;
+    if (input.text.isNotEmpty || currentInput.isNotEmpty) {
+      tip('Выберите пустую ячейку под числами или справа от них');
+      return;
+    }
+    await applyEdit({
+      'action': 'autosum',
+      'sheet': sheetIndex,
+      'address': selected,
+    });
+    inputFocus.unfocus();
+  });
+  Future<void> recalculate() => run(() async {
+    if (book == null) return;
+    await flushInput();
+    await applyEdit({
+      'action': 'recalculate',
+      'sheet': sheetIndex,
+      'address': selected,
+    });
+    inputFocus.unfocus();
+    tip('Формулы пересчитаны');
+  });
   Future<void> selectCell(String address, {bool reveal = false}) =>
       run(() async {
         if (address == selected && !reveal) return;
@@ -473,7 +497,6 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
   final inputFocus = FocusNode();
   Widget header(String text) => Container(
-    height: 56,
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -485,9 +508,13 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     child: Text(
       text,
       maxLines: 1,
+      textScaler: TextScaler.noScaling,
+      overflow: TextOverflow.clip,
       style: TextStyle(
         color: Theme.of(context).colorScheme.onSurfaceVariant,
-        fontSize: 14,
+        fontSize: 11,
+        height: 1,
+        fontWeight: FontWeight.w500,
       ),
     ),
   );
@@ -506,6 +533,32 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     );
     final numeric = item is Map && item['numeric'] == true;
     final fill = rgb(style['fill']) ?? Colors.white;
+    final text = Text(
+      value,
+      softWrap: style['wrap'] == true,
+      textAlign: switch (style['align']) {
+        'center' => TextAlign.center,
+        'right' => TextAlign.right,
+        _ => numeric ? TextAlign.right : TextAlign.left,
+      },
+      textScaler: TextScaler.noScaling,
+      style: TextStyle(
+        height: 1.1,
+        color: rgb(style['color']) ?? const Color(0xff172634),
+        fontSize: ((style['fontSize'] as num?)?.toDouble() ?? 12) * 4 / 3,
+        fontFamily: style['fontName'] as String?,
+        fontWeight: style['bold'] == true ? FontWeight.bold : FontWeight.normal,
+        fontStyle: style['italic'] == true
+            ? FontStyle.italic
+            : FontStyle.normal,
+        decoration: TextDecoration.combine([
+          if (style['underline'] == true) TextDecoration.underline,
+          if (style['strike'] == true) TextDecoration.lineThrough,
+        ]),
+      ),
+      maxLines: style['wrap'] == true ? null : 1,
+      overflow: TextOverflow.clip,
+    );
     return InkWell(
       key: ValueKey('grid-cell-$address'),
       onTap: busy ? null : () => selectCell(address),
@@ -549,34 +602,17 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 ),
         ),
         child: ClipRect(
-          child: Text(
-            value,
-            softWrap: style['wrap'] == true,
-            textAlign: switch (style['align']) {
-              'center' => TextAlign.center,
-              'right' => TextAlign.right,
-              _ => numeric ? TextAlign.right : TextAlign.left,
-            },
-            textScaler: TextScaler.noScaling,
-            style: TextStyle(
-              height: 1.1,
-              color: rgb(style['color']) ?? const Color(0xff172634),
-              fontSize: ((style['fontSize'] as num?)?.toDouble() ?? 12) * 4 / 3,
-              fontFamily: style['fontName'] as String?,
-              fontWeight: style['bold'] == true
-                  ? FontWeight.bold
-                  : FontWeight.normal,
-              fontStyle: style['italic'] == true
-                  ? FontStyle.italic
-                  : FontStyle.normal,
-              decoration: TextDecoration.combine([
-                if (style['underline'] == true) TextDecoration.underline,
-                if (style['strike'] == true) TextDecoration.lineThrough,
-              ]),
-            ),
-            maxLines: style['wrap'] == true ? null : 1,
-            overflow: TextOverflow.clip,
-          ),
+          child: style['shrink'] == true && style['wrap'] != true
+              ? FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment(switch (style['align']) {
+                    'center' => 0.0,
+                    'right' => 1.0,
+                    _ => numeric ? 1.0 : -1.0,
+                  }, 0),
+                  child: text,
+                )
+              : text,
         ),
       ),
     );
@@ -609,7 +645,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         key: gridViewport,
         rowCount: gridMaxRows,
         columnCount: gridMaxColumns,
-        rowHeaderExtent: 64,
+        rowHeaderExtent: 46,
+        columnHeaderExtent: 28,
         layout: layout,
         onResize: busy ? null : resizeLine,
         corner: header(''),
@@ -628,7 +665,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         ),
       if (viewFailed)
         Positioned(
-          top: 56,
+          top: 28,
           left: 4,
           right: 4,
           child: Material(
@@ -795,6 +832,19 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         'grid',
         exclude: {'Ж'},
         leading: {
+          'Формулы': [
+            EditorTool(
+              'Автосумма складывает соседние числа сверху, а если их нет — слева. Выберите пустую ячейку для результата.',
+              Icons.info_outline,
+              inline: true,
+              builder: (_) => const Padding(
+                padding: EdgeInsets.all(12),
+                child: UiText(
+                  'Автосумма складывает соседние числа сверху, а если их нет — слева. Выберите пустую ячейку для результата.',
+                ),
+              ),
+            ),
+          ],
           'Вид': [
             EditorTool(
               'Размер строк и столбцов',
@@ -859,6 +909,16 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ],
         },
         overrides: {
+          '∑ Автосумма': EditorTool(
+            '∑ Автосумма',
+            Icons.functions,
+            onPressed: busy || book == null ? null : autoSum,
+          ),
+          'Пересчитать': EditorTool(
+            'Пересчитать',
+            Icons.refresh,
+            onPressed: busy || book == null ? null : recalculate,
+          ),
           'Масштаб': EditorTool(
             'Масштаб',
             Icons.zoom_in,
@@ -926,6 +986,13 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 {'wrap': cellStyle['wrap'] != true},
               ),
               colors('Цвет текста', 'color', Icons.format_color_text),
+              action(
+                cellStyle['shrink'] == true
+                    ? 'Выключить уменьшение текста'
+                    : 'Уменьшить текст по ширине',
+                Icons.fit_screen,
+                {'shrink': cellStyle['shrink'] != true},
+              ),
             ],
           ),
           'Заливка': colors('Заливка', 'fill', Icons.format_color_fill),

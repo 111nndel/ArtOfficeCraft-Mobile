@@ -1,3 +1,6 @@
+import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
+import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
+import 'package:artofficecraft_mobile/ui/office_theme.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
 import 'package:artofficecraft_mobile/ui/sheet_viewport.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +9,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'grid_editing_test.dart' as grid;
 
 void main() {
+  testWidgets(
+    'Document headings stay compact with large system text and sheet zoom',
+    (tester) async {
+      final backend = grid.MemoryGrid();
+      await grid.open(tester, backend);
+      final context = tester.element(find.byType(SheetViewport));
+      final scale = MediaQuery.of(context)
+          .copyWith(textScaler: TextScaler.linear(3));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: OfficeTheme.build(Brightness.light),
+          builder: (_, child) => MediaQuery(data: scale, child: child!),
+          home: NativeGridScreen(
+            backend: backend,
+            launch: const EditorLaunch(create: true),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final viewport = tester.state<SheetViewportState>(
+        find.byType(SheetViewport),
+      );
+      final heading = find.byKey(const ValueKey('grid-column-header-0'));
+      final label = find.descendant(of: heading, matching: find.byType(Text));
+      expect(tester.getSize(heading).height, 28);
+      expect(tester.widget<Text>(label).style!.fontSize, 11);
+      expect(tester.widget<Text>(label).textScaler!.scale(11), 11);
+      viewport.setZoom(5);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(heading).height, 28);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('grid-row-header-0'))).width,
+        46,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'A failed window read preserves pending input and clears when returning to loaded cells',
     (tester) async {

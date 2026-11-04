@@ -327,7 +327,7 @@ void main() {
 
       final info = await readNativeBuildInfo();
       expect(info!['abi'], 1);
-      expect(info['coreVersion'], '0.18.0');
+      expect(info['coreVersion'], '0.19.0');
       expect((info['engines'] as Map).keys.toSet(), {
         'wordcraft',
         'gridcraft',
@@ -1011,6 +1011,109 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await backend.close();
+    },
+  );
+  testWidgets(
+    'Compact headings and actual formula commands save, undo and reopen',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(() => backend.close());
+      var bytes = await backend.create();
+      for (final entry in {'A1': '12', 'A2': '8'}.entries) {
+        bytes = await backend.edit(bytes, {
+          'sheet': 0,
+          'address': entry.key,
+          'value': entry.value,
+        });
+      }
+      bytes = await backend.edit(bytes, {
+        'sheet': 0,
+        'address': 'B1',
+        'action': 'format',
+        'value': 'Long imported label',
+        'style': {'shrink': true},
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: OfficeTheme.build(Brightness.light),
+          home: NativeGridScreen(
+            backend: backend,
+            launch: EditorLaunch(bytes: bytes, name: 'Formulas.xlsx'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('grid-column-header-0')))
+            .height,
+        28,
+      );
+      final shrink = find.descendant(
+        of: find.byKey(const ValueKey('grid-cell-B1')),
+        matching: find.byType(FittedBox),
+      );
+      expect(shrink, findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('grid-cell-A3')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Главная'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Формулы'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('∑ Автосумма'));
+      await tester.pumpAndSettle();
+      final formula = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      expect(tester.widget<TextField>(formula).controller!.text, '=SUM(A1:A2)');
+      await tester.tap(find.byTooltip('Отменить'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '');
+      await tester.tap(find.byTooltip('Повторить'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '=SUM(A1:A2)');
+      await tester.tap(find.text('Пересчитать'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Свернуть инструменты'));
+      await tester.pumpAndSettle();
+      const files = MethodChannel('flutter_file_dialog');
+      Uint8List? exported;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(files, (call) async {
+            exported = (call.arguments as Map)['data'] as Uint8List;
+            return '/test/Formulas.xlsx';
+          });
+      try {
+        await tester.tap(find.byTooltip('Меню файла'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Сохранить копию'));
+        await tester.pumpAndSettle();
+        final reopened = await backend.inspectGrid(
+          exported!,
+          const GridWindow(0, 0, 0),
+          'A3',
+        );
+        expect(reopened['selection']['input'], '=SUM(A1:A2)');
+        expect(reopened['selection']['display'], '20');
+        expect(reopened['sheets'][0]['cells']['B1']['style']['shrink'], true);
+        expect(
+          (await backend.inspectGrid(
+            bytes,
+            const GridWindow(0, 0, 0),
+            'A3',
+          ))['selection']['input'],
+          '',
+        );
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(files, null);
+      }
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpAndSettle();
+      await capture(tester, 'compact-grid-formulas');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 }

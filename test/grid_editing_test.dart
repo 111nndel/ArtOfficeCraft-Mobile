@@ -78,6 +78,44 @@ Future<void> save(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets(
+    'Formula tools preserve dirty input, call the backend and support undo',
+    (tester) async {
+      final backend = MemoryGrid();
+      await open(tester, backend);
+      await tester.tap(find.text('Главная'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Формулы'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('∑ Автосумма'));
+      await tester.pumpAndSettle();
+      expect(backend.requests.single['action'], 'autosum');
+      await tester.tap(find.byTooltip('Свернуть инструменты'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '12');
+      await tester.pump();
+      await tester.tap(find.byTooltip('Развернуть инструменты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('∑ Автосумма'));
+      await tester.pumpAndSettle();
+      expect(backend.requests, hasLength(1));
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '12',
+      );
+      await tester.tap(find.text('Пересчитать'));
+      await tester.pumpAndSettle();
+      expect(backend.requests.map((r) => r['action'] ?? 'value'), [
+        'autosum',
+        'value',
+        'recalculate',
+      ]);
+      expect(backend.requests[1]['value'], '12');
+      await tester.tap(find.byTooltip('Отменить'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
   const channel = MethodChannel('flutter_file_dialog');
   tearDown(
     () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

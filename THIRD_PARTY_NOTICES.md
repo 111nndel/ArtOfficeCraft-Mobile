@@ -38,3 +38,11 @@ branding, or original third-party installers are bundled in this source reposito
 
 The original integration code is distributed under the repository's MIT LICENSE.
 This does not override any third-party copyright or trademark requirements.
+
+RaTeX 0.1.14 (ratex-font/layout/lexer/parser/types) is introduced by GridCraft's
+math support. Published crates omit their standalone license files. Exact source
+commit `08cae05377938391117913ca4f278e6a3ffb6a8a` provides the MIT license and font
+notices copied verbatim under `licenses/third-party/ratex-0.1.14/`.
+`overrides.json` binds these supplemental texts to the exact package versions,
+repository, declared license, Cargo VCS commit and SHA-256 of each text. Unknown
+versions/sources still fail license collection; collection stays offline.

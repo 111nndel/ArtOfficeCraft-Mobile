@@ -415,4 +415,10 @@ const english = <String, String>{
   "Перейти": "Go",
   "Введите адрес от A1 до XFD1048576": "Enter an address from A1 to XFD1048576",
   "Повторить загрузку области": "Retry loading this area",
+  "Выберите пустую ячейку под числами или справа от них":
+      "Select an empty cell below or to the right of numbers",
+  "Формулы пересчитаны": "Formulas recalculated",
+  "Выключить уменьшение текста": "Turn off shrink to fit",
+  "Уменьшить текст по ширине": "Shrink to fit",
+  "Автосумма складывает соседние числа сверху, а если их нет — слева. Выберите пустую ячейку для результата.": "AutoSum adds adjacent numbers above, or to the left if there are none above. Select an empty cell for the result.",
 };
