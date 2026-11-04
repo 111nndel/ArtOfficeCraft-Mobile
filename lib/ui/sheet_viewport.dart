@@ -274,12 +274,13 @@ class SheetViewportState extends State<SheetViewport>
   void goToCell(int row, int column) {
     _inertia.stop();
     _fitMode = 0;
+    final scale = _overviewActive ? math.max(1.0, zoom * 2) : zoom;
     _translate(
       widget.cellBuilder == null
           ? column * widget.columnExtent
           : columns.offset(column),
       widget.cellBuilder == null ? row * widget.rowExtent : rows.offset(row),
-      zoom,
+      scale,
     );
   }
 
@@ -570,7 +571,6 @@ class SheetViewportState extends State<SheetViewport>
               }
               final row = rows.indexAt(point.dy),
                   col = columns.indexAt(point.dx);
-              setZoom(math.max(1.0, zoom * 2));
               goToCell(row, col);
               widget.onOverviewTap!(row, col);
             },

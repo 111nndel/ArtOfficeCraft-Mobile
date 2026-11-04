@@ -139,6 +139,12 @@ void main() {
       );
       state.fitUsedRange();
       await tester.pumpAndSettle();
+      state.goToCell(200, 5);
+      await tester.pumpAndSettle();
+      expect(state.zoom, 1, reason: 'Go to cell must leave a fitted overview');
+      expect(state.screenPoint(const Offset(1500, 13600)).dy, closeTo(56, .01));
+      state.fitUsedRange();
+      await tester.pumpAndSettle();
       final target = state.screenPoint(const Offset(3300 / 2, 232 * 68 / 2));
       await tester.tapAt(target);
       await tester.pumpAndSettle();

@@ -10,6 +10,7 @@ sheet and Fit width use sparse imported geometry and hidden dimensions. The
 whole-sheet overview centers the used range, and fit survives viewport resizing.
 Normal touch gestures return to manual scale. Tap-to-edit resolves a document
 coordinate, restores readable scale and uses the checked native edit pipeline.
+Go to cell also leaves overview mode instead of remaining clamped to used bounds.
 
 The regular FFI view keeps its 128-row/32-column/4096-cell limits. An explicit
 rectangle-only overview request iterates stored sparse records, rather than
