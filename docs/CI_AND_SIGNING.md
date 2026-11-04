@@ -59,24 +59,16 @@ it, delete the source keystore, or silently replace it with a runner-generated k
 The Windows fallback publisher also checks this exact certificate before it can
 create a release. Use its `-VerifyOnly` switch to check an APK without publishing.
 
-The private keystore is held in GitHub environment secret
-`AOC_PREVIEW_KEYSTORE_BASE64`, not in Git. Base64 is transport encoding, not
-encryption; GitHub encrypts stored secrets. The established development key uses
-alias `androiddebugkey` and the standard development-store password. It must not
-be presented as production-grade key protection or used as a Play release key.
+The signing key is provided to the isolated publishing job through a protected
+GitHub environment secret; it is not stored in the repository. The existing
+preview certificate is a **development** identity and must not be used as a
+production or Google Play signing key.
 
-A separate private copy is kept outside the source checkout on the build PC.
-An encrypted PKCS12 backup of the same key is also saved in ChatGPT as
-`ArtOfficeCraft_Signing_Backup_2026-11-03.zip`. Its independently generated
-256-bit random password is **not** in the archive, chat or repository; it is in
-`%LOCALAPPDATA%\ArtOfficeCraft\Signing\backup-password.txt` on the build PC,
-inside a current-user/SYSTEM-only directory. The backup was restored into a
-temporary keystore and successfully signed an APK with the original fingerprint;
-the temporary keystore was deleted. The owner must move the backup password to
-an independent password manager before retiring or losing that PC.
-Public certificate fingerprints and this document can be stored or shared safely;
-they cannot recreate a lost private key. ChatGPT file storage does not make a
-signing key permanent, and a chat should not be the only recovery location.
-An independent encrypted backup and its password must be retained by the owner
-before retiring that PC or changing accounts. Expiration/production-key migration
-requires a separately planned signing transition, not a changed fingerprint.
+Keep independently encrypted backups of signing credentials and recovery
+passphrases in private, access-controlled storage. Never publish backup
+filenames, storage locations, password locations, credentials, or recovery
+instructions in this repository. The public certificate fingerprint cannot be
+used to reconstruct the private key.
+
+Any future change to signing identity requires a separate, carefully planned
+migration to avoid breaking updates for existing installations.
