@@ -3,6 +3,7 @@ import '../workspace/document_picker.dart';
 import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../ui/sheet_viewport.dart';
+import '../ui/grid_overview.dart';
 import '../workspace/draft_store.dart';
 
 import 'dart:async';
@@ -69,6 +70,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
 
   final toolPanel = GlobalKey<EditorToolPanelState>();
   bool toolsExpanded = false;
+  bool headingsPinned = false;
+  bool overviewSampled = false;
   bool formulaExpanded = false;
   late final DocumentBackend? bridge =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.grid);
@@ -278,11 +281,21 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     layout = GridLayout.fromJson(parsed['layout'] as Map?);
     selected = selectedCell['address'] as String? ?? selected;
     loadedWindow = window;
+    overviewSampled = parsed['overviewTruncated'] == true;
     viewFailed = false;
   }
 
   void visibleWindow(GridWindow region) {
-    final visible = region.rowIndices != null
+    final visible = region.overview
+        ? GridWindow(
+            sheetIndex,
+            region.row,
+            region.column,
+            rows: region.rows,
+            columns: region.columns,
+            overview: true,
+          )
+        : region.rowIndices != null
         ? GridWindow.visible(
             sheetIndex,
             region.rowIndices!,
@@ -429,7 +442,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         if (position == null) {
           throw const FormatException('Введите адрес от A1 до XFD1048576');
         }
-        final window = loadedWindow.contains(position.row, position.column)
+        final window =
+            !loadedWindow.overview &&
+                loadedWindow.contains(position.row, position.column)
             ? loadedWindow
             : GridWindow(
                 sheetIndex,
@@ -522,7 +537,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     final item = address == selected ? selectedCell : cells[address];
     final position = gridAddress(address)!;
     final known =
-        item is Map || loadedWindow.contains(position.row, position.column);
+        item is Map ||
+        !loadedWindow.overview &&
+            loadedWindow.contains(position.row, position.column);
     final value = !known
         ? '…'
         : item is Map
@@ -648,6 +665,15 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         rowHeaderExtent: 46,
         columnHeaderExtent: 28,
         layout: layout,
+        freezeHeadings: headingsPinned,
+        overviewBuilder: (_) => RepaintBoundary(
+          child: CustomPaint(
+            key: const Key('grid-overview'),
+            painter: GridOverviewPainter(layout, cells, selected),
+          ),
+        ),
+        onOverviewTap: (row, col) =>
+            selectCell('${gridColumnName(col)}${row + 1}'),
         onResize: busy ? null : resizeLine,
         corner: header(''),
         columnHeaderBuilder: (context, col) => header(gridColumnName(col)),
@@ -707,6 +733,15 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         reveal: true,
       ),
     );
+  }
+
+  void fitView({bool widthOnly = false}) {
+    toolPanel.currentState?.setExpanded(false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        gridViewport.currentState?.fitUsedRange(widthOnly: widthOnly);
+      }
+    });
   }
 
   @override
@@ -818,6 +853,35 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
               action(color.$1, icon, {property: color.$2}),
           ],
         );
+    final zoomTool = EditorTool(
+      'Масштаб',
+      Icons.zoom_in,
+      children: [
+        for (final percent in [
+          1,
+          2,
+          5,
+          10,
+          15,
+          25,
+          33,
+          50,
+          75,
+          100,
+          125,
+          150,
+          200,
+          300,
+          400,
+          500,
+        ])
+          EditorTool(
+            '$percent%',
+            Icons.zoom_in,
+            onPressed: () => gridViewport.currentState?.setZoom(percent / 100),
+          ),
+      ],
+    );
     return EditorToolPanel(
       key: toolPanel,
       color: const Color(0xff17815c),
@@ -830,7 +894,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           : null,
       sections: officeSections(
         'grid',
-        exclude: {'Ж'},
+        exclude: {'Ж', 'Масштаб'},
         leading: {
           'Формулы': [
             EditorTool(
@@ -846,16 +910,33 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             ),
           ],
           'Вид': [
-            EditorTool(
-              'Размер строк и столбцов',
-              Icons.touch_app_outlined,
-              inline: true,
-              builder: (_) => const Padding(
-                padding: EdgeInsets.all(12),
-                child: UiText(
-                  'Удерживайте заголовок строки или столбца и тяните для изменения размера. Двумя пальцами изменяйте масштаб таблицы.',
+            if (overviewSampled)
+              EditorTool(
+                'Упрощённый обзор',
+                Icons.info_outline,
+                inline: true,
+                builder: (_) => const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: UiText(
+                    'Для большой таблицы обзор упрощён. Нажмите на участок, чтобы открыть точные ячейки.',
+                  ),
                 ),
               ),
+            EditorTool(
+              'Вся таблица',
+              Icons.fit_screen,
+              onPressed: () => fitView(),
+            ),
+            EditorTool(
+              'По ширине таблицы',
+              Icons.width_full,
+              onPressed: () => fitView(widthOnly: true),
+            ),
+            zoomTool,
+            EditorTool(
+              headingsPinned ? 'Открепить заголовки' : 'Закрепить заголовки',
+              Icons.push_pin_outlined,
+              onPressed: () => setState(() => headingsPinned = !headingsPinned),
             ),
             EditorTool(
               'Перейти к ячейке',
@@ -879,6 +960,17 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     child: const UiText('Перейти'),
                   ),
                 ],
+              ),
+            ),
+            EditorTool(
+              'Размер строк и столбцов',
+              Icons.touch_app_outlined,
+              inline: true,
+              builder: (_) => const Padding(
+                padding: EdgeInsets.all(12),
+                child: UiText(
+                  'Удерживайте заголовок строки или столбца и тяните для изменения размера. Двумя пальцами изменяйте масштаб таблицы.',
+                ),
               ),
             ),
           ],
@@ -918,19 +1010,6 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             'Пересчитать',
             Icons.refresh,
             onPressed: busy || book == null ? null : recalculate,
-          ),
-          'Масштаб': EditorTool(
-            'Масштаб',
-            Icons.zoom_in,
-            children: [
-              for (final percent in [50, 75, 100, 125, 150, 200, 300, 400, 500])
-                EditorTool(
-                  '$percent%',
-                  Icons.zoom_in,
-                  onPressed: () =>
-                      gridViewport.currentState?.setZoom(percent / 100),
-                ),
-            ],
           ),
           'Формат ячейки': EditorTool(
             'Формат ячейки',

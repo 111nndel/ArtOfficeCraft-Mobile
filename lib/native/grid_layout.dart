@@ -116,8 +116,32 @@ class GridMerge {
   String get address => '${gridColumnName(column)}${row + 1}';
 }
 
+class GridBounds {
+  const GridBounds(this.row, this.column, this.endRow, this.endColumn);
+  final int row, column, endRow, endColumn;
+  RectInSheet pixels(GridAxis rows, GridAxis columns) => RectInSheet(
+    columns.offset(column),
+    rows.offset(row),
+    columns.offset(endColumn + 1),
+    rows.offset(endRow + 1),
+  );
+}
+
+class RectInSheet {
+  const RectInSheet(this.left, this.top, this.right, this.bottom);
+  final double left, top, right, bottom;
+  double get width => right - left;
+  double get height => bottom - top;
+}
+
 class GridLayout {
-  GridLayout(this.rows, this.columns, this.merges, {this.showGridlines = true});
+  GridLayout(
+    this.rows,
+    this.columns,
+    this.merges, {
+    this.showGridlines = true,
+    this.usedBounds,
+  });
   factory GridLayout.fromJson(Map? json) {
     List<List<num>> runs(String key) => (json?[key] as List? ?? [])
         .map((v) => List<num>.from(v as List))
@@ -140,11 +164,21 @@ class GridLayout {
           )
           .toList(),
       showGridlines: json?['showGridlines'] != false,
+      usedBounds:
+          json?['usedRange'] is List && (json!['usedRange'] as List).length == 4
+          ? GridBounds(
+              (json['usedRange'][0] as num).toInt(),
+              (json['usedRange'][1] as num).toInt(),
+              (json['usedRange'][2] as num).toInt(),
+              (json['usedRange'][3] as num).toInt(),
+            )
+          : null,
     );
   }
   final GridAxis rows, columns;
   final List<GridMerge> merges;
   final bool showGridlines;
+  final GridBounds? usedBounds;
   GridMerge? mergeAt(int row, int column) {
     for (final merge in merges) {
       if (merge.contains(row, column)) return merge;

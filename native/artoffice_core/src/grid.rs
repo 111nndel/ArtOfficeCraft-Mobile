@@ -228,6 +228,15 @@ fn axis_runs(lines:&std::collections::BTreeMap<u32,gridcraft_model::features::Li
     runs
 }
 
+fn overview_cell(mut cell:Json)->Json {
+    let obj=cell.as_object_mut().unwrap();
+    obj.remove("input");
+    if let Some(text)=obj.get("display").and_then(Json::as_str).map(|s|s.chars().take(512).collect::<String>()) {
+        obj.insert("display".into(),Json::String(text));
+    }
+    cell
+}
+
 /// Bounded rectangle plus an independent selected-cell value. Sparse cells are
 /// looked up by address, never selected by a global populated-cell cutoff.
 #[unsafe(no_mangle)]
@@ -238,6 +247,12 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
         let idx=field("sheet")?;
         let row=field("row")?; let col=field("column")?;
         let rows=field("rows")?; let cols=field("columns")?;
+        let overview=match req.get("overview") {
+            None=>false,Some(v)=>v.as_bool().ok_or("overview must be boolean")?,
+        };
+        if overview && (req.get("rowIndices").is_some() || req.get("columnIndices").is_some()) {
+            return Err("Overview accepts a rectangle, not index lists".into())
+        }
         let indices=|name:&str,start:u64,count:u64,max:u32,cap:usize| -> Result<Vec<u32>,String> {
             if let Some(array)=req.get(name) {
                 let values=array.as_array().ok_or("Indices must be an array")?;
@@ -254,8 +269,8 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
                 Ok((start as u32..(start+count) as u32).collect())
             }
         };
-        let row_indices=indices("rowIndices",row,rows,gridcraft_core::MAX_ROWS,128)?;
-        let col_indices=indices("columnIndices",col,cols,gridcraft_core::MAX_COLS,32)?;
+        let row_indices=if overview {Vec::new()} else {indices("rowIndices",row,rows,gridcraft_core::MAX_ROWS,128)?};
+        let col_indices=if overview {Vec::new()} else {indices("columnIndices",col,cols,gridcraft_core::MAX_COLS,32)?};
         if rows==0 || cols==0 || row_indices.len()*col_indices.len()>4096 ||
             row>=gridcraft_core::MAX_ROWS as u64 || col>=gridcraft_core::MAX_COLS as u64 ||
             rows>gridcraft_core::MAX_ROWS as u64-row || cols>gridcraft_core::MAX_COLS as u64-col {
@@ -276,6 +291,18 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
                 "formula":sh.cell(loc).is_some_and(|c|c.formula.is_some()),"style":style_json(&wb,style)})
         };
         let mut cells=serde_json::Map::new();
+        let in_region=|loc:CellRef| (loc.row as u64)>=row && (loc.row as u64)<row+rows &&
+            (loc.col as u64)>=col && (loc.col as u64)<col+cols;
+        let overview_total=if overview {sh.cells.iter().filter(|(loc,_)|in_region(*loc)).count()} else {0};
+        const OVERVIEW_CAP:usize=8192;
+        if overview {
+            // Sample across the entire used range for huge sheets, never allocate
+            // a row×column matrix or silently return only the first rows.
+            let stride=if overview_total>OVERVIEW_CAP {overview_total.div_ceil(OVERVIEW_CAP-1)} else {1};
+            for (i,(loc,_)) in sh.cells.iter().filter(|(loc,_)|in_region(*loc)).enumerate() {
+                if i%stride==0 || i+1==overview_total {cells.insert(loc.a1(),overview_cell(inspect(loc)));}
+            }
+        }
         for &r in &row_indices {
             for &c in &col_indices {
                 let loc=CellRef::new(r,c);
@@ -286,12 +313,21 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
         }
         // Include anchors even when the visible portion starts inside a merge.
         for merge in &sh.merges {
-            if row_indices.iter().any(|r|*r>=merge.start.row && *r<=merge.end.row) &&
-                col_indices.iter().any(|c|*c>=merge.start.col && *c<=merge.end.col) {
-                cells.insert(merge.start.a1(),inspect(merge.start));
+            let intersects=if overview {in_region(merge.start) && cells.len()<OVERVIEW_CAP} else {
+                row_indices.iter().any(|r|*r>=merge.start.row && *r<=merge.end.row) &&
+                col_indices.iter().any(|c|*c>=merge.start.col && *c<=merge.end.col)
+            };
+            if intersects {
+                let cell=inspect(merge.start);
+                cells.insert(merge.start.a1(),if overview {overview_cell(cell)} else {cell});
             }
         }
         let selection=inspect(selected);
+        let mut used=sh.used_range().map(|r|[r.start.row,r.start.col,r.end.row,r.end.col]).unwrap_or([0,0,0,0]);
+        for m in &sh.merges {
+            used[0]=used[0].min(m.start.row);used[1]=used[1].min(m.start.col);
+            used[2]=used[2].max(m.end.row);used[3]=used[3].max(m.end.col);
+        }
         let sheets:Vec<_>=wb.sheets.iter().enumerate().map(|(i,s)|json!({"index":i,"name":s.name,
             "cells":if i as u64==idx {Json::Object(cells.clone())} else {json!({})},
             "protected":s.protection.is_some() || wb.protected_structure})).collect();
@@ -299,9 +335,10 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
             "defaultColumnWidth":valid_extent(sh.default_col_width,64.0),
             "rows":axis_runs(&sh.rows,sh.default_row_height),"columns":axis_runs(&sh.cols,sh.default_col_width),
             "merges":sh.merges.iter().map(|m|[m.start.row,m.start.col,m.end.row,m.end.col]).collect::<Vec<_>>(),
-            "showGridlines":sh.show_gridlines});
+            "showGridlines":sh.show_gridlines,"usedRange":used});
         serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
             "selection":selection,"window":req,"layout":layout,"warnings":report.warnings,
+            "overviewTruncated":overview && overview_total>OVERVIEW_CAP,"overviewTotalCells":overview_total,
             "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
     })
 }
@@ -315,6 +352,51 @@ mod window_tests {
         let data=unsafe{std::slice::from_raw_parts(r.ptr,r.len)}.to_vec();
         let status=r.status; super::super::ac_result_free(r);
         if status==0 {Ok(serde_json::from_slice(&data).unwrap())} else {Err(String::from_utf8_lossy(&data).into_owned())}
+    }
+    #[test]
+    fn whole_book_overview_reads_last_row_without_rectangle_limit_or_mutation() {
+        let mut wb=Workbook::new();
+        for row in 0..232 {for col in 0..11 {
+            wb.sheet_mut(0).unwrap().set_value(CellRef::new(row,col),Value::number((row*11+col) as f64));
+        }}
+        let original=write(&wb).unwrap();
+        let mut req=json!({"sheet":0,"row":0,"column":0,"rows":232,"columns":11,"selected":"K232"});
+        assert!(view(&original,req.clone()).is_err());
+        req["overview"]=json!(true);
+        let overview=view(&original,req).unwrap();
+        assert_eq!(overview["layout"]["usedRange"],json!([0,0,231,10]));
+        assert_eq!(overview["overviewTruncated"],false);
+        assert_eq!(overview["sheets"][0]["cells"].as_object().unwrap().len(),2552);
+        assert_eq!(overview["sheets"][0]["cells"]["K232"]["display"],"2551");
+        assert_eq!(overview["selection"]["input"],"2551");
+        assert_eq!(workbook(&original).unwrap().sheet(0).unwrap().cells.len(),2552);
+    }
+    #[test]
+    fn overview_caps_sparse_cells_and_text_across_the_entire_excel_range() {
+        let mut wb=Workbook::new();
+        for row in 0..20000 {
+            wb.sheet_mut(0).unwrap().set_value(CellRef::new(row*25,0),Value::number(row as f64));
+        }
+        put(&mut wb,0,"A1",&"x".repeat(1000)).unwrap();
+        let bytes=write(&wb).unwrap();
+        let overview=view(&bytes,json!({"overview":true,"sheet":0,"row":0,"column":0,"rows":1048576,"columns":16384,"selected":"A1"})).unwrap();
+        let cells=overview["sheets"][0]["cells"].as_object().unwrap();
+        assert!(cells.len()<=8192);
+        assert!(cells.contains_key("A499976"));
+        assert_eq!(cells["A1"]["display"].as_str().unwrap().len(),512);
+        assert!(cells["A1"].get("input").is_none());
+        assert_eq!(overview["selection"]["input"].as_str().unwrap().len(),1000);
+        assert_eq!(overview["overviewTruncated"],true);
+        assert_eq!(overview["overviewTotalCells"],20000);
+    }
+    #[test]
+    fn overview_rejects_ambiguous_and_invalid_requests() {
+        let bytes=write(&Workbook::new()).unwrap();
+        for patch in [json!({"overview":"yes"}),json!({"rowIndices":[0]}),json!({"rows":0}),json!({"columns":16385}),json!({"row":1048576})] {
+            let mut request=json!({"overview":true,"sheet":0,"row":0,"column":0,"rows":1048576,"columns":16384,"selected":"A1"});
+            request.as_object_mut().unwrap().extend(patch.as_object().unwrap().clone());
+            assert!(view(&bytes,request).is_err());
+        }
     }
     #[test]
     fn window_finds_dense_and_far_cells_without_global_cutoff() {

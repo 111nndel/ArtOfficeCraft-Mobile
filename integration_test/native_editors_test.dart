@@ -1,3 +1,5 @@
+import 'package:artofficecraft_mobile/native/grid_layout.dart';
+
 import 'grid_layout_fixture.dart';
 import 'worker_media_fixture.dart';
 
@@ -327,7 +329,7 @@ void main() {
 
       final info = await readNativeBuildInfo();
       expect(info!['abi'], 1);
-      expect(info['coreVersion'], '0.19.0');
+      expect(info['coreVersion'], '0.20.0');
       expect((info['engines'] as Map).keys.toSet(), {
         'wordcraft',
         'gridcraft',
@@ -590,6 +592,8 @@ void main() {
       await tester.tap(find.text('View'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Zoom'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('150%'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('150%'));
       await tester.pumpAndSettle();
@@ -1112,6 +1116,151 @@ void main() {
       await binding.convertFlutterSurfaceToImage();
       await tester.pumpAndSettle();
       await capture(tester, 'compact-grid-formulas');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'Whole-sheet overview, edge headings, pinch, tap-to-edit and export use real Rust',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(() => backend.close());
+      var bytes = gridLayoutFixture();
+      bytes = await backend.edit(bytes, {
+        'sheet': 0,
+        'address': 'K232',
+        'value': 'Overview end',
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: OfficeTheme.build(Brightness.light),
+          home: NativeGridScreen(
+            backend: backend,
+            launch: EditorLaunch(bytes: bytes, name: 'Overview.xlsx'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final viewport = tester.state<SheetViewportState>(
+        find.byType(SheetViewport),
+      );
+      viewport.goToCell(20, 5);
+      await tester.pumpAndSettle();
+      final canvas = tester.getRect(find.byKey(const Key('sheet-viewport')));
+      final corner = tester.getRect(find.byKey(const ValueKey('grid-corner')));
+      expect(corner.right, lessThan(canvas.left));
+      expect(corner.bottom, lessThan(canvas.top));
+      viewport.goToCell(0, 0);
+      await tester.pumpAndSettle();
+      final formula = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(formula, 'Keep pending overview input');
+      await tester.tap(find.byKey(const Key('tool-section-caption')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вид'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Вся таблица'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('grid-overview')), findsOneWidget);
+      final fitted = viewport.zoom;
+      expect(fitted, lessThan(.25));
+      final size = tester.getSize(find.byKey(const Key('sheet-viewport')));
+      final layout = (await backend.inspectGrid(
+        bytes,
+        const GridWindow(0, 0, 0),
+        'A1',
+      ))['layout'];
+      final gridLayout = GridLayout.fromJson(layout as Map);
+      expect(
+        viewport.documentPoint(Offset(size.width, size.height)).dy,
+        greaterThanOrEqualTo(gridLayout.rows.offset(232)),
+      );
+      expect(
+        viewport.documentPoint(Offset(size.width, size.height)).dx,
+        greaterThanOrEqualTo(gridLayout.columns.offset(11)),
+      );
+      expect(
+        tester.widget<TextField>(formula).controller!.text,
+        'Keep pending overview input',
+      );
+      await tester.tap(find.byTooltip('Развернуть инструменты'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По ширине таблицы'));
+      await tester.pumpAndSettle();
+      expect(viewport.zoom, greaterThan(fitted));
+      viewport.fitUsedRange();
+      await tester.pumpAndSettle();
+      final origin = tester.getTopLeft(find.byKey(const Key('sheet-viewport')));
+      await tester.tapAt(
+        origin +
+            viewport.screenPoint(
+              Offset(
+                gridLayout.columns.offset(2) + gridLayout.columns.extent(2) / 2,
+                gridLayout.rows.offset(200) + gridLayout.rows.extent(200) / 2,
+              ),
+            ),
+      );
+      await tester.pumpAndSettle();
+      expect(viewport.zoom, 1);
+      expect(find.byKey(const ValueKey('grid-cell-C201')), findsOneWidget);
+      for (var tries = 0; tries < 100; tries++) {
+        if (!tester.widget<TextField>(formula).readOnly &&
+            find.text('C201').evaluate().isNotEmpty) {
+          break;
+        }
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(tester.widget<TextField>(formula).readOnly, false);
+      expect(find.text('C201'), findsOneWidget);
+      await tester.tap(formula);
+      await tester.pumpAndSettle();
+      await tester.enterText(formula, 'Edited after overview');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Применить'));
+      await tester.pumpAndSettle();
+      const files = MethodChannel('flutter_file_dialog');
+      Uint8List? exported;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(files, (call) async {
+            exported = (call.arguments as Map)['data'] as Uint8List;
+            return '/test/Overview.xlsx';
+          });
+      try {
+        await tester.tap(find.byTooltip('Меню файла'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Сохранить копию'));
+        await tester.pumpAndSettle();
+        final selected = await backend.inspectGrid(
+          exported!,
+          const GridWindow(0, 200, 2),
+          'C201',
+        );
+        expect(selected['selection']['input'], 'Edited after overview');
+        expect(
+          (await backend.inspectGrid(
+            exported!,
+            const GridWindow(0, 0, 0),
+            'A1',
+          ))['selection']['input'],
+          'Keep pending overview input',
+        );
+        expect(
+          (await backend.inspectGrid(
+            bytes,
+            const GridWindow(0, 0, 0),
+            'A1',
+          ))['selection']['input'],
+          'Imported merged title',
+        );
+      } finally {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(files, null);
+      }
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpAndSettle();
+      await capture(tester, 'overview-to-edited-cell');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

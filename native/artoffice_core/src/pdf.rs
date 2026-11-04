@@ -1,5 +1,5 @@
-//! PDFCraft 0.17.0 COS + model integration. Limited page-structure edits.
-//! We deliberately avoid the unbuildable upstream pdfcraft-organize crate in v0.17.0.
+//! Pinned PDFCraft COS + model integration. Limited page-structure edits.
+//! The desktop organize crate is not linked by this mobile adapter.
 use std::sync::Arc;
 use pdfcraft_cos::{Document,Dict,Object,SaveOptions,write_full};
 use pdfcraft_model::{pages,Page};

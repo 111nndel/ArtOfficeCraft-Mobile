@@ -1,4 +1,6 @@
-param([Parameter(Mandatory=$true)][string]$Device)
+param([Parameter(Mandatory=$true)][string]$Device,
+      [string]$Target = 'integration_test/native_editors_test.dart',
+      [string]$TestName = '')
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Push-Location $root
@@ -18,7 +20,10 @@ try {
     Copy-Item $manifest $backup
     [System.IO.File]::WriteAllText($manifest,
         '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/></manifest>')
-    flutter test integration_test/native_editors_test.dart -d $Device --disable-dds --reporter expanded
+    if ($Target -notmatch '^integration_test/[A-Za-z0-9_]+_test\.dart$') {throw 'Use a local integration_test target'}
+    $testArgs = @('test', $Target, '-d', $Device, '--disable-dds', '--reporter', 'expanded')
+    if ($TestName) {$testArgs += @('--plain-name', $TestName)}
+    & flutter @testArgs
     $testExit = $LASTEXITCODE
 } finally {
     if ($backup -and (Test-Path $backup)) {

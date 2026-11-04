@@ -43,7 +43,7 @@ class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        const UiText('0.19.0 · тестовая версия'),
+        const UiText('0.20.0 · тестовая версия'),
         const SizedBox(height: 20),
         if (LanguageScope.maybeOf(context) case final settings?)
           DropdownButtonFormField<String>(
@@ -122,7 +122,7 @@ class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
           onPressed: () => showLicensePage(
             context: context,
             applicationName: 'ArtOfficeCraft Mobile',
-            applicationVersion: '0.19.0',
+            applicationVersion: '0.20.0',
           ),
           icon: const Icon(Icons.description_outlined),
           label: const UiText('Лицензии и авторские права'),

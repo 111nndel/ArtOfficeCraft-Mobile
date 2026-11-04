@@ -54,7 +54,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "artoffice_core"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "deckcraft-model",
  "deckcraft-pptx",
@@ -662,7 +662,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-cos"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "chrono",
  "pdfcraft-crypt",
@@ -672,7 +672,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-crypt"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "aes",
  "md-5",
@@ -683,7 +683,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-filters"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "fax",
  "flate2",
@@ -694,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-model"
-version = "0.18.0"
+version = "0.18.1"
 dependencies = [
  "pdfcraft-cos",
 ]
@@ -1267,7 +1267,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wordcraft-doc"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "base64",
  "log",
@@ -1280,7 +1280,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docx"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "aes",
  "base64",
@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-geom"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "serde",
 ]

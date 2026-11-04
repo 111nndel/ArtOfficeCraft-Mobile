@@ -415,6 +415,12 @@ const english = <String, String>{
   "Перейти": "Go",
   "Введите адрес от A1 до XFD1048576": "Enter an address from A1 to XFD1048576",
   "Повторить загрузку области": "Retry loading this area",
+  "Вся таблица": "Fit entire sheet",
+  "По ширине таблицы": "Fit sheet width",
+  "Закрепить заголовки": "Pin headings",
+  "Открепить заголовки": "Unpin headings",
+  "Упрощённый обзор": "Simplified overview",
+  "Для большой таблицы обзор упрощён. Нажмите на участок, чтобы открыть точные ячейки.": "The overview is simplified for a large sheet. Tap an area to open its exact cells.",
   "Выберите пустую ячейку под числами или справа от них":
       "Select an empty cell below or to the right of numbers",
   "Формулы пересчитаны": "Formulas recalculated",
