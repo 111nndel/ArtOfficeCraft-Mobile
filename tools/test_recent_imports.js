@@ -60,7 +60,17 @@ async function selectFixture(name) {
   tap(await waitFor(n=>/^sdk_gphone/.test(n.label) && n['resource-id']==='android:id/title','Emulator storage'));
   tap(await waitFor('Download'));
   tap(await waitFor('AOC-QA-021'));
-  tap(await waitFor(name));
+  // DocumentsUI may retain grid mode and older fixture files across QA runs.
+  // Reach the generated file instead of assuming its title is on the first screen.
+  let selected;
+  for(let i=0;i<20;i++) {
+    selected=nodes().find(n=>n.label===name);
+    if(selected)break;
+    command(['shell','input','swipe','540','2000','540','900','350']);
+    await pause(250);
+  }
+  if(!selected)throw Error('Fixture not visible: '+name);
+  tap(selected);
   await waitFor(n=>n.package===pkg && n.label.startsWith(name),'Opened '+name);
   await pause(800);
 }

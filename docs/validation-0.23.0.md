@@ -49,7 +49,14 @@ indentation and inherited/theme color resolution are not implemented in this vie
 - Ordinary profile APK explicitly rebuilt from lib/main.dart: package/ZIP/native
   16-KB alignment, license notices and certificate checks passed. Its permissions
   contain no INTERNET or network-state permissions. The preview certificate is
-  unchanged. Actual system-picker/recent-document checks are recorded below.
+  unchanged.
+- Ordinary application with real Android DocumentsUI: four MIME filters/imports
+  passed. Held-finger column resize changed 404 to 543 screen pixels; row resize
+  changed 210 to 120, and undo restored 210. A second unique-name workbook was
+  imported from inside Grid, the app was force-stopped and restarted, both recent
+  copies remained and reopened with imported contents. The QA picker helper now
+  scrolls through older generated fixtures instead of assuming the new file title
+  is visible on the first DocumentsUI grid screen.
 
 ## Limits
 
