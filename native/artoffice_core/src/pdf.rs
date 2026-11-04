@@ -143,6 +143,11 @@ pub extern "C" fn ac_pdf_edit(data:*const u8,n:usize,req:*const u8,req_len:usize
                 all.remove(index);
                 set_order(&mut doc,&all)?;
             },
+            "move_to"=>{
+                let target=j.get("to").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Missing target page")?;
+                if target>=all.len() {return Err("Target page out of range".into())}
+                let page=all.remove(index);all.insert(target,page);set_order(&mut doc,&all)?;
+            },
             "move_up"=>{
                 if index==0{return Err("Page already first".into());}
                 all.swap(index,index-1);set_order(&mut doc,&all)?;
@@ -194,5 +199,20 @@ mod tests{
         let one=result(ac_pdf_create(std::ptr::null(),0)).unwrap();
         let s=json!({"action":"delete","page":0}).to_string();
         assert!(result(ac_pdf_edit(one.as_ptr(),one.len(),s.as_ptr(),s.len())).is_err());
+    }
+
+    #[test]
+    fn direct_page_move_keeps_rotation_and_geometry() {
+        let one=result(ac_pdf_create(std::ptr::null(),0)).unwrap();
+        let two=edit(&one,"insert_blank",0);
+        let three=edit(&two,"insert_blank",1);
+        let rotated=edit(&three,"rotate_cw",0);
+        let request=json!({"action":"move_to","page":0,"to":2}).to_string();
+        let moved=result(ac_pdf_edit(rotated.as_ptr(),rotated.len(),request.as_ptr(),request.len())).unwrap();
+        let doc=parse(&moved).unwrap();let all=pages(&doc);
+        assert_eq!(all.len(),3);assert_eq!(all[2].rotation(&doc),90);assert_eq!(all[0].rotation(&doc),0);
+        let request=json!({"action":"move_to","page":0,"to":3}).to_string();
+        assert!(result(ac_pdf_edit(rotated.as_ptr(),rotated.len(),request.as_ptr(),request.len())).is_err());
+        let original=parse(&rotated).unwrap();assert_eq!(pages(&original)[0].rotation(&original),90);
     }
 }

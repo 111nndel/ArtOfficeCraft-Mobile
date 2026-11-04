@@ -201,6 +201,12 @@ pub extern "C" fn ac_pptx_edit(data:*const u8,n:usize, request:*const u8, req_le
                 let body=shape.text.as_mut().ok_or("Shape is not a text shape")?;
                 *body=TextBody::from_text(text);
             },
+            "move_slide"=>{
+                let source=value.get("slide").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Missing slide index")?;
+                let target=value.get("to").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Missing target slide")?;
+                if source>=p.slides.len() || target>=p.slides.len() {return Err("Slide index out of bounds".into())}
+                let slide=p.slides.remove(source);p.slides.insert(target,slide);
+            },
             "delete_slide"=>{
                 if p.slides.len()<=1 {return Err("Cannot delete last slide".into())}
                 if index>=p.slides.len() {return Err("Slide index out of bounds".into())}
@@ -271,5 +277,32 @@ mod tests {
         let r=ac_pptx_inspect(b"not-pptx".as_ptr(),8);
         assert_ne!(r.status,0);
         super::super::ac_result_free(r);
+    }
+
+    #[test]
+    fn reordering_slides_preserves_content_and_geometry() {
+        let mut p=Presentation::default();
+        add_text(&mut p,0,"First 😀",true).unwrap();
+        let initial=save(&p).unwrap();
+        let two=edit(&initial,json!({"action":"add_slide","text":"Second"}));
+        let three=edit(&two,json!({"action":"add_slide","text":"Third"}));
+        let before=load(&three).unwrap();
+        let moved=edit(&three,json!({"action":"move_slide","slide":0,"to":2}));
+        let after=load(&moved).unwrap();
+        // PPTX import allocates model identifiers anew; compare slide content,
+        // rather than treating transient in-memory ids as file identities.
+        for (new,old) in [(0,1),(1,2),(2,0)] {
+            let a=&after.slides[new];let b=&before.slides[old];
+            assert_eq!(a.shapes.len(),b.shapes.len());
+            for (x,y) in a.shapes.iter().zip(&b.shapes) {
+                assert_eq!(x.text.as_ref().map(|t|t.text()),y.text.as_ref().map(|t|t.text()));
+                assert_eq!(x.xfrm,y.xfrm);
+            }
+            assert_eq!(a.notes_text(),b.notes_text());
+        }
+        assert!(after.validate().is_empty());
+        let request=json!({"action":"move_slide","slide":0,"to":999}).to_string();
+        let invalid=ac_pptx_edit(three.as_ptr(),three.len(),request.as_ptr(),request.len());
+        assert_ne!(invalid.status,0);super::super::ac_result_free(invalid);
     }
 }

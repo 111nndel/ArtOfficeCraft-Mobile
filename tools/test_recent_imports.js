@@ -70,7 +70,7 @@ async function selectFixture(name) {
   command(['shell','am','force-stop',pkg]);
   command(['shell','am','start','-n',pkg+'/.MainActivity','-f','0x10008000']);
   await waitFor(/^Files(?:\n|$)/);
-  const first='Recent-021-A.xlsx',second='Recent-021-B.xlsx',directory='/sdcard/Download/AOC-QA-021';
+  const runKey='Recent-'+Date.now(),first=runKey+'-A.xlsx',second=runKey+'-B.xlsx',directory='/sdcard/Download/AOC-QA-021';
   command(['shell','mkdir','-p',directory]);
   for(const name of [first,second])command(['push',path.resolve('test/fixtures/formatted-grid.xlsx'),directory+'/'+name]);
   await openPicker('Spreadsheet');
@@ -83,7 +83,7 @@ async function selectFixture(name) {
   command(['shell','am','force-stop',pkg]);
   command(['shell','am','start','-n',pkg+'/.MainActivity','-f','0x10008000']);
   tap(await waitFor(n=>n.class==='android.widget.EditText','Find a file'));
-  command(['shell','input','text','Recent-021']);
+  command(['shell','input','text',runKey]);
   command(['shell','input','keyevent','4']);
   const a=await waitFor(n=>n.label.startsWith(first),'First recent survives');
   await waitFor(n=>n.label.startsWith(second),'Second recent survives');
@@ -94,6 +94,6 @@ async function selectFixture(name) {
   tap(await waitFor(n=>n.label.startsWith(second),'Second recent'));
   await waitFor(n=>n.label.startsWith(second),'Reopened second');
   await waitFor(/Imported merged title/);
-  const result={passed:true,device,api:36,checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened']};
+  const result={passed:true,device,api:36,files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened']};
   fs.writeFileSync(path.join(proof,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});

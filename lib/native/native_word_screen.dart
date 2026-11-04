@@ -69,6 +69,169 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     });
   }
 
+  final findText = TextEditingController(),
+      replaceText = TextEditingController();
+  final paragraphKeys = <int, GlobalKey>{};
+  int findCursor = -1;
+  List<({int block, int start, int end, bool editable})> get findMatches {
+    final query = findText.text;
+    final found = <({int block, int start, int end, bool editable})>[];
+    if (query.isEmpty) return found;
+    for (final block in blocks) {
+      final id = block['block'] as int;
+      final text = activeBlock == id && inlineDirty
+          ? inline.text
+          : block['text']?.toString() ?? '';
+      var at = 0;
+      while ((at = text.indexOf(query, at)) >= 0) {
+        found.add((
+          block: id,
+          start: at,
+          end: at + query.length,
+          editable: block['editable'] == true,
+        ));
+        if (found.length >= 10000) return found;
+        at += query.length;
+      }
+    }
+    return found;
+  }
+
+  Future<void> findNext(int direction) => guarded(() async {
+    final matches = findMatches;
+    if (matches.isEmpty) return;
+    findCursor = findCursor < 0
+        ? (direction > 0 ? 0 : matches.length - 1)
+        : (findCursor + direction) % matches.length;
+    final match = matches[findCursor];
+    final block = blocks.firstWhere((b) => b['block'] == match.block);
+    if (match.editable) {
+      startInline(block, focus: false);
+      inline.selection = TextSelection(
+        baseOffset: match.start,
+        extentOffset: match.end,
+      );
+    } else {
+      setState(() => selectedBlock = match.block);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = paragraphKeys[match.block]?.currentContext;
+      if (mounted && target != null) {
+        Scrollable.ensureVisible(
+          target,
+          alignment: .2,
+          duration: const Duration(milliseconds: 150),
+        );
+      }
+    });
+  });
+
+  Future<void> replaceFound(bool all) => guarded(() async {
+    if (document == null) return;
+    final matches = findMatches;
+    if (matches.isEmpty) return;
+    final match = matches[(findCursor < 0 ? 0 : findCursor) % matches.length];
+    if ((!all && !match.editable) || (all && matches.any((m) => !m.editable))) {
+      inform('Некоторые совпадения защищены от редактирования');
+      return;
+    }
+    final previous = document!;
+    final replacement = replaceText.text;
+    final result = await engine!.editAndInspect(previous, {
+      'action': all ? 'replace_all' : 'replace_one',
+      'find': findText.text,
+      'replacement': replacement,
+      if (!all) ...{
+        'block': match.block,
+        'start': match.start,
+        'end': match.end,
+      },
+    });
+    await updatePreview(result.bytes, preview: result.preview);
+    if (!mounted) return;
+    history.push(previous);
+    final after = findMatches;
+    final next = after.indexWhere(
+      (m) =>
+          m.block > match.block ||
+          m.block == match.block && m.start >= match.start + replacement.length,
+    );
+    setState(() {
+      changed = true;
+      findCursor = all || next < 0 ? -1 : next;
+    });
+    inform(
+      '${tr(context, 'Заменено совпадений')}: ${all ? matches.length : 1}',
+    );
+  });
+
+  Widget searchPanel() {
+    final matches = findMatches;
+    final enabled = !busy && !operationPending && matches.isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: const Key('word-find-input'),
+          controller: findText,
+          maxLength: 256,
+          decoration: InputDecoration(labelText: tr(context, 'Найти текст')),
+          onChanged: (_) => setState(() => findCursor = -1),
+          onSubmitted: (_) {
+            if (!busy) findNext(1);
+          },
+        ),
+        Text(tr(context, 'Точное совпадение с учётом регистра')),
+        if (tables > 0)
+          const UiText('Содержимое таблиц пока не участвует в поиске'),
+        Text('${tr(context, 'Совпадений')}: ${matches.length}'),
+        if (matches.length >= 10000)
+          const UiText('Слишком много совпадений — уточните запрос'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: enabled ? () => findNext(-1) : null,
+              icon: const Icon(Icons.arrow_upward),
+              label: const UiText('Предыдущее совпадение'),
+            ),
+            OutlinedButton.icon(
+              onPressed: enabled ? () => findNext(1) : null,
+              icon: const Icon(Icons.arrow_downward),
+              label: const UiText('Следующее совпадение'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const Key('word-replace-input'),
+          controller: replaceText,
+          maxLength: 1024,
+          decoration: InputDecoration(labelText: tr(context, 'Заменить на')),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton(
+              onPressed: enabled ? () => replaceFound(false) : null,
+              child: const UiText('Заменить совпадение'),
+            ),
+            OutlinedButton(
+              onPressed: enabled && matches.length < 10000
+                  ? () => replaceFound(true)
+                  : null,
+              child: const UiText('Заменить все'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   final toolPanel = GlobalKey<EditorToolPanelState>();
   bool toolsExpanded = false;
   late final DocumentBackend? engine =
@@ -93,7 +256,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     queueDraft();
   }
 
-  void startInline(Map<String, dynamic> block) {
+  void startInline(Map<String, dynamic> block, {bool focus = true}) {
     inline.load(block);
     setState(() {
       activeBlock = block['block'] as int;
@@ -101,7 +264,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       inlineDirty = false;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && activeBlock != null) inlineFocus.requestFocus();
+      if (mounted && focus && activeBlock != null) inlineFocus.requestFocus();
     });
   }
 
@@ -184,6 +347,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     inline.removeListener(selectionChanged);
     inline.dispose();
     inlineFocus.dispose();
+    findText.dispose();
+    replaceText.dispose();
     if (widget.backend == null) unawaited(closeDocumentBackend(engine));
     super.dispose();
   }
@@ -523,6 +688,12 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
           ],
         },
         overrides: {
+          'Найти и заменить': EditorTool(
+            'Найти и заменить',
+            Icons.find_replace,
+            builder: (_) => searchPanel(),
+          ),
+
           'Абзац': EditorTool(
             'Абзац',
             Icons.format_align_justify,
@@ -650,6 +821,10 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                             children: [
                               for (final block in blocks)
                                 Padding(
+                                  key: paragraphKeys.putIfAbsent(
+                                    block['block'] as int,
+                                    () => GlobalKey(),
+                                  ),
                                   padding: EdgeInsets.only(
                                     bottom:
                                         (block['spaceAfter'] as num?)

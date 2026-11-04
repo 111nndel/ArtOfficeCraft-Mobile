@@ -176,9 +176,20 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
-        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate") {return Err("Unknown cell action".into())}
-        if matches!(action,"autosum"|"recalculate") && req.get("value").is_some() {
+        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet") {return Err("Unknown cell action".into())}
+        if matches!(action,"autosum"|"recalculate"|"add_sheet") && req.get("value").is_some() {
             return Err("Calculation actions do not accept a cell value".into())
+        }
+        if action=="add_sheet" {
+            wb.sheet(idx).ok_or("Sheet index out of bounds")?;
+            CellRef::parse(address).ok_or("Invalid A1 reference")?;
+            if wb.protected_structure {return Err("Workbook structure is protected".into())}
+            if wb.sheets.len()>=256 {return Err("Mobile editor supports at most 256 sheets".into())}
+            let name=match req.get("name") {None=>wb.next_sheet_name(),Some(v)=>v.as_str().ok_or("Sheet name must be text")?.to_owned()};
+            if name.chars().any(char::is_control) {return Err("Sheet name contains control characters".into())}
+            wb.check_sheet_name(&name,None)?;
+            wb.sheets.push(std::sync::Arc::new(gridcraft_model::Sheet::new(name)));
+            wb.set_active_sheet(wb.sheets.len()-1);
         }
         if action=="autosum" {autosum(&mut wb,idx,address)?;}
         if action=="recalculate" {
@@ -309,7 +320,7 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
             "merges":sh.merges.iter().map(|m|[m.start.row,m.start.col,m.end.row,m.end.col]).collect::<Vec<_>>(),
             "showGridlines":sh.show_gridlines,"usedRange":used});
         serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
-            "selection":selection,"window":req,"layout":layout,"warnings":report.warnings,
+            "selection":selection,"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":report.warnings,
             "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
     })
 }
@@ -547,5 +558,33 @@ mod formatting_tests {
         let entered=edit(&initial,json!({"sheet":0,"address":"A1","value":"12,5"}));
         let output=edit(&entered,json!({"sheet":0,"address":"A1","action":"format","style":{"numFmt":"#,##0.00 \"₽\""}}));
         let wb=workbook(&output).unwrap();assert_eq!(wb.sheet(0).unwrap().cell(CellRef::parse("A1").unwrap()).unwrap().value,Value::number(12.5));
+    }
+
+    #[test]
+    fn named_sheet_creation_preserves_existing_cells_and_reopens_active_sheet() {
+        let original=include_bytes!("../../../test/fixtures/formatted-grid.xlsx").as_slice();
+        let mut wb=workbook(original).unwrap();
+        let before=wb.sheet(0).unwrap().clone();
+        // Use a cross-sheet formula to ensure adding a tab does not rewrite it.
+        put(&mut wb,0,"Z500","=SUM(A1:A2)").unwrap();
+        let initial=write(&wb).unwrap();
+        let added=edit(&initial,json!({"action":"add_sheet","sheet":0,"address":"A1","name":"Расчёт 2026"}));
+        let reopened=workbook(&added).unwrap();
+        assert_eq!(reopened.sheets.len(),wb.sheets.len()+1);
+        assert_eq!(reopened.sheets.last().unwrap().name,"Расчёт 2026");
+        assert_eq!(reopened.active_sheet(),reopened.sheets.len()-1);
+        assert_eq!(reopened.sheet(0).unwrap().input_text(CellRef::new(499,25)),"=SUM(A1:A2)");
+        assert_eq!(reopened.sheet(0).unwrap().input_text(CellRef::new(0,0)),before.input_text(CellRef::new(0,0)));
+        assert_eq!(reopened.sheet(0).unwrap().merges,before.merges);
+        for name in ["bad/name","History","'quote", ""] {
+            let request=json!({"action":"add_sheet","sheet":0,"address":"A1","name":name}).to_string();
+            let result=ac_xlsx_set_cell(initial.as_ptr(),initial.len(),request.as_ptr(),request.len());
+            assert_ne!(result.status,0);super::super::ac_result_free(result);
+        }
+        let mut protected=wb.clone();protected.protected_structure=true;
+        let protected=write(&protected).unwrap();
+        let request=json!({"action":"add_sheet","sheet":0,"address":"A1"}).to_string();
+        let result=ac_xlsx_set_cell(protected.as_ptr(),protected.len(),request.as_ptr(),request.len());
+        assert_ne!(result.status,0);super::super::ac_result_free(result);
     }
 }

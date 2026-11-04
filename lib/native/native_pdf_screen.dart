@@ -6,6 +6,7 @@ import '../workspace/draft_store.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
+import 'document_history.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 
@@ -68,6 +69,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   final pdfViewport = GlobalKey<PdfViewportState>();
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf);
+  final history = DocumentHistory();
+  final targetPage = TextEditingController();
   Uint8List? contents;
   List<Map<String, dynamic>> pages = [];
   String filename = 'Новый документ.pdf';
@@ -137,7 +140,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       changed = edited;
       _thumbnailImages.clear();
       _pageImage = _pageRenderer.render(newSession, selected);
-      if (name != null) filename = name;
+      if (name != null) {
+        history.clear();
+        filename = name;
+      }
     });
     if (previousSession != null) {
       unawaited(_pageRenderer.close(previousSession).catchError((Object _) {}));
@@ -148,6 +154,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   void dispose() {
     widget.draft?.removeListener(draftStatusChanged);
     if (widget.draft != null) unawaited(widget.draft!.close());
+    targetPage.dispose();
     final previous = _session;
     if (previous != null) {
       unawaited(_pageRenderer.close(previous).catchError((Object _) {}));
@@ -224,7 +231,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     await rememberCurrent();
     tip('Копия PDF сохранена. Подписи могут стать недействительными.');
   });
-  Future<void> edit(String action) => execute(() async {
+  Future<void> edit(String action, {int? to}) => execute(() async {
     if (contents == null) return;
     if (action == 'delete') {
       if (pages.length <= 1) {
@@ -253,11 +260,13 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       if (yes != true) return;
     }
     {
-      final updated = await engine!.editAndInspect(contents!, {
+      final previous = contents!, previousPage = selected;
+      final updated = await engine!.editAndInspect(previous, {
         'action': action,
         'page': selected,
+        'to': ?to,
       });
-      var next = selected;
+      var next = action == 'move_to' ? to! : selected;
       if (action == 'move_up') next--;
       if (action == 'move_down' ||
           action == 'duplicate' ||
@@ -270,9 +279,34 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         page: next,
         edited: true,
       );
+      if (mounted) history.push(previous, position: previousPage);
       tip('Структура PDF изменена');
     }
   });
+
+  Future<void> restoreHistory(bool undo) => execute(() async {
+    final target = undo ? history.undoTarget : history.redoTarget;
+    if (target == null || contents == null) return;
+    final previous = contents!, previousPage = selected;
+    final page =
+        (undo ? history.undoPosition : history.redoPosition) ?? selected;
+    await load(target, page: page, edited: true);
+    if (!mounted) return;
+    if (undo) {
+      history.undo(previous, position: previousPage);
+    } else {
+      history.redo(previous, position: previousPage);
+    }
+  });
+
+  void moveToPage() {
+    final page = int.tryParse(targetPage.text.trim());
+    if (page == null || page < 1 || page > pages.length) {
+      tip('Введите существующий номер страницы');
+      return;
+    }
+    edit('move_to', to: page - 1);
+  }
 
   Future<Uint8List> thumbnailFor(int index) {
     final old = _thumbnailImages[index];
@@ -394,6 +428,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     key: toolPanel,
     color: const Color(0xffc94e59),
     onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+    undo: !busy && history.canUndo ? () => restoreHistory(true) : null,
+    redo: !busy && history.canRedo ? () => restoreHistory(false) : null,
     sections: officeSections(
       'pdf',
       leading: {
@@ -422,6 +458,51 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         ],
       },
       overrides: {
+        'Порядок страниц': EditorTool(
+          'Порядок страниц',
+          Icons.reorder,
+          children: [
+            EditorTool(
+              'На одну страницу выше',
+              Icons.arrow_upward,
+              onPressed: !busy && selected > 0 ? () => edit('move_up') : null,
+            ),
+            EditorTool(
+              'На одну страницу ниже',
+              Icons.arrow_downward,
+              onPressed: !busy && selected + 1 < pages.length
+                  ? () => edit('move_down')
+                  : null,
+            ),
+            EditorTool(
+              'Переместить к номеру',
+              Icons.my_location,
+              builder: (_) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    key: const Key('pdf-target-page'),
+                    controller: targetPage,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: tr(context, 'Номер страницы'),
+                    ),
+                    onSubmitted: (_) {
+                      if (!busy) moveToPage();
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: busy ? null : moveToPage,
+                    icon: const Icon(Icons.swap_vert),
+                    label: const UiText('Переместить страницу'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
         'Масштаб': EditorTool(
           'Масштаб',
           Icons.zoom_in,
@@ -543,24 +624,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                       child: PdfViewport(
                         key: pdfViewport,
                         image: _pageImage,
-                        pageWidth:
-                            (((pages[selected]['rotation'] as num? ?? 0)
-                                                    .toInt() %
-                                                180 ==
-                                            0
-                                        ? pages[selected]['width']
-                                        : pages[selected]['height'])
-                                    as num)
-                                .toDouble(),
-                        pageHeight:
-                            (((pages[selected]['rotation'] as num? ?? 0)
-                                                    .toInt() %
-                                                180 ==
-                                            0
-                                        ? pages[selected]['height']
-                                        : pages[selected]['width'])
-                                    as num)
-                                .toDouble(),
+                        // Rust already returns displayed dimensions after rotation.
+                        pageWidth: (pages[selected]['width'] as num).toDouble(),
+                        pageHeight: (pages[selected]['height'] as num)
+                            .toDouble(),
                       ),
                     ),
                     if (showThumbnails && !toolsExpanded)

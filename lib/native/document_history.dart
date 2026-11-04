@@ -11,30 +11,33 @@ class DocumentHistory {
     }
   }
   final int byteBudget, stepBudget;
-  final List<Uint8List> _undo = [], _redo = [];
+  final List<_HistoryState> _undo = [], _redo = [];
   static const maxBytes = 24 * 1024 * 1024;
-  int get retainedBytes => [..._undo, ..._redo].fold(0, (n, b) => n + b.length);
+  int get retainedBytes =>
+      [..._undo, ..._redo].fold(0, (n, b) => n + b.bytes.length);
   int get retainedSteps => _undo.length + _redo.length;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
-  Uint8List? get undoTarget => _undo.isEmpty ? null : _undo.last;
-  Uint8List? get redoTarget => _redo.isEmpty ? null : _redo.last;
+  Uint8List? get undoTarget => _undo.isEmpty ? null : _undo.last.bytes;
+  Uint8List? get redoTarget => _redo.isEmpty ? null : _redo.last.bytes;
+  int? get undoPosition => _undo.isEmpty ? null : _undo.last.position;
+  int? get redoPosition => _redo.isEmpty ? null : _redo.last.position;
   void clear() {
     _undo.clear();
     _redo.clear();
   }
 
-  void push(Uint8List bytes) {
+  void push(Uint8List bytes, {int? position}) {
     _redo.clear();
-    _record(_undo, bytes);
+    _record(_undo, bytes, position: position);
   }
 
-  void _record(List<Uint8List> target, Uint8List bytes) {
+  void _record(List<_HistoryState> target, Uint8List bytes, {int? position}) {
     if (bytes.length > byteBudget) {
       target.clear();
       return;
     }
-    target.add(immutableDocumentBytes(bytes));
+    target.add(_HistoryState(immutableDocumentBytes(bytes), position));
     final other = identical(target, _undo) ? _redo : _undo;
     while (retainedBytes > byteBudget || retainedSteps > stepBudget) {
       if (other.isNotEmpty) {
@@ -45,17 +48,23 @@ class DocumentHistory {
     }
   }
 
-  Uint8List undo(Uint8List current) {
+  Uint8List undo(Uint8List current, {int? position}) {
     if (_undo.isEmpty) throw StateError('No undo state');
     final value = _undo.removeLast();
-    _record(_redo, current);
-    return value;
+    _record(_redo, current, position: position);
+    return value.bytes;
   }
 
-  Uint8List redo(Uint8List current) {
+  Uint8List redo(Uint8List current, {int? position}) {
     if (_redo.isEmpty) throw StateError('No redo state');
     final value = _redo.removeLast();
-    _record(_undo, current);
-    return value;
+    _record(_undo, current, position: position);
+    return value.bytes;
   }
+}
+
+class _HistoryState {
+  const _HistoryState(this.bytes, this.position);
+  final Uint8List bytes;
+  final int? position;
 }

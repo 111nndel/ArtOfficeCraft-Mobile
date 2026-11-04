@@ -8,6 +8,7 @@ import 'dart:async';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
+import 'document_history.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 
@@ -73,6 +74,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   bool toolsExpanded = false;
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.deck);
+  final history = DocumentHistory();
   Uint8List? data;
   List<Map<String, dynamic>> slides = [];
   String filename = 'Новая презентация.pptx';
@@ -128,6 +130,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       index = selected.clamp(0, next.length - 1);
       modified = changed;
       if (name != null) {
+        history.clear();
         filename = name;
         textEdit = null;
       }
@@ -267,7 +270,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final selected = request['action'] == 'add_slide'
         ? slides.length
         : (request['slide'] as int? ?? index);
-    final update = await engine!.editAndInspect(data!, {
+    final previous = data!, previousIndex = index;
+    final update = await engine!.editAndInspect(previous, {
       ...request,
       'text': text,
     });
@@ -278,6 +282,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       changed: true,
     );
     if (mounted) {
+      history.push(previous, position: previousIndex);
       setState(() => textEdit = null);
       toolPanel.currentState?.back();
     }
@@ -302,6 +307,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     'shape': shape['id'],
   }, initial: shape['text']?.toString() ?? '');
   Future<void> removeSlide() => action(() async {
+    await applyPendingText();
+    if (!mounted) return;
     if (slides.length <= 1) {
       message('Нельзя удалить последний слайд');
       return;
@@ -323,7 +330,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       ),
     );
     if (yes != true) return;
-    final update = await engine!.editAndInspect(data!, {
+    final previous = data!, previousIndex = index;
+    final update = await engine!.editAndInspect(previous, {
       'action': 'delete_slide',
       'slide': index,
     });
@@ -333,7 +341,71 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       selected: index == 0 ? 0 : index - 1,
       changed: true,
     );
+    if (mounted) history.push(previous, position: previousIndex);
     message('Слайд удалён');
+  });
+  Future<void> moveSlide(int target, {bool toEnd = false}) => action(() async {
+    if (data == null || target < 0 || target >= slides.length) return;
+    await applyPendingText();
+    if (!mounted) return;
+    if (toEnd) target = slides.length - 1;
+    final previous = data!, previousIndex = index;
+    final update = await engine!.editAndInspect(previous, {
+      'action': 'move_slide',
+      'slide': index,
+      'to': target,
+    });
+    await load(
+      update.bytes,
+      preview: update.preview,
+      selected: target,
+      changed: true,
+    );
+    if (mounted) history.push(previous, position: previousIndex);
+  });
+
+  Future<void> applyPendingText() async {
+    if (textEdit != null) {
+      if (textDraftDirty) {
+        final viewing = index;
+        await applyTextDraft();
+        if (!mounted) return;
+        if (textEdit != null) {
+          throw const FormatException(
+            'Сначала примените или отмените введённый текст.',
+          );
+        }
+        setState(() => index = viewing.clamp(0, slides.length - 1));
+      } else {
+        setState(() => textEdit = null);
+      }
+    }
+  }
+
+  Future<void> restoreHistory(bool undo) => action(() async {
+    if (data == null) return;
+    if (textDraftDirty) {
+      if (undo) {
+        setState(() {
+          deckText.text = textInitial;
+          textEdit = null;
+        });
+      }
+      return;
+    }
+    final target = undo ? history.undoTarget : history.redoTarget;
+    if (target == null) return;
+    final previous = data!, previousIndex = index;
+    final position =
+        (undo ? history.undoPosition : history.redoPosition) ?? index;
+    await load(target, selected: position, changed: true);
+    if (!mounted) return;
+    if (undo) {
+      history.undo(previous, position: previousIndex);
+    } else {
+      history.redo(previous, position: previousIndex);
+    }
+    setState(() => textEdit = null);
   });
   Widget slideCanvas({int? slideIndex}) {
     final slideNumber = slideIndex ?? index;
@@ -575,6 +647,12 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     key: toolPanel,
     color: const Color(0xffcc6243),
     onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+    undo: !busy && (history.canUndo || textDraftDirty)
+        ? () => restoreHistory(true)
+        : null,
+    redo: !busy && !textDraftDirty && history.canRedo
+        ? () => restoreHistory(false)
+        : null,
     sections: officeSections(
       'deck',
       leading: {
@@ -646,6 +724,37 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       },
       exclude: {'Текст'},
       overrides: {
+        'Порядок слайдов': EditorTool(
+          'Порядок слайдов',
+          Icons.reorder,
+          children: [
+            EditorTool(
+              'На один слайд выше',
+              Icons.arrow_upward,
+              onPressed: !busy && index > 0 ? () => moveSlide(index - 1) : null,
+            ),
+            EditorTool(
+              'На один слайд ниже',
+              Icons.arrow_downward,
+              onPressed: !busy && index + 1 < slides.length
+                  ? () => moveSlide(index + 1)
+                  : null,
+            ),
+            EditorTool(
+              'В начало',
+              Icons.first_page,
+              onPressed: !busy && index > 0 ? () => moveSlide(0) : null,
+            ),
+            EditorTool(
+              'В конец',
+              Icons.last_page,
+              onPressed: !busy && index + 1 < slides.length
+                  ? () => moveSlide(slides.length - 1, toEnd: true)
+                  : null,
+            ),
+          ],
+        ),
+
         'Новый слайд': EditorTool(
           'Новый слайд',
           Icons.add,

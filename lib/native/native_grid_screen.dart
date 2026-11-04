@@ -98,6 +98,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     widget.draft?.removeListener(draftStatusChanged);
     if (widget.draft != null) unawaited(widget.draft!.close());
     inputFocus.dispose();
+    newSheetName.dispose();
     viewTimer?.cancel();
     addressInput.dispose();
     input.dispose();
@@ -143,11 +144,16 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     Uint8List data, {
     String? name,
     bool edited = false,
-    int index = 0,
+    int? index,
   }) async {
     data = immutableDocumentBytes(data);
-    final window = GridWindow(index, 0, 0);
-    final parsed = await bridge!.inspectGrid(data, window, 'A1');
+    var window = GridWindow(index ?? 0, 0, 0);
+    var parsed = await bridge!.inspectGrid(data, window, 'A1');
+    final active = index ?? (parsed['activeSheet'] as int? ?? 0);
+    if (active != window.sheet) {
+      window = GridWindow(active, 0, 0);
+      parsed = await bridge!.inspectGrid(data, window, 'A1');
+    }
     if (!mounted) return;
     final list = parsed['sheets'];
     if (list is! List || list.isEmpty) {
@@ -156,7 +162,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     setState(() {
       book = data;
       sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
-      sheetIndex = index.clamp(0, sheets.length - 1);
+      sheetIndex = window.sheet.clamp(0, sheets.length - 1);
       selected = 'A1';
       acceptView(parsed, window);
       wantedWindow = window;
@@ -368,6 +374,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   ) {
     setState(() {
       book = bytes;
+      sheetIndex = window.sheet;
+      wantedWindow = window;
       acceptView(parsed, window);
       input.text = currentInput;
       modified = true;
@@ -385,7 +393,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     );
     parsedSheets(updated.preview);
     if (!mounted) return;
-    history.push(previous);
+    history.push(previous, position: sheetIndex);
     install(updated.bytes, updated.preview, window);
     await rememberCurrent();
   }
@@ -489,17 +497,57 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     final target = undo ? history.undoTarget : history.redoTarget;
     if (target == null) return;
-    final window = loadedWindow;
-    final parsed = await bridge!.inspectGrid(target, window, selected);
+    final targetSheet =
+        (undo ? history.undoPosition : history.redoPosition) ?? sheetIndex;
+    final differentSheet = targetSheet != sheetIndex;
+    final window = differentSheet
+        ? GridWindow(targetSheet, 0, 0)
+        : loadedWindow;
+    final parsed = await bridge!.inspectGrid(
+      target,
+      window,
+      differentSheet ? 'A1' : selected,
+    );
     parsedSheets(parsed);
     if (!mounted) return;
     if (undo) {
-      history.undo(book!);
+      history.undo(book!, position: sheetIndex);
     } else {
-      history.redo(book!);
+      history.redo(book!, position: sheetIndex);
     }
+    viewTimer?.cancel();
     install(target, parsed, window);
+    if (differentSheet) gridViewport.currentState?.reset();
     await rememberCurrent();
+  });
+
+  final newSheetName = TextEditingController();
+  Future<void> addSheet() => run(() async {
+    if (book == null) return;
+    await flushInput();
+    final previous = book!, previousSheet = sheetIndex;
+    final window = GridWindow(sheets.length, 0, 0);
+    final name = newSheetName.text.trim();
+    final update = await bridge!.editAndInspectGrid(
+      previous,
+      {
+        'action': 'add_sheet',
+        'sheet': sheetIndex,
+        'address': selected,
+        if (name.isNotEmpty) 'name': name,
+      },
+      window,
+      'A1',
+    );
+    parsedSheets(update.preview);
+    if (!mounted) return;
+    history.push(previous, position: previousSheet);
+    viewTimer?.cancel();
+    install(update.bytes, update.preview, window);
+    gridViewport.currentState?.reset();
+    newSheetName.clear();
+    await rememberCurrent();
+    tip('Лист создан');
   });
   final inputFocus = FocusNode();
   Widget header(String text) => Container(
@@ -973,6 +1021,34 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ],
         },
         overrides: {
+          'Новый лист': EditorTool(
+            'Новый лист',
+            Icons.add_box_outlined,
+            builder: (_) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  key: const Key('new-sheet-name'),
+                  controller: newSheetName,
+                  maxLength: 31,
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'Имя листа'),
+                    hintText: tr(context, 'Автоматически, если пусто'),
+                  ),
+                  onSubmitted: (_) {
+                    if (!busy) addSheet();
+                  },
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: busy ? null : addSheet,
+                  icon: const Icon(Icons.add),
+                  label: const UiText('Создать лист'),
+                ),
+              ],
+            ),
+          ),
+
           '∑ Автосумма': EditorTool(
             '∑ Автосумма',
             Icons.functions,

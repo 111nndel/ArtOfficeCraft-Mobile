@@ -47,4 +47,22 @@ void main() {
       expect(history.canRedo, isFalse);
     },
   );
+  test(
+    'Navigation positions travel with their snapshots through undo and redo',
+    () {
+      final h = DocumentHistory();
+      h.push(state(1, 3), position: 0);
+      h.push(state(2, 3), position: 4);
+      expect(h.undoPosition, 4);
+      final previous = h.undo(state(3, 3), position: 5);
+      expect(previous.first, 2);
+      expect(h.undoPosition, 0);
+      expect(h.redoPosition, 5);
+      expect(h.redo(previous, position: 4).first, 3);
+      expect(h.undoPosition, 4);
+      h.clear();
+      expect(h.undoPosition, isNull);
+      expect(h.redoPosition, isNull);
+    },
+  );
 }

@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.21.0 / core 0.21.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.22.0 / core 0.22.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/validation-0.21.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
+`docs/validation-0.22.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -384,3 +384,16 @@ Testing with an actual Android phone via ADB remains outstanding.
 ## Constraints
 
 APK is debug; Android ARM64 target verified by build. It must not be represented as a finished office suite. Full features require significant engineering and tests, not just exposing existing Rust source trees.
+
+
+0.22.0 connects exact, case-sensitive paragraph find/replace in Word, including
+Unicode offsets, unchanged run preservation and one history step per replacement
+operation. Table content remains excluded and protected matches refuse edits.
+Grid adds validated named sheets through the pinned upstream model, saves the
+active tab and restores sheet context through undo/redo. Deck reorders whole
+slides without rebuilding their shapes/media; its history and PDF page history
+now preserve selected indices and mutate only after a checked restore. Pending
+Deck text is committed without silently switching the slide being reordered.
+PDF supports direct page-number moves; displayed width/height from Rust are no
+longer swapped a second time for rotated pages. New controls use the existing
+nested panel and include English strings. Full Office fidelity remains incomplete.

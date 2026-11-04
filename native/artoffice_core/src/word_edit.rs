@@ -65,15 +65,57 @@ fn patch(p:&mut Paragraph,j:&J)->Result<(),String>{
     if let Some(v)=number(j,"lineSpacing",1.0,3.0)? {p.props.line_spacing=Some(LineSpacing::Multiple(v))}
     p.touch();Ok(())
 }
+fn editable(p:&Paragraph)->bool {
+    p.objects.is_empty() && !p.runs.iter().any(|r|r.props.ins.is_some()||r.props.del.is_some()||r.props.fmt_change.is_some())
+}
+fn replace_matches(doc:&mut wordcraft_doc::Document,j:&J,all:bool)->Result<(),String> {
+    let find=j.get("find").and_then(J::as_str).filter(|s|!s.is_empty() && s.len()<=1024).ok_or("Find text must contain 1..1024 bytes")?;
+    let replacement=j.get("replacement").and_then(J::as_str).filter(|s|s.len()<=65536 && !s.contains('\0') && !s.contains(wordcraft_doc::para::OBJ)).ok_or("Invalid replacement text")?;
+    let index=if all {None} else {Some(j.get("block").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Invalid paragraph index")?)};
+    if index.is_some_and(|n|n>=doc.body.len()) {return Err("Paragraph not found".into())}
+    let mut count=0usize;
+    for (i,block) in doc.body.iter_mut().enumerate() {
+        if index.is_some_and(|n|n!=i) {continue}
+        let Block::Para(p)=Arc::make_mut(block) else {
+            if !all {return Err("Selected block is not a paragraph".into())} else {continue}
+        };
+        let ranges=if all {p.text.match_indices(find).take(10001).map(|(a,_)|(a,a+find.len())).collect::<Vec<_>>()} else {
+            let a=offset(&p.text,units(j,"start",u64::MAX)?)?;
+            let b=offset(&p.text,units(j,"end",u64::MAX)?)?;
+            if p.text.get(a..b)!=Some(find) {return Err("The selected match has changed; find it again".into())}
+            vec![(a,b)]
+        };
+        if ranges.is_empty() {continue}
+        if !editable(p) {return Err("A matching paragraph contains protected revisions or inline objects".into())}
+        count+=ranges.len();
+        if count>10000 {return Err("Too many matches; narrow the search".into())}
+        let removed=ranges.len().checked_mul(find.len()).ok_or("Replacement too large")?;
+        let added=ranges.len().checked_mul(replacement.len()).ok_or("Replacement too large")?;
+        if p.text.len()-removed+added>65536 {return Err("Replacement paragraph exceeds 64 KiB".into())}
+        for (a,b) in ranges.into_iter().rev() {
+            let props=p.props_of_char(a).clone();
+            p.delete(a,b).map_err(|e|e.to_string())?;
+            p.insert_text(a,replacement,&props).map_err(|e|e.to_string())?;
+        }
+        p.touch();
+    }
+    if count==0 {return Err("No matching text in editable paragraphs".into())}
+    Ok(())
+}
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_docx_edit(data:*const u8,len:usize,req:*const u8,req_len:usize)->AcResult{
     protect(||{
         let j:J=serde_json::from_slice(decode(req,req_len,MAX_TEXT_BYTES)?).map_err(|e|format!("Invalid edit request: {e}"))?;
-        if j.get("action").and_then(J::as_str)!=Some("paragraph") {return Err("Unsupported Word action".into())}
-        let index=j.get("block").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Invalid block index")?;
+        let action=j.get("action").and_then(J::as_str).ok_or("Missing Word action")?;
         let mut doc=wordcraft_docx::read(decode(data,len,MAX_INPUT_BYTES)?).map_err(|e|e.to_string())?;
         if doc.settings.protection.is_some() || doc.settings.protect_formatting {return Err("Protected DOCX cannot be edited".into())}
         if doc.settings.track_changes {return Err("Track changes must be resolved in a full editor first".into())}
+        if action=="replace_one" || action=="replace_all" {
+            replace_matches(&mut doc,&j,action=="replace_all")?;
+            return wordcraft_docx::write(&doc).map_err(|e|e.to_string())
+        }
+        if action!="paragraph" {return Err("Unsupported Word action".into())}
+        let index=j.get("block").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Invalid block index")?;
         let block=doc.body.get_mut(index).ok_or("Paragraph not found")?;
         let Block::Para(p)=Arc::make_mut(block) else {return Err("Selected block is not a paragraph".into())};
         if !p.objects.is_empty() || p.runs.iter().any(|r|r.props.ins.is_some()||r.props.del.is_some()||r.props.fmt_change.is_some()) {
@@ -122,5 +164,31 @@ mod tests{
   assert!(edit(&input,json!({"action":"paragraph","block":999,"text":"x"})).is_err());
   let mut doc=wordcraft_docx::read(&input).unwrap();doc.settings.protection=Some("readOnly".into());let protected=wordcraft_docx::write(&doc).unwrap();
   assert!(edit(&protected,json!({"action":"paragraph","block":0,"text":"x"})).is_err());
+ }
+
+ #[test]fn find_replace_preserves_unicode_and_unaffected_runs(){
+  let text="До cat / cat 😀";
+  let input=bytes(super::super::ac_docx_create(text.as_ptr(),text.len())).unwrap();
+  let bold=edit(&input,json!({"action":"paragraph","block":0,"start":0,"end":3,"char":{"bold":true}})).unwrap();
+  let units=text.encode_utf16().count();
+  let styled=edit(&bold,json!({"action":"paragraph","block":0,"start":units-2,"end":units,"char":{"italic":true}})).unwrap();
+  let out=edit(&styled,json!({"action":"replace_all","find":"cat","replacement":"кот"})).unwrap();
+  let doc=wordcraft_docx::read(&out).unwrap();let Block::Para(p)=doc.body[0].as_ref()else{panic!()};
+  assert_eq!(p.text,"До кот / кот 😀");assert_eq!(p.props_at(1).bold,Some(true));
+  assert_eq!(p.props_of_char(p.text.len()-4).italic,Some(true));
+  let one=edit(&styled,json!({"action":"replace_one","block":0,"start":3,"end":6,"find":"cat","replacement":"X"})).unwrap();
+  assert_eq!(preview(&wordcraft_docx::read(&one).unwrap())[0]["text"],"До X / cat 😀");
+  assert_eq!(preview(&wordcraft_docx::read(&styled).unwrap())[0]["text"],text);
+  assert!(edit(&styled,json!({"action":"replace_one","block":0,"start":3,"end":6,"find":"dog","replacement":"X"})).is_err());
+ }
+ #[test]fn replacement_limits_and_document_protection_are_atomic(){
+  let text="a".repeat(10001);let original=bytes(super::super::ac_docx_create(text.as_ptr(),text.len())).unwrap();
+  for request in [json!({"action":"replace_all","find":"a","replacement":"b"}),json!({"action":"replace_all","find":"","replacement":"b"})] {
+   assert!(edit(&original,request).is_err());
+  }
+  let mut doc=wordcraft_docx::read(&original).unwrap();doc.settings.protection=Some("readOnly".into());
+  let protected=wordcraft_docx::write(&doc).unwrap();
+  assert!(edit(&protected,json!({"action":"replace_all","find":"a","replacement":"b"})).is_err());
+  assert_eq!(preview(&wordcraft_docx::read(&original).unwrap())[0]["text"],text);
  }
 }
