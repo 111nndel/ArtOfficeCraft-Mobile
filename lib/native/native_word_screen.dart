@@ -688,6 +688,57 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
           ],
         },
         overrides: {
+          'Цвет текста': EditorTool(
+            'Цвет текста',
+            Icons.format_color_text,
+            children: [
+              EditorTool(
+                'Автоматический',
+                Icons.format_color_reset,
+                onPressed: editing
+                    ? () => commitInline(
+                        patch: {
+                          'char': {'color': null},
+                        },
+                      )
+                    : null,
+              ),
+              for (final color in [
+                ('Чёрный', '#000000'),
+                ('Синий', '#3565CA'),
+                ('Зелёный', '#147553'),
+                ('Красный', '#C64246'),
+                ('Фиолетовый', '#7B45A0'),
+              ])
+                EditorTool(
+                  color.$1,
+                  Icons.circle,
+                  onPressed: editing
+                      ? () => commitInline(
+                          patch: {
+                            'char': {'color': color.$2},
+                          },
+                        )
+                      : null,
+                ),
+            ],
+          ),
+          'Отступы': EditorTool(
+            'Отступы',
+            Icons.format_indent_increase,
+            children: [
+              for (final value in [0, 12, 24, 36])
+                EditorTool(
+                  '$value pt',
+                  Icons.format_indent_increase,
+                  localize: false,
+                  onPressed: editing
+                      ? () => commitInline(patch: {'indentLeft': value})
+                      : null,
+                ),
+            ],
+          ),
+
           'Найти и заменить': EditorTool(
             'Найти и заменить',
             Icons.find_replace,
@@ -826,6 +877,13 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                                     () => GlobalKey(),
                                   ),
                                   padding: EdgeInsets.only(
+                                    left:
+                                        ((block['indentLeft'] as num?)
+                                                    ?.toDouble() ??
+                                                0)
+                                            .clamp(0.0, 2000.0) *
+                                        4 /
+                                        3,
                                     bottom:
                                         (block['spaceAfter'] as num?)
                                             ?.toDouble() ??
@@ -866,11 +924,17 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                                                     'right' => TextAlign.right,
                                                     _ => TextAlign.justify,
                                                   },
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontFamily: 'serif',
                                                 color: Color(0xff27313d),
                                                 fontSize: 17,
-                                                height: 1.5,
+                                                height:
+                                                    ((block['lineSpacing']
+                                                                    as num?)
+                                                                ?.toDouble() ??
+                                                            1.5)
+                                                        .clamp(.5, 8.0)
+                                                        .toDouble(),
                                               ),
                                               decoration:
                                                   InputDecoration.collapsed(
@@ -892,30 +956,10 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                                                           run['text']
                                                               ?.toString() ??
                                                           '',
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            run['bold'] == true
-                                                            ? FontWeight.bold
-                                                            : FontWeight.normal,
-                                                        fontStyle:
-                                                            run['italic'] ==
-                                                                true
-                                                            ? FontStyle.italic
-                                                            : FontStyle.normal,
-                                                        decoration:
-                                                            run['underline'] ==
-                                                                true
-                                                            ? TextDecoration
-                                                                  .underline
-                                                            : TextDecoration
-                                                                  .none,
-                                                        fontSize:
-                                                            ((run['size']
-                                                                        as num?)
-                                                                    ?.toDouble() ??
-                                                                12) *
-                                                            1.33,
-                                                      ),
+                                                      style:
+                                                          WordInlineController.runStyle(
+                                                            run as Map,
+                                                          ),
                                                     ),
                                                   if ((block['runs'] as List? ??
                                                           [])
@@ -943,11 +987,17 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                                                     'right' => TextAlign.right,
                                                     _ => TextAlign.justify,
                                                   },
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontFamily: 'serif',
                                                 color: Color(0xff27313d),
                                                 fontSize: 17,
-                                                height: 1.5,
+                                                height:
+                                                    ((block['lineSpacing']
+                                                                    as num?)
+                                                                ?.toDouble() ??
+                                                            1.5)
+                                                        .clamp(.5, 8.0)
+                                                        .toDouble(),
                                               ),
                                             ),
                                     ),

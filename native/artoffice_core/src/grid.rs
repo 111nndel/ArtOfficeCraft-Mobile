@@ -1,6 +1,6 @@
 //! GridCraft: real XLSX create/read/edit/write bridge.
 //! Preview is bounded and does not pretend to render full Excel features.
-use gridcraft_core::{CellRef, Value};
+use gridcraft_core::{CellRef, RangeRef, Value};
 use gridcraft_model::{Cell, Formula, Workbook};
 use gridcraft_model::style::{Color, Fill, HAlign, NumFmt, PatternType, Underline, Borders, BorderLine, VAlign};
 use gridcraft_numfmt::{NumberFormat, format_value};
@@ -122,6 +122,35 @@ fn format_cell(w:&mut Workbook, idx:usize, a1:&str, patch:&Json)->Result<(),Stri
     w.sheet_mut(idx).ok_or("Sheet not found")?.set_style(loc,id);
     Ok(())
 }
+/// Bulk edits are atomic: validate the full range and merges before changing cells.
+fn edit_range(w:&mut Workbook, idx:usize, request:&Json, clear:bool)->Result<(),String> {
+    if w.protected_structure {return Err("Workbook is protected".into())}
+    let text=request.get("range").and_then(Json::as_str).ok_or("Missing cell range")?;
+    let range=RangeRef::parse(text).ok_or("Invalid A1 cell range")?;
+    if u64::from(range.width())*u64::from(range.height())>4096 {return Err("Select at most 4096 cells per operation".into())}
+    let sh=w.sheet(idx).ok_or("Sheet index out of bounds")?;
+    if sh.protection.is_some() {return Err("Protected sheet cannot be edited".into())}
+    for merge in &sh.merges {
+        if merge.intersects(&range) && !range.contains_range(merge) {return Err("Select complete merged cells".into())}
+    }
+    if request.get("value").is_some() {return Err("Range actions do not accept a cell value".into())}
+    if clear {
+        let sh=w.sheet_mut(idx).unwrap();
+        for row in range.start.row..=range.end.row {for col in range.start.col..=range.end.col {
+            let at=CellRef::new(row,col);let style=sh.style_id(at);
+            sh.set_cell(at,Cell{style,..Cell::default()});
+        }}
+    } else {
+        let style=request.get("style").ok_or("Missing range style")?;
+        let mut seen=std::collections::HashSet::new();
+        for row in range.start.row..=range.end.row {for col in range.start.col..=range.end.col {
+            let at=CellRef::new(row,col);
+            let at=w.sheet(idx).unwrap().merge_at(at).map_or(at,|m|m.start);
+            if seen.insert(at) {format_cell(w,idx,&at.a1(),style)?;}
+        }}
+    }
+    Ok(())
+}
 fn line_json(line:BorderLine,w:&Workbook)->Json {
     json!({"width":line.style.width(),"color":line.color.hex(&w.theme)})
 }
@@ -176,9 +205,14 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
-        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet") {return Err("Unknown cell action".into())}
+        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet"|"format_range"|"clear_range") {return Err("Unknown cell action".into())}
         if matches!(action,"autosum"|"recalculate"|"add_sheet") && req.get("value").is_some() {
             return Err("Calculation actions do not accept a cell value".into())
+        }
+        if action=="format_range" || action=="clear_range" {
+            edit_range(&mut wb,idx,&req,action=="clear_range")?;
+            if action=="clear_range" {gridcraft_calc::Calc::new().recalc_all(&mut wb);}
+            return write(&wb)
         }
         if action=="add_sheet" {
             wb.sheet(idx).ok_or("Sheet index out of bounds")?;
@@ -586,5 +620,39 @@ mod formatting_tests {
         let request=json!({"action":"add_sheet","sheet":0,"address":"A1"}).to_string();
         let result=ac_xlsx_set_cell(protected.as_ptr(),protected.len(),request.as_ptr(),request.len());
         assert_ne!(result.status,0);super::super::ac_result_free(result);
+    }
+
+    #[test]
+    fn range_format_and_clear_preserve_styles_and_recalculate_dependents() {
+        let initial=write(&Workbook::new()).unwrap();
+        let mut data=edit(&initial,json!({"sheet":0,"address":"A1","value":"12"}));
+        data=edit(&data,json!({"sheet":0,"address":"B1","value":"=A1*2"}));
+        data=edit(&data,json!({"sheet":0,"address":"D1","value":"=SUM(A1:B1)"}));
+        let formatted=edit(&data,json!({"action":"format_range","sheet":0,"address":"A1","range":"A1:B2","style":{"bold":true,"fill":"#E2F0D9","numFmt":"0.00"}}));
+        let wb=workbook(&formatted).unwrap();
+        for row in 0..2 {for col in 0..2 {assert!(wb.styles.get(wb.sheet(0).unwrap().style_id(CellRef::new(row,col))).font.bold);}}
+        assert_eq!(wb.sheet(0).unwrap().input_text(CellRef::new(0,1)),"=A1*2");
+        assert_eq!(wb.sheet(0).unwrap().value(CellRef::new(0,3)),Value::number(36.0));
+        let clear=edit(&formatted,json!({"action":"clear_range","sheet":0,"address":"A1","range":"A1:B2"}));
+        let wb=workbook(&clear).unwrap();let sheet=wb.sheet(0).unwrap();
+        assert_eq!(sheet.input_text(CellRef::new(0,0)),"");assert_eq!(sheet.input_text(CellRef::new(0,1)),"");
+        assert_eq!(sheet.input_text(CellRef::new(0,3)),"=SUM(A1:B1)");
+        assert_eq!(sheet.value(CellRef::new(0,3)),Value::number(0.0));
+        assert!(wb.styles.get(sheet.style_id(CellRef::new(0,0))).font.bold);
+        assert!(!wb.styles.get(sheet.style_id(CellRef::new(0,2))).font.bold);
+    }
+    #[test]
+    fn range_edits_reject_partial_merges_excessive_ranges_and_protection() {
+        let original=include_bytes!("../../../test/fixtures/formatted-grid.xlsx").as_slice();
+        for range in ["B2:C3","A1:XFD1048576","XFE1:XFE2","A0:B1"] {
+            let request=json!({"action":"clear_range","sheet":0,"address":"A1","range":range}).to_string();
+            let result=ac_xlsx_set_cell(original.as_ptr(),original.len(),request.as_ptr(),request.len());
+            assert_ne!(result.status,0);super::super::ac_result_free(result);
+        }
+        let good=edit(original,json!({"action":"format_range","sheet":0,"address":"A1","range":"A1:C2","style":{"fill":"#FFF2CC"}}));
+        let wb=workbook(&good).unwrap();assert_eq!(wb.sheet(0).unwrap().input_text(CellRef::new(0,0)),"Imported merged title");
+        let mut locked=wb.clone();locked.protected_structure=true;
+        let bytes=write(&locked).unwrap();let req=json!({"action":"clear_range","sheet":0,"address":"A1","range":"A1:C2"}).to_string();
+        let result=ac_xlsx_set_cell(bytes.as_ptr(),bytes.len(),req.as_ptr(),req.len());assert_ne!(result.status,0);super::super::ac_result_free(result);
     }
 }

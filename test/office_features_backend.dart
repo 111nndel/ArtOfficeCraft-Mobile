@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
+import 'package:artofficecraft_mobile/native/grid_selection.dart';
+import 'package:artofficecraft_mobile/native/grid_window.dart';
 
 /// JSON snapshots isolate UI transaction/history tests from native algorithms,
 /// which are covered separately by Rust and Android round trips.
@@ -68,6 +70,26 @@ class FeaturesBackend implements DocumentBackend {
           'cells': <String, dynamic>{},
         });
         data['activeSheet'] = sheets.length - 1;
+      case 'format_range':
+      case 'clear_range':
+        final range = GridSelection.parse(request['range'] as String)!;
+        final cells = data['sheets'][request['sheet']]['cells'] as Map;
+        for (var r = range.row; r <= range.endRow; r++) {
+          for (var c = range.column; c <= range.endColumn; c++) {
+            final key = '${gridColumnName(c)}${r + 1}';
+            final cell = Map<String, dynamic>.from(cells[key] as Map? ?? {});
+            if (request['action'] == 'clear_range') {
+              cell['input'] = '';
+              cell['display'] = '';
+            } else {
+              cell['style'] = {
+                ...?cell['style'] as Map?,
+                ...request['style'] as Map,
+              };
+            }
+            cells[key] = cell;
+          }
+        }
       case 'move_slide':
         final slides = data['slides'] as List;
         slides.insert(

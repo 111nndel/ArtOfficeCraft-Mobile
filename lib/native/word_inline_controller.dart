@@ -5,7 +5,15 @@ class WordInlineController extends TextEditingController {
   List<TextStyle> _styles = [];
   String _previous = '';
 
+  static Color? textColor(dynamic value) {
+    if (value is! String || !RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(value)) {
+      return null;
+    }
+    return Color(0xff000000 | int.parse(value.substring(1), radix: 16));
+  }
+
   static TextStyle runStyle(Map run) => TextStyle(
+    color: textColor(run['color']),
     fontWeight: run['bold'] == true ? FontWeight.bold : FontWeight.normal,
     fontStyle: run['italic'] == true ? FontStyle.italic : FontStyle.normal,
     decoration: run['underline'] == true

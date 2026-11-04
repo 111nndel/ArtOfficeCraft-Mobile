@@ -11,7 +11,7 @@ void main() {
       controller.load({
         'text': 'A😀 хвост',
         'runs': [
-          {'text': 'A😀 ', 'bold': true},
+          {'text': 'A😀 ', 'bold': true, 'color': '#3565CA'},
           {'text': 'хвост', 'italic': true},
         ],
       });
@@ -33,6 +33,10 @@ void main() {
       expect(span.toPlainText(), 'A😀 новый хвост');
       final children = span.children!.cast<TextSpan>();
       expect(children.first.style!.fontWeight, FontWeight.bold);
+      expect(children.first.style!.color, const Color(0xff3565ca));
+      expect(children.last.style!.color, isNull);
+      expect(WordInlineController.textColor('auto'), isNull);
+      expect(WordInlineController.textColor('#bad'), isNull);
       expect(children.last.style!.fontStyle, FontStyle.italic);
       expect(
         children.any((s) => s.style!.decoration == TextDecoration.underline),

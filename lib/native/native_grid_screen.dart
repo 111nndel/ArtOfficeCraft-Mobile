@@ -13,6 +13,7 @@ import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
 import 'grid_window.dart';
+import 'grid_selection.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 
@@ -99,6 +100,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (widget.draft != null) unawaited(widget.draft!.close());
     inputFocus.dispose();
     newSheetName.dispose();
+    rangeInput.dispose();
     viewTimer?.cancel();
     addressInput.dispose();
     input.dispose();
@@ -161,6 +163,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     setState(() {
       book = data;
+      rangeSelection = null;
+      rangeInput.clear();
       sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       sheetIndex = window.sheet.clamp(0, sheets.length - 1);
       selected = 'A1';
@@ -374,6 +378,10 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   ) {
     setState(() {
       book = bytes;
+      if (sheetIndex != window.sheet) {
+        rangeSelection = null;
+        rangeInput.clear();
+      }
       sheetIndex = window.sheet;
       wantedWindow = window;
       acceptView(parsed, window);
@@ -435,35 +443,50 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     inputFocus.unfocus();
     tip('Формулы пересчитаны');
   });
-  Future<void> selectCell(String address, {bool reveal = false}) =>
-      run(() async {
-        if (address == selected && !reveal) return;
-        await flushInput();
-        final position = gridAddress(address);
-        if (position == null) {
-          throw const FormatException('Введите адрес от A1 до XFD1048576');
-        }
-        final window = loadedWindow.contains(position.row, position.column)
-            ? loadedWindow
-            : GridWindow(
-                sheetIndex,
-                position.row,
-                position.column,
-                rows: 1,
-                columns: 1,
-              ).buffered;
-        final parsed = await bridge!.inspectGrid(book!, window, address);
-        if (!mounted) return;
+  Future<void> selectCell(
+    String address, {
+    bool reveal = false,
+    bool keepRange = false,
+  }) => run(() async {
+    if (address == selected && !reveal) {
+      if (!keepRange) {
         setState(() {
-          selected = address;
-          acceptView(parsed, window);
-          input.text = currentInput;
+          rangeSelection = null;
+          rangeInput.clear();
         });
-        if (reveal) {
-          gridViewport.currentState?.goToCell(position.row, position.column);
-        }
-        if (reveal) FocusManager.instance.primaryFocus?.unfocus();
-      });
+      }
+      return;
+    }
+    await flushInput();
+    final position = gridAddress(address);
+    if (position == null) {
+      throw const FormatException('Введите адрес от A1 до XFD1048576');
+    }
+    final window = loadedWindow.contains(position.row, position.column)
+        ? loadedWindow
+        : GridWindow(
+            sheetIndex,
+            position.row,
+            position.column,
+            rows: 1,
+            columns: 1,
+          ).buffered;
+    final parsed = await bridge!.inspectGrid(book!, window, address);
+    if (!mounted) return;
+    setState(() {
+      selected = address;
+      if (!keepRange) {
+        rangeSelection = null;
+        rangeInput.clear();
+      }
+      acceptView(parsed, window);
+      input.text = currentInput;
+    });
+    if (reveal) {
+      gridViewport.currentState?.goToCell(position.row, position.column);
+    }
+    if (reveal) FocusManager.instance.primaryFocus?.unfocus();
+  });
   Future<void> chooseSheet(int idx) => run(() async {
     if (idx == sheetIndex) return;
     await flushInput();
@@ -472,6 +495,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (!mounted) return;
     setState(() {
       sheetIndex = idx;
+      rangeSelection = null;
+      rangeInput.clear();
       selected = 'A1';
       acceptView(parsed, window);
       wantedWindow = window;
@@ -481,6 +506,17 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
   Future<void> formatCell(Map<String, dynamic> style) => run(() async {
     if (book == null) return;
+    if (rangeSelection != null) {
+      await flushInput();
+      await applyEdit({
+        'action': 'format_range',
+        'sheet': sheetIndex,
+        'address': selected,
+        'range': rangeSelection!.address,
+        'style': style,
+      });
+      return;
+    }
     await applyEdit({
       'action': 'format',
       'sheet': sheetIndex,
@@ -519,6 +555,73 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     install(target, parsed, window);
     if (differentSheet) gridViewport.currentState?.reset();
     await rememberCurrent();
+  });
+
+  GridSelection? rangeSelection;
+  final rangeInput = TextEditingController();
+  bool updateRange(GridSelection value, {bool message = true}) {
+    final expanded = value.includingMerges(layout);
+    if (expanded.cellCount > GridSelection.maxCells) {
+      if (message) tip('Выберите не более 4096 ячеек за одну операцию');
+      return false;
+    }
+    setState(() {
+      rangeSelection = expanded;
+      rangeInput.text = expanded.address;
+    });
+    return true;
+  }
+
+  Future<void> beginRange(String address) async {
+    await selectCell(address);
+    if (!mounted || busy || selected != address) return;
+    inputFocus.unfocus();
+    final p = gridAddress(selected)!;
+    updateRange(GridSelection(p.row, p.column, p.row, p.column));
+  }
+
+  Future<void> focusRange() async {
+    final value = rangeSelection;
+    if (value == null || busy) return;
+    await selectCell(
+      '${gridColumnName(value.column)}${value.row + 1}',
+      keepRange: true,
+    );
+  }
+
+  Future<void> chooseRange() async {
+    final parsed = GridSelection.parse(rangeInput.text);
+    if (parsed == null) {
+      tip('Введите диапазон, например A1:D10');
+      return;
+    }
+    final value = parsed.includingMerges(layout);
+    if (value.cellCount > GridSelection.maxCells) {
+      tip('Выберите не более 4096 ячеек за одну операцию');
+      return;
+    }
+    final address = '${gridColumnName(value.column)}${value.row + 1}';
+    await selectCell(address);
+    if (!mounted || busy || selected != address) return;
+    updateRange(value);
+    inputFocus.unfocus();
+    gridViewport.currentState?.goToCell(value.row, value.column);
+  }
+
+  Future<void> clearSelected() => run(() async {
+    if (book == null) return;
+    await flushInput();
+    final p = gridAddress(selected)!;
+    final range =
+        rangeSelection ??
+        GridSelection(p.row, p.column, p.row, p.column).includingMerges(layout);
+    await applyEdit({
+      'action': 'clear_range',
+      'sheet': sheetIndex,
+      'address': selected,
+      'range': range.address,
+    });
+    inputFocus.unfocus();
   });
 
   final newSheetName = TextEditingController();
@@ -616,14 +719,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return InkWell(
       key: ValueKey('grid-cell-$address'),
       onTap: busy ? null : () => selectCell(address),
-      onLongPress: busy
-          ? null
-          : () async {
-              await selectCell(address);
-              if (mounted && selected == address && !busy) {
-                inputFocus.requestFocus();
-              }
-            },
+      onLongPress: busy ? null : () => beginRange(address),
       child: Container(
         alignment: Alignment(
           switch (style['align']) {
@@ -702,6 +798,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         rowHeaderExtent: 46,
         columnHeaderExtent: 28,
         layout: layout,
+        selection: rangeSelection,
+        onSelectionChanged: busy
+            ? null
+            : (value) => updateRange(value, message: false),
+        onSelectionEnd: busy ? null : focusRange,
         freezeHeadings: headingsPinned,
         compactCellsBuilder: (_, rect, rows, columns) => RepaintBoundary(
           child: CustomPaint(
@@ -721,13 +822,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ),
         ),
         onCellTap: (row, col) => selectCell('${gridColumnName(col)}${row + 1}'),
-        onCellLongPress: (row, col) async {
-          final address = '${gridColumnName(col)}${row + 1}';
-          await selectCell(address);
-          if (mounted && selected == address && !busy) {
-            inputFocus.requestFocus();
-          }
-        },
+        onCellLongPress: (row, col) =>
+            beginRange('${gridColumnName(col)}${row + 1}'),
         onResize: busy ? null : resizeLine,
         corner: header(''),
         columnHeaderBuilder: (context, col) => header(gridColumnName(col)),
@@ -1021,6 +1117,57 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ],
         },
         overrides: {
+          'Очистить содержимое': EditorTool(
+            'Очистить содержимое',
+            Icons.backspace_outlined,
+            onPressed: busy || book == null ? null : clearSelected,
+          ),
+          'Выделить диапазон': EditorTool(
+            'Выделить диапазон',
+            Icons.select_all,
+            builder: (_) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  key: const Key('grid-range-input'),
+                  controller: rangeInput,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'Диапазон'),
+                    hintText: 'A1:D10',
+                  ),
+                  onSubmitted: (_) {
+                    if (!busy) chooseRange();
+                  },
+                ),
+                const SizedBox(height: 12),
+                if (rangeSelection != null)
+                  Text(
+                    '${rangeSelection!.address} · ${rangeSelection!.cellCount} ${tr(context, 'ячеек')}',
+                  ),
+                FilledButton.icon(
+                  onPressed: busy ? null : chooseRange,
+                  icon: const Icon(Icons.select_all),
+                  label: const UiText('Выделить ячейки'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: busy || rangeSelection == null
+                      ? null
+                      : () => setState(() {
+                          rangeSelection = null;
+                          rangeInput.clear();
+                        }),
+                  child: const UiText('Снять выделение'),
+                ),
+                const SizedBox(height: 8),
+                const UiText(
+                  'Удерживайте ячейку, затем тяните круглые маркеры. Формат применяется ко всему диапазону.',
+                ),
+              ],
+            ),
+          ),
+
           'Новый лист': EditorTool(
             'Новый лист',
             Icons.add_box_outlined,

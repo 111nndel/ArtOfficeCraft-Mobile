@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart' as gestures;
@@ -7,6 +8,7 @@ import 'package:flutter/physics.dart' as physics;
 import '../l10n/app_strings.dart';
 import '../native/grid_layout.dart';
 import '../native/grid_window.dart';
+import '../native/grid_selection.dart';
 
 /// Document geometry is zoomed; editor controls remain outside this viewport.
 class SheetViewport extends StatefulWidget {
@@ -31,7 +33,10 @@ class SheetViewport extends StatefulWidget {
        compactCellsBuilder = null,
        onCellTap = null,
        onCellLongPress = null,
-       freezeHeadings = false;
+       freezeHeadings = false,
+       selection = null,
+       onSelectionChanged = null,
+       onSelectionEnd = null;
   const SheetViewport.cells({
     super.key,
     required this.rowCount,
@@ -47,6 +52,9 @@ class SheetViewport extends StatefulWidget {
     this.onCellTap,
     this.onCellLongPress,
     this.freezeHeadings = false,
+    this.selection,
+    this.onSelectionChanged,
+    this.onSelectionEnd,
     this.rowExtent = 56,
     this.columnExtent = 116,
     this.rowHeaderExtent = 52,
@@ -70,6 +78,9 @@ class SheetViewport extends StatefulWidget {
   compactCellsBuilder;
   final void Function(int row, int column)? onCellTap, onCellLongPress;
   final bool freezeHeadings;
+  final GridSelection? selection;
+  final ValueChanged<GridSelection>? onSelectionChanged;
+  final VoidCallback? onSelectionEnd;
   final ValueChanged<GridWindow>? onWindowChanged;
   final Future<void> Function(bool row, int index, double size)? onResize;
   @override
@@ -107,7 +118,10 @@ class SheetViewportState extends State<SheetViewport>
   }
 
   void _scaleEnd(ScaleEndDetails details) {
-    if (_multiTouch || _resizingRow != null || details.pointerCount != 0) {
+    if (_multiTouch ||
+        _resizingRow != null ||
+        _draggingCorner != null ||
+        details.pointerCount != 0) {
       return;
     }
     final velocity = details.velocity.pixelsPerSecond;
@@ -174,7 +188,7 @@ class SheetViewportState extends State<SheetViewport>
   }
 
   void _scaleUpdate(ScaleUpdateDetails details) {
-    if (_resizingRow != null) return;
+    if (_resizingRow != null || _draggingCorner != null) return;
     final scale = (_gestureScale * details.scale)
         .clamp(minimumZoom, 5.0)
         .toDouble();
@@ -221,6 +235,8 @@ class SheetViewportState extends State<SheetViewport>
       ? (widget.rowCount + 1) * widget.rowExtent
       : rows.total;
   void reset() {
+    _rangeScroll?.cancel();
+    _draggingCorner = null;
     _inertia.stop();
     _lastRegion = null;
     transform.value = Matrix4.identity();
@@ -329,6 +345,7 @@ class SheetViewportState extends State<SheetViewport>
   @override
   void dispose() {
     _inertia.dispose();
+    _rangeScroll?.cancel();
     transform.dispose();
     super.dispose();
   }
@@ -488,6 +505,180 @@ class SheetViewportState extends State<SheetViewport>
     );
   }
 
+  Offset _selectionPointer = Offset.zero, _selectionScene = Offset.zero;
+  int _selectionAnchorRow = 0, _selectionAnchorColumn = 0;
+  bool? _draggingCorner;
+  Timer? _rangeScroll;
+  Offset _rangePointer = Offset.zero, _rangeTranslation = Offset.zero;
+  void _startRangeScroll() {
+    _rangeScroll?.cancel();
+    _rangeScroll = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted || _draggingCorner == null) {
+        _rangeScroll?.cancel();
+        return;
+      }
+      final box = context.findRenderObject();
+      if (box is! RenderBox) return;
+      final point = box.globalToLocal(_rangePointer);
+      double speed(double value, double length) => value < 36
+          ? ((36 - value) / 36).clamp(0.0, 1.0) * 8
+          : value > length - 36
+          ? -((value - length + 36) / 36).clamp(0.0, 1.0) * 8
+          : 0;
+      final before = Offset(
+        transform.value.storage[12],
+        transform.value.storage[13],
+      );
+      final next = Offset(
+        (before.dx + speed(point.dx, _size.width))
+            .clamp(
+              math.min(0.0, _size.width - _padding.dx - _width * zoom),
+              0.0,
+            )
+            .toDouble(),
+        (before.dy + speed(point.dy, _size.height))
+            .clamp(
+              math.min(0.0, _size.height - _padding.dy - _height * zoom),
+              0.0,
+            )
+            .toDouble(),
+      );
+      if (next == before) return;
+      _matrix(zoom, next.dx, next.dy);
+      if (!_publishSelection()) {
+        _matrix(zoom, before.dx, before.dy);
+        _rangeScroll?.cancel();
+      }
+    });
+  }
+
+  void _beginSelection(bool start, DragStartDetails details) {
+    final value = widget.selection!;
+    _inertia.stop();
+    _draggingCorner = start;
+    _selectionPointer = _rangePointer = details.globalPosition;
+    _rangeTranslation = Offset(
+      transform.value.storage[12],
+      transform.value.storage[13],
+    );
+    _startRangeScroll();
+    final row = start ? value.row : value.endRow,
+        col = start ? value.column : value.endColumn;
+    _selectionScene = Offset(
+      columns.offset(col) + columns.extent(col) / 2,
+      rows.offset(row) + rows.extent(row) / 2,
+    );
+    _selectionAnchorRow = start ? value.endRow : value.row;
+    _selectionAnchorColumn = start ? value.endColumn : value.column;
+  }
+
+  void _moveSelection(DragUpdateDetails details) {
+    _rangePointer = details.globalPosition;
+    if (_rangeScroll?.isActive != true) _startRangeScroll();
+    _publishSelection();
+  }
+
+  bool _publishSelection() {
+    final start = _draggingCorner;
+    if (start == null) return false;
+    final translation = Offset(
+      transform.value.storage[12],
+      transform.value.storage[13],
+    );
+    final point =
+        _selectionScene +
+        (_rangePointer -
+                _selectionPointer -
+                (translation - _rangeTranslation)) /
+            zoom;
+    final row = rows.indexAt(point.dy.clamp(0, rows.total).toDouble());
+    final col = columns.indexAt(point.dx.clamp(0, columns.total).toDouble());
+    final value = start
+        ? GridSelection(
+            math.min(row, _selectionAnchorRow),
+            math.min(col, _selectionAnchorColumn),
+            _selectionAnchorRow,
+            _selectionAnchorColumn,
+          )
+        : GridSelection(
+            _selectionAnchorRow,
+            _selectionAnchorColumn,
+            math.max(row, _selectionAnchorRow),
+            math.max(col, _selectionAnchorColumn),
+          );
+    if (value.cellCount > GridSelection.maxCells) return false;
+    widget.onSelectionChanged?.call(value);
+    return true;
+  }
+
+  void _endSelection() {
+    _rangeScroll?.cancel();
+    _draggingCorner = null;
+    widget.onSelectionEnd?.call();
+  }
+
+  List<Widget> _selectionWidgets() {
+    final value = widget.selection;
+    if (value == null) return const [];
+    final rect = Rect.fromPoints(
+      screenPoint(Offset(columns.offset(value.column), rows.offset(value.row))),
+      screenPoint(
+        Offset(
+          columns.offset(value.endColumn + 1),
+          rows.offset(value.endRow + 1),
+        ),
+      ),
+    );
+    Widget handle(bool start) {
+      final point = start ? rect.topLeft : rect.bottomRight;
+      if (_size.shortestSide < 44 ||
+          (!(Offset.zero & _size).contains(point) &&
+              _draggingCorner != start)) {
+        return const SizedBox.shrink();
+      }
+      final center =
+          (point + (start ? const Offset(-22, -22) : const Offset(22, 22)));
+      final x = center.dx.clamp(22.0, _size.width - 22),
+          y = center.dy.clamp(22.0, _size.height - 22);
+      return Positioned(
+        left: x - 22,
+        top: y - 22,
+        width: 44,
+        height: 44,
+        child: GestureDetector(
+          key: ValueKey(start ? 'grid-selection-start' : 'grid-selection-end'),
+          dragStartBehavior: gestures.DragStartBehavior.down,
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (d) => _beginSelection(start, d),
+          onPanUpdate: _moveSelection,
+          onPanEnd: (_) => _endSelection(),
+          onPanCancel: _endSelection,
+          child: Semantics(
+            label: tr(context, start ? 'Начало диапазона' : 'Конец диапазона'),
+            child: Center(
+              child: Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: const Color(0xff188458),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return [
+      Positioned.fill(
+        child: IgnorePointer(child: CustomPaint(painter: _RangePainter(rect))),
+      ),
+      if (widget.onSelectionChanged != null) ...[handle(true), handle(false)],
+    ];
+  }
+
   Widget _cellSurface() => Listener(
     onPointerDown: (e) {
       _inertia.stop();
@@ -552,6 +743,7 @@ class SheetViewportState extends State<SheetViewport>
               0,
             );
           final cells = _cells(Rect.fromPoints(top, bottom));
+          final selection = _selectionWidgets();
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -567,7 +759,9 @@ class SheetViewportState extends State<SheetViewport>
                   child: cells,
                 ),
               ),
+              if (selection.isNotEmpty) selection.first,
               _headings(),
+              ...selection.skip(1),
             ],
           );
         },
@@ -677,4 +871,23 @@ class SheetViewportState extends State<SheetViewport>
       );
     },
   );
+}
+
+class _RangePainter extends CustomPainter {
+  _RangePainter(this.rect);
+  final Rect rect;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(rect, Paint()..color = const Color(0x12188458));
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color = const Color(0xff188458)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RangePainter old) => rect != old.rect;
 }

@@ -2,7 +2,7 @@
 use std::sync::Arc;
 use serde_json::{json, Value as J};
 use wordcraft_doc::{Block, CharProps, Paragraph};
-use wordcraft_doc::props::{Align, LineSpacing, Rgb, TextColor, Underline};
+use wordcraft_doc::props::{Align, LineSpacing, TextColor, Underline};
 use super::{AcResult, decode, protect, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
 
 fn offset(text: &str, units: u64) -> Result<usize,String> {
@@ -46,14 +46,14 @@ fn patch(p:&mut Paragraph,j:&J)->Result<(),String>{
         for key in object.keys() {if !["bold","italic","underline","size","color"].contains(&key.as_str()){return Err("Unsupported character property".into())}}
         let bold=bool_field(c,"bold")?;let italic=bool_field(c,"italic")?;let underline=bool_field(c,"underline")?;
         let size=number(c,"size",4.0,96.0)?;
-        let color=c.get("color").map(|v|v.as_str().and_then(Rgb::parse).ok_or("Invalid color")).transpose()?;
+        let color=c.get("color").map(|v|if v.is_null() {Ok(TextColor::Auto)} else {v.as_str().and_then(TextColor::parse).ok_or("Invalid color")}).transpose()?;
         let a=offset(&p.text,units(j,"start",0)?)?;
         let b=offset(&p.text,units(j,"end",p.text.encode_utf16().count() as u64)?)?;
         if a>b {return Err("Reversed selection".into())}
         let change=|r:&mut CharProps|{
             if let Some(v)=bold {r.bold=Some(v)}; if let Some(v)=italic {r.italic=Some(v)};
             if let Some(v)=underline {r.underline=Some(if v {Underline::Single}else{Underline::None})};
-            if let Some(v)=size {r.size=Some(v)};if let Some(v)=color {r.color=Some(TextColor::Rgb(v))};
+            if let Some(v)=size {r.size=Some(v)};if let Some(v)=color {r.color=Some(v)};
         };
         if p.text.is_empty(){change(&mut p.mark)}else{p.format(a,b,&change).map_err(|e|e.to_string())?;}
     }
@@ -132,12 +132,14 @@ pub fn preview(doc:&wordcraft_doc::Document)->Vec<J>{
         let mut off=0usize;
         let runs:Vec<J>=p.runs.iter().map(|r|{let start=off;off=off.saturating_add(r.len).min(p.text.len());
             json!({"text":p.text.get(start..off).unwrap_or(""),"bold":r.props.bold,"italic":r.props.italic,
-                "underline":r.props.underline.is_some_and(|v|v!=Underline::None),"size":r.props.size})}).collect();
+                "underline":r.props.underline.is_some_and(|v|v!=Underline::None),"size":r.props.size,
+                "color":match r.props.color {Some(TextColor::Rgb(rgb))=>Some(format!("#{}",rgb.hex())),_=>None}})}).collect();
         let editable=p.objects.is_empty() && !doc.settings.track_changes && doc.settings.protection.is_none() && !doc.settings.protect_formatting
             && !p.runs.iter().any(|r|r.props.ins.is_some()||r.props.del.is_some()||r.props.fmt_change.is_some());
         Some(json!({"block":index,"text":p.plain_text(),"editable":editable,"runs":runs,
             "align":p.props.align.unwrap_or(Align::Left),"indentLeft":p.props.indent_left.unwrap_or(0.0),
-            "indentFirst":p.props.indent_first.unwrap_or(0.0),"spaceAfter":p.props.space_after.unwrap_or(12.0)}))
+            "indentFirst":p.props.indent_first.unwrap_or(0.0),"spaceAfter":p.props.space_after.unwrap_or(12.0),
+            "lineSpacing":match p.props.line_spacing {Some(LineSpacing::Multiple(v))=>Some(v),_=>None}}))
     }).collect()
 }
 
@@ -190,5 +192,16 @@ mod tests{
   let protected=wordcraft_docx::write(&doc).unwrap();
   assert!(edit(&protected,json!({"action":"replace_all","find":"a","replacement":"b"})).is_err());
   assert_eq!(preview(&wordcraft_docx::read(&original).unwrap())[0]["text"],text);
+ }
+
+ #[test]fn selected_color_indent_and_line_spacing_reopen_and_preview_consistently(){
+  let text="До 😀 после";let original=bytes(super::super::ac_docx_create(text.as_ptr(),text.len())).unwrap();
+  let out=edit(&original,json!({"action":"paragraph","block":0,"start":3,"end":5,"char":{"color":"#3565CA"},"indentLeft":24,"lineSpacing":2.0})).unwrap();
+  let view=preview(&wordcraft_docx::read(&out).unwrap());
+  assert_eq!(view[0]["indentLeft"],24.0);assert_eq!(view[0]["lineSpacing"],2.0);
+  assert!(view[0]["runs"].as_array().unwrap().iter().any(|r|r["text"]=="😀" && r["color"]=="#3565CA"));
+  let cleared=edit(&out,json!({"action":"paragraph","block":0,"start":3,"end":5,"char":{"color":null}})).unwrap();
+  let view=preview(&wordcraft_docx::read(&cleared).unwrap());
+  assert!(view[0]["runs"].as_array().unwrap().iter().all(|r|r["color"].is_null()));
  }
 }

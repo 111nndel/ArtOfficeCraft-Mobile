@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.22.0 / core 0.22.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.23.0 / core 0.23.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/validation-0.22.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
+`docs/validation-0.23.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -34,6 +34,13 @@ Coordinate headings still follow physical sheet edges by default; optional pinni
 stays in View. Inertial pan, focal-point pinch and touch resizing are preserved.
 Successful imports and new documents reset the workspace identity in all four
 editors, preventing a new import from overwriting the previous recent copy.
+
+0.23.0 connects rectangular touch selection with 44-dp handles and edge scrolling.
+Range formatting/clear use the pinned native workbook and preserve clear-time
+styles; recalculation, checked snapshots and history still apply. Range actions
+are limited to 4096 cells and complete merges. Word exposes selected RGB/automatic
+color and left-indent presets; preview and inline/static display share foreground
+color and multiple line spacing. Four upstream pins and dependencies are unchanged.
 
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.

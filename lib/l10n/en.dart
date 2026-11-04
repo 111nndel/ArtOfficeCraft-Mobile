@@ -290,6 +290,8 @@ const english = <String, String>{
   "Без заливки": "No fill",
   "Автоматический": "Automatic",
   "Чёрный": "Black",
+  "Фиолетовый": "Purple",
+  "Выделить ячейки": "Select cells",
   "Белый": "White",
   "Синий": "Blue",
   "Зелёный": "Green",
@@ -456,4 +458,14 @@ const english = <String, String>{
       "Some matches cannot be edited",
   "Слишком много совпадений — уточните запрос":
       "Too many matches — narrow your search",
+  "Очистить содержимое": "Clear contents",
+  "Начало диапазона": "Range start",
+  "Конец диапазона": "Range end",
+  "Диапазон": "Range",
+  "ячеек": "cells",
+  "Снять выделение": "Clear selection",
+  "Введите диапазон, например A1:D10": "Enter a range, for example A1:D10",
+  "Выберите не более 4096 ячеек за одну операцию":
+      "Select at most 4096 cells per operation",
+  "Удерживайте ячейку, затем тяните круглые маркеры. Формат применяется ко всему диапазону.": "Hold a cell, then drag the round handles. Formatting applies to the whole range.",
 };
