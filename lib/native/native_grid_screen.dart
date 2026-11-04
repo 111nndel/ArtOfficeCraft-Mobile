@@ -14,6 +14,7 @@ import '../ui/editor_tools.dart';
 import 'document_backend.dart';
 import 'grid_window.dart';
 import 'grid_selection.dart';
+import 'grid_clipboard.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 
@@ -390,20 +391,27 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     });
   }
 
+  Future<void> acceptEdit(
+    Uint8List previous,
+    DocumentSnapshot updated,
+    GridWindow window,
+  ) async {
+    parsedSheets(updated.preview);
+    if (!mounted) return;
+    history.push(previous, position: sheetIndex);
+    install(updated.bytes, updated.preview, window);
+    await rememberCurrent();
+  }
+
   Future<void> applyEdit(Map<String, dynamic> request) async {
-    final previous = book!;
-    final window = loadedWindow;
+    final previous = book!, window = loadedWindow;
     final updated = await bridge!.editAndInspectGrid(
       previous,
       request,
       window,
       selected,
     );
-    parsedSheets(updated.preview);
-    if (!mounted) return;
-    history.push(previous, position: sheetIndex);
-    install(updated.bytes, updated.preview, window);
-    await rememberCurrent();
+    await acceptEdit(previous, updated, window);
   }
 
   Future<void> flushInput() async {
@@ -622,6 +630,95 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       'range': range.address,
     });
     inputFocus.unfocus();
+  });
+
+  GridSelection get clipboardSelection {
+    final cell = gridAddress(selected)!;
+    return rangeSelection ??
+        GridSelection(
+          cell.row,
+          cell.column,
+          cell.row,
+          cell.column,
+        ).includingMerges(layout);
+  }
+
+  Future<void> copyClipboard() => run(() async {
+    if (book == null) return;
+    if (book!.length > GridClip.maxSource) {
+      tip('Для копирования с оформлением файл должен быть не больше 24 МиБ');
+      return;
+    }
+    await flushInput();
+    final area = clipboardSelection;
+    final info = await bridge!.copyGrid(book!, {
+      'sheet': sheetIndex,
+      'range': area.address,
+    });
+    final entry = GridClip(book!, sheetIndex, info);
+    await GridClipboard.write(entry);
+    if (!mounted) return;
+    setState(() {});
+    inputFocus.unfocus();
+    tip('Диапазон скопирован');
+  });
+  Future<void> pasteClipboard(String mode) => run(() async {
+    if (book == null) return;
+    final data = await GridClipboard.read();
+    if (data == null) {
+      if (mounted) setState(() {});
+      tip('В буфере обмена нет текста');
+      return;
+    }
+    final rich = data.rich;
+    if (rich == null && mode != 'all') {
+      if (mounted) setState(() {});
+      tip('Сначала скопируйте диапазон в приложении');
+      return;
+    }
+    await flushInput();
+    final at = gridAddress(selected)!;
+    if (rich == null) {
+      await applyEdit({
+        'action': 'paste_text',
+        'sheet': sheetIndex,
+        'address': selected,
+        'text': data.text,
+      });
+    } else {
+      if (at.row + rich.rows > gridMaxRows ||
+          at.column + rich.columns > gridMaxColumns) {
+        tip('Вставляемый диапазон выходит за границы листа');
+        return;
+      }
+      final previous = book!, window = loadedWindow;
+      final updated = await bridge!.pasteGrid(
+        previous,
+        rich.source,
+        {
+          'sheet': sheetIndex,
+          'address': selected,
+          'sourceSheet': rich.sheet,
+          'sourceRange': rich.range.address,
+          'mode': mode,
+        },
+        window,
+        selected,
+      );
+      await acceptEdit(previous, updated, window);
+      if (mounted) {
+        updateRange(
+          GridSelection(
+            at.row,
+            at.column,
+            at.row + rich.rows - 1,
+            at.column + rich.columns - 1,
+          ),
+        );
+      }
+    }
+    inputFocus.unfocus();
+    tip('Данные вставлены');
   });
 
   final newSheetName = TextEditingController();
@@ -1117,6 +1214,50 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ],
         },
         overrides: {
+          'Копировать': EditorTool(
+            'Копировать',
+            Icons.copy,
+            onPressed: busy || book == null ? null : copyClipboard,
+          ),
+          'Вставить': EditorTool(
+            'Вставить',
+            Icons.content_paste,
+            builder: (_) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const UiText(
+                  'Вставка начинается с выбранной ячейки. Масштаб не меняется.',
+                ),
+                const SizedBox(height: 12),
+                for (final choice in [
+                  ('Вставить всё', 'all'),
+                  ('Только значения', 'values'),
+                  ('Только формулы', 'formulas'),
+                  ('Только оформление', 'formats'),
+                ]) ...[
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        busy ||
+                            (choice.$2 != 'all' &&
+                                GridClipboard.current == null)
+                        ? null
+                        : () => pasteClipboard(choice.$2),
+                    icon: Icon(
+                      choice.$2 == 'all'
+                          ? Icons.content_paste
+                          : Icons.content_paste_go,
+                    ),
+                    label: UiText(choice.$1),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (GridClipboard.current == null)
+                  const UiText(
+                    'Копирование в приложении сохраняет формулы и оформление. Текст из других приложений можно вставить через «Вставить всё».',
+                  ),
+              ],
+            ),
+          ),
           'Очистить содержимое': EditorTool(
             'Очистить содержимое',
             Icons.backspace_outlined,

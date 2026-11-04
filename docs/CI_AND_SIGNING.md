@@ -72,3 +72,15 @@ used to reconstruct the private key.
 
 Any future change to signing identity requires a separate, carefully planned
 migration to avoid breaking updates for existing installations.
+
+
+### Release without a contributor PC
+
+A push to `codex/release-v<VERSION>-alpha.<N>` is an explicit preview release
+request, in addition to the existing alpha-tag trigger. The exact version is
+validated against APK metadata. All Flutter/Rust/package and Android emulator
+jobs must succeed first. The isolated `android-preview` job retains its protected
+environment, existing certificate check and no source checkout. It creates a
+missing lightweight tag at the exact tested SHA, rejects any existing tag pointing
+elsewhere and refuses to overwrite a published release. No runner signing key is
+exported and no contributor machine is needed.

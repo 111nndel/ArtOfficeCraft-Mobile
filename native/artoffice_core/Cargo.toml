@@ -1,6 +1,6 @@
 [package]
 name = "artoffice_core"
-version = "0.23.0"
+version = "0.24.0"
 edition = "2024"
 publish = false
 license = "MIT OR Apache-2.0"
@@ -21,6 +21,7 @@ gridcraft-model = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24
 gridcraft-xlsx = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/xlsx" }
 gridcraft-calc = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/calc" }
 gridcraft-numfmt = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/numfmt" }
+gridcraft-engine = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/engine" }
 
 # BEGIN ArtOfficeCraft reviewed PDF dependency patches
 [patch.crates-io]

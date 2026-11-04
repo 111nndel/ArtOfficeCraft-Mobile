@@ -86,6 +86,53 @@ abstract interface class GridDocuments {
   );
 }
 
+abstract interface class GridClipboardDocuments {
+  Future<Map<String, dynamic>> copyGridRange(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  );
+  Future<DocumentSnapshot> pasteGridRange(
+    Uint8List bytes,
+    Uint8List source,
+    Map<String, dynamic> request,
+    GridWindow window,
+    String selected,
+  );
+}
+
+extension GridClipboardTransactions on DocumentBackend {
+  Future<Map<String, dynamic>> copyGrid(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  ) {
+    final backend = this;
+    if (backend is! GridClipboardDocuments) {
+      throw StateError('Grid clipboard backend unavailable');
+    }
+    return (backend as GridClipboardDocuments).copyGridRange(bytes, request);
+  }
+
+  Future<DocumentSnapshot> pasteGrid(
+    Uint8List bytes,
+    Uint8List source,
+    Map<String, dynamic> request,
+    GridWindow window,
+    String selected,
+  ) {
+    final backend = this;
+    if (backend is! GridClipboardDocuments) {
+      throw StateError('Grid clipboard backend unavailable');
+    }
+    return (backend as GridClipboardDocuments).pasteGridRange(
+      bytes,
+      source,
+      request,
+      window,
+      selected,
+    );
+  }
+}
+
 extension GridTransactions on DocumentBackend {
   Future<Map<String, dynamic>> inspectGrid(
     Uint8List bytes,
@@ -153,7 +200,8 @@ final class NativeDocumentBackend
         InspectedDocumentBackend,
         DocumentBackendLifetime,
         DocumentImages,
-        GridDocuments {
+        GridDocuments,
+        GridClipboardDocuments {
   NativeDocumentBackend(this.kind, {this.libraryPath});
   final NativeDocumentKind kind;
   final String? libraryPath;
@@ -180,8 +228,9 @@ final class NativeDocumentBackend
   Future<Object?> _call(
     String operation,
     Uint8List? bytes,
-    Map<String, dynamic> request,
-  ) {
+    Map<String, dynamic> request, {
+    Uint8List? source,
+  }) {
     if (_closed) return Future.error(StateError('Document backend is closed'));
     // Snapshot mutable buffers and containers before the startup await. Strings
     // remain immutable; UTF-8/JSON encoding and all Rust calls stay in the worker.
@@ -198,6 +247,7 @@ final class NativeDocumentBackend
       'bytes': transfer,
       'document': bytes == null ? null : _documentToken,
       'request': frozenRequest,
+      if (source != null) 'source': TransferableTypedData.fromList([source]),
     };
     _started = true;
     return _worker.request(operation, payload);
@@ -262,6 +312,30 @@ final class NativeDocumentBackend
   }
 
   @override
+  Future<Map<String, dynamic>> copyGridRange(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  ) async =>
+      _freeze(await _call('gridCopy', bytes, request)) as Map<String, dynamic>;
+  @override
+  Future<DocumentSnapshot> pasteGridRange(
+    Uint8List bytes,
+    Uint8List source,
+    Map<String, dynamic> request,
+    GridWindow window,
+    String selected,
+  ) async {
+    final result = await _call('gridPasteInspect', bytes, {
+      'edit': request,
+      'view': window.request(selected),
+    }, source: source) as Map;
+    return DocumentSnapshot(
+      _bytes(result['bytes']),
+      Map<String, dynamic>.from(result['preview'] as Map),
+    );
+  }
+
+  @override
   Future<void> close() async {
     _closed = true;
     if (_started) await _worker.close();
@@ -287,6 +361,25 @@ void _documentWorkerMain((SendPort, Map<String, Object?>) bootstrap) {
     }
     final bytes = token == null ? null : currentBytes;
     final request = Map<String, dynamic>.from(payload['request'] as Map);
+    if (operation == 'gridPasteInspect') {
+      final source = (payload['source'] as TransferableTypedData)
+          .materialize()
+          .asUint8List();
+      final next = engine.pasteGrid(
+        bytes!,
+        source,
+        Map<String, dynamic>.from(request['edit'] as Map),
+      );
+      final preview = engine.call(
+        'gridInspect',
+        next,
+        Map<String, dynamic>.from(request['view'] as Map),
+      );
+      return {
+        'bytes': TransferableTypedData.fromList([next]),
+        'preview': preview,
+      };
+    }
     if (operation == 'editInspect' || operation == 'gridEditInspect') {
       final grid = operation == 'gridEditInspect';
       final next = engine.call(
@@ -334,6 +427,21 @@ class _NativeEngine {
           ? PdfCraftBridge.tryOpen()!
           : PdfCraftBridge.openLibraryForTesting(library!),
   };
+  Uint8List pasteGrid(
+    Uint8List bytes,
+    Uint8List source,
+    Map<String, dynamic> request,
+  ) {
+    if (kind != NativeDocumentKind.grid) {
+      throw StateError('Not a workbook backend');
+    }
+    return ((_bridge ??= _open()) as GridCraftBridge).pasteRange(
+      bytes,
+      source,
+      request,
+    );
+  }
+
   Object call(
     String operation,
     Uint8List? bytes,
@@ -355,6 +463,7 @@ class _NativeEngine {
         final engine = bridge as GridCraftBridge;
         if (operation == 'create') return engine.create();
         if (operation == 'inspect') return engine.inspect(bytes!);
+        if (operation == 'gridCopy') return engine.copyRange(bytes!, request);
         if (operation == 'gridInspect') {
           return engine.inspectWindow(bytes!, request);
         }

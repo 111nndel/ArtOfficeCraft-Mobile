@@ -11,10 +11,10 @@ use super::{AcResult, decode, protect, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
 fn input<'a>(p: *const u8, n: usize) -> Result<&'a str, String> {
     std::str::from_utf8(decode(p, n, MAX_TEXT_BYTES)?).map_err(|_| "Invalid UTF-8 input".to_owned())
 }
-fn workbook(bytes: &[u8]) -> Result<Workbook,String> {
+pub(super) fn workbook(bytes: &[u8]) -> Result<Workbook,String> {
     gridcraft_xlsx::read_xlsx(bytes).map(|(w, _)| w).map_err(|e|format!("GridCraft XLSX read: {e}"))
 }
-fn write(w: &Workbook) -> Result<Vec<u8>,String> {
+pub(super) fn write(w: &Workbook) -> Result<Vec<u8>,String> {
     gridcraft_xlsx::write_xlsx(w).map_err(|e|format!("GridCraft XLSX write: {e}"))
 }
 fn put(w: &mut Workbook, sheet_index: usize, a1: &str, value: &str) -> Result<(),String> {
@@ -205,10 +205,11 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
-        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet"|"format_range"|"clear_range") {return Err("Unknown cell action".into())}
+        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet"|"format_range"|"clear_range"|"paste_text") {return Err("Unknown cell action".into())}
         if matches!(action,"autosum"|"recalculate"|"add_sheet") && req.get("value").is_some() {
             return Err("Calculation actions do not accept a cell value".into())
         }
+        if action=="paste_text" {return super::grid_clipboard::paste_text(wb,&req)}
         if action=="format_range" || action=="clear_range" {
             edit_range(&mut wb,idx,&req,action=="clear_range")?;
             if action=="clear_range" {gridcraft_calc::Calc::new().recalc_all(&mut wb);}

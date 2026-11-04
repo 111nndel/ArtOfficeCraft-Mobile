@@ -12,6 +12,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from verify_android_apk import verify
 
 
+def release_tag(ref, version):
+    if ref.startswith('refs/tags/'):
+        tag = ref.removeprefix('refs/tags/')
+    elif ref.startswith('refs/heads/codex/release-'):
+        tag = ref.removeprefix('refs/heads/codex/release-')
+    else:
+        return ''
+    if not re.fullmatch('v' + re.escape(version) + r'-alpha\.[0-9]+', tag):
+        raise ValueError('Release ref must match the application version')
+    return tag
+
+
 def main():
     apk = Path('build/app/outputs/flutter-apk/app-arm64-v8a-profile.apk')
     report = verify(apk)
@@ -28,9 +40,7 @@ def main():
     name, base = version.groups()
     if f"name='ai.artofficecraft.artofficecraft_mobile'" not in identity or f"versionName='{name}'" not in identity or f"versionCode='{2000 + int(base)}'" not in identity:
         raise ValueError('Unexpected Android application identity')
-    tag = os.environ.get('RELEASE_TAG', '')
-    if tag and not re.fullmatch(r'v' + re.escape(name) + r'-alpha\.[0-9]+', tag):
-        raise ValueError('Release tag must match the application version')
+    tag = release_tag(os.environ.get('GITHUB_REF', ''), name)
     dest = Path('build/apk-candidate')
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copy2(apk, dest / apk.name)
@@ -58,7 +68,7 @@ def main():
     notes = notes.replace('## Known Limitations', download + '## Known Limitations', 1)
     notes += ('\n\n## Build & Verification\n\n'
               '- Flutter unit/widget tests, Rust tests and APK package checks passed.\n'
-              '- Android emulator test results are reported separately in the workflow logs; '
+              '- Publication requires Android 16 emulator and ordinary-app checks in the same run; '
               'this build alone does not prove complete editor fidelity.\n'
               '- The existing development preview signing certificate is used.\n'
               f'- Source commit: `{os.environ["GITHUB_SHA"]}`.\n'

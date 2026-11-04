@@ -29,6 +29,22 @@ typedef _DartTwo = _GridResult Function(
   ffi.Pointer<ffi.Uint8>,
   int,
 );
+typedef _NativeThree = _GridResult Function(
+  ffi.Pointer<ffi.Uint8>,
+  ffi.IntPtr,
+  ffi.Pointer<ffi.Uint8>,
+  ffi.IntPtr,
+  ffi.Pointer<ffi.Uint8>,
+  ffi.IntPtr,
+);
+typedef _DartThree = _GridResult Function(
+  ffi.Pointer<ffi.Uint8>,
+  int,
+  ffi.Pointer<ffi.Uint8>,
+  int,
+  ffi.Pointer<ffi.Uint8>,
+  int,
+);
 typedef _NativeFree = ffi.Void Function(_GridResult);
 typedef _DartFree = void Function(_GridResult);
 typedef _NativeAbi = ffi.Uint32 Function();
@@ -46,6 +62,12 @@ final class GridCraftBridge {
       _window = library.lookupFunction<_NativeTwo, _DartTwo>(
         'ac_xlsx_inspect_window',
       ),
+      _copy = library.lookupFunction<_NativeTwo, _DartTwo>(
+        'ac_xlsx_copy_range',
+      ),
+      _paste = library.lookupFunction<_NativeThree, _DartThree>(
+        'ac_xlsx_paste_range',
+      ),
       _free = library.lookupFunction<_NativeFree, _DartFree>('ac_result_free'),
       _abi = library.lookupFunction<_NativeAbi, _DartAbi>(
         'ac_engine_abi_version',
@@ -56,6 +78,8 @@ final class GridCraftBridge {
   final _DartOne _inspect;
   final _DartTwo _edit;
   final _DartTwo _window;
+  final _DartTwo _copy;
+  final _DartThree _paste;
   final _DartFree _free;
   final _DartAbi _abi;
 
@@ -141,6 +165,44 @@ final class GridCraftBridge {
         ) as Map,
       );
     } finally {
+      calloc.free(q);
+      calloc.free(p);
+    }
+  }
+
+  Map<String, dynamic> copyRange(
+    Uint8List workbook,
+    Map<String, dynamic> changes,
+  ) {
+    final p = _alloc(workbook),
+        request = Uint8List.fromList(utf8.encode(jsonEncode(changes)));
+    final q = _alloc(request);
+    try {
+      return Map<String, dynamic>.from(
+        jsonDecode(
+          utf8.decode(_read(_copy(p, workbook.length, q, request.length))),
+        ) as Map,
+      );
+    } finally {
+      calloc.free(q);
+      calloc.free(p);
+    }
+  }
+
+  Uint8List pasteRange(
+    Uint8List workbook,
+    Uint8List source,
+    Map<String, dynamic> changes,
+  ) {
+    final p = _alloc(workbook), q = _alloc(source);
+    final request = Uint8List.fromList(utf8.encode(jsonEncode(changes))),
+        r = _alloc(request);
+    try {
+      return _read(
+        _paste(p, workbook.length, q, source.length, r, request.length),
+      );
+    } finally {
+      calloc.free(r);
       calloc.free(q);
       calloc.free(p);
     }

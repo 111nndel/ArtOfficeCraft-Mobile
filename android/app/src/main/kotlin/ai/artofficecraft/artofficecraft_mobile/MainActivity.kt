@@ -1,5 +1,10 @@
 package ai.artofficecraft.artofficecraft_mobile
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
@@ -52,6 +57,40 @@ class MainActivity : FlutterActivity() {
                         result.error("WORKSPACE_UNAVAILABLE", "Cannot open private workspace", null)
                     }
                 } else result.notImplemented()
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/grid_clipboard")
+            .setMethodCallHandler { call, result ->
+                try {
+                    val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    when (call.method) {
+                        "write" -> {
+                            val text = call.argument<String>("text")
+                            val token = call.argument<String>("token")
+                            require(text != null && text.length <= 256 * 1024 &&
+                                token != null && token.matches(Regex("[0-9a-f]{32}"))) { "Invalid clipboard data" }
+                            val clip = ClipData.newPlainText("ArtOfficeCraft cells", text)
+                            if (Build.VERSION.SDK_INT >= 24) {
+                                clip.description.extras = PersistableBundle().apply { putString("ai.artofficecraft.gridToken", token) }
+                            }
+                            manager.setPrimaryClip(clip)
+                            result.success(null)
+                        }
+                        "read" -> {
+                            val clip = manager.primaryClip
+                            val text = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+                            if (text == null) result.success(null)
+                            else {
+                                require(text.length <= 256 * 1024) { "Clipboard text too large" }
+                                val token = if (Build.VERSION.SDK_INT >= 24) clip?.description?.extras?.getString("ai.artofficecraft.gridToken") else null
+                                result.success(mapOf("text" to text, "token" to token))
+                            }
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (_: Exception) {
+                    result.error("CLIPBOARD_UNAVAILABLE", "Cannot access Android clipboard", null)
+                }
             }
 
         MethodChannel(

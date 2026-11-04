@@ -79,7 +79,7 @@ def main():
         raise RuntimeError('Could not locate expected WordCraft Cargo path fields')
     grid=pins['gridcraft']
     base='../../upstream/staged/gridcraft/'+grid['tag']+'-'+grid['commit'][:12]+'/crates/'
-    for name in ('core','model','xlsx','calc','numfmt'):
+    for name in ('core','model','xlsx','calc','numfmt','engine'):
         crate='gridcraft-'+name
         cargo,count=re.subn(
             r'('+re.escape(crate)+r'\s*=\s*\{\s*path\s*=\s*")[^"]+',

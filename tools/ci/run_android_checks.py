@@ -17,7 +17,7 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[2]
-SUITES = ('native_editors', 'office_features', 'range_features')
+SUITES = ('native_editors', 'office_features', 'range_features', 'clipboard_features')
 PNG = b'\x89PNG\r\n\x1a\n'
 
 

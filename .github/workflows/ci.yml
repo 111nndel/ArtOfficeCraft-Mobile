@@ -157,9 +157,9 @@ jobs:
           retention-days: 7
 
   publish:
-    name: Sign and publish tagged preview
+    name: Sign and publish verified preview
     needs: [android, emulator]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.repository == '111nndel/ArtOfficeCraft-Mobile'
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/codex/release-v')) && github.repository == '111nndel/ArtOfficeCraft-Mobile'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: android-preview
@@ -168,6 +168,17 @@ jobs:
     steps:
       # This job never checks out or executes project/PR source. Only Android
       # tools sign the APK data produced by the successful build in this run.
+      - name: Resolve explicit release request
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" =~ ^refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+)$ ]]; then
+            tag="${BASH_REMATCH[1]}"
+          elif [[ "$GITHUB_REF" =~ ^refs/heads/codex/release-(v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+)$ ]]; then
+            tag="${BASH_REMATCH[1]}"
+          else
+            echo 'Unsupported release ref'; exit 1
+          fi
+          printf 'RELEASE_TAG=%s\n' "$tag" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: apk-candidate
@@ -188,7 +199,6 @@ jobs:
         env:
           PREVIEW_KEYSTORE: ${{ secrets.AOC_PREVIEW_KEYSTORE_BASE64 }}
           SOURCE_COMMIT: ${{ github.sha }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           test -n "$PREVIEW_KEYSTORE" || { echo 'Preview signing secret is missing'; exit 1; }
@@ -238,9 +248,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           SOURCE_COMMIT: ${{ github.sha }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          # A release branch is an explicit request. Its tag is created only
+          # after all checks pass, at the exact commit tested by this run.
+          if tag_sha="$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha 2>/dev/null)"; then
+            [[ "$tag_sha" == "$SOURCE_COMMIT" ]] || { echo 'Existing tag points to another commit'; exit 1; }
+          else
+            [[ "$GITHUB_REF" == "refs/heads/codex/release-$RELEASE_TAG" ]]
+            gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$SOURCE_COMMIT"
+          fi
           if gh release view "$RELEASE_TAG" --json isDraft > "$RUNNER_TEMP/release-state.json" 2>/dev/null; then
             python -c 'import json,sys; assert json.load(open(sys.argv[1]))["isDraft"], "Refusing to overwrite a published release"' "$RUNNER_TEMP/release-state.json"
           else

@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.23.0 / core 0.23.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.24.0 / core 0.24.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/validation-0.23.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
+`docs/validation-0.24.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -41,6 +41,17 @@ styles; recalculation, checked snapshots and history still apply. Range actions
 are limited to 4096 cells and complete merges. Word exposes selected RGB/automatic
 color and left-indent presets; preview and inline/static display share foreground
 color and multiple line spacing. Four upstream pins and dependencies are unchanged.
+
+0.24.0 adds the pinned gridcraft-engine command facade for copy/paste. The C ABI
+adds bounded copy-range metadata and a three-buffer rich paste operation; the
+Dart worker returns checked XLSX/view snapshots before publishing edits. Only
+selected TSV and an opaque identity token enter Android's clipboard. One source
+snapshot stays in memory (24 MiB maximum); pasted selections are limited to 4096
+cells and text to 256 KiB UTF-8. All/values/formulas/formats modes use upstream
+commands and rebasing/style interning. Partial merges, protected destinations,
+array/spill ranges and format-only merged sources are guarded. Upstream source
+pins remain unchanged; nine transitive packages are newly resolved and their
+notices are bundled. Word/Deck/PDF have no new feature in this release.
 
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.

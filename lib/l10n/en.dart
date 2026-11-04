@@ -468,4 +468,19 @@ const english = <String, String>{
   "Выберите не более 4096 ячеек за одну операцию":
       "Select at most 4096 cells per operation",
   "Удерживайте ячейку, затем тяните круглые маркеры. Формат применяется ко всему диапазону.": "Hold a cell, then drag the round handles. Formatting applies to the whole range.",
+  "Вставка начинается с выбранной ячейки. Масштаб не меняется.":
+      "Pasting starts at the selected cell. Zoom stays unchanged.",
+  "Вставить всё": "Paste all",
+  "Только значения": "Values only",
+  "Только формулы": "Formulas only",
+  "Только оформление": "Formats only",
+  "Копирование в приложении сохраняет формулы и оформление. Текст из других приложений можно вставить через «Вставить всё».": "Copying within the app keeps formulas and formatting. Use Paste all for text from other apps.",
+  "Для копирования с оформлением файл должен быть не больше 24 МиБ":
+      "To copy with formatting, the file must be at most 24 MiB.",
+  "Диапазон скопирован": "Range copied",
+  "В буфере обмена нет текста": "No text on the clipboard",
+  "Сначала скопируйте диапазон в приложении": "Copy a range in this app first",
+  "Вставляемый диапазон выходит за границы листа":
+      "The pasted range exceeds the sheet bounds",
+  "Данные вставлены": "Data pasted",
 };

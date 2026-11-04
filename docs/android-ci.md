@@ -11,13 +11,14 @@ the Rust core for x86_64 with 16-KiB ELF alignment. Flutter/Java/NDK match the
 ordinary build. A pinned emulator-runner action starts an API 36 Google APIs
 x86_64 image with the Pixel 7 hardware profile and KVM acceleration.
 
-`tools/ci/run_android_checks.py` drives all three existing integration suites:
+`tools/ci/run_android_checks.py` drives all four integration suites:
 
 | Suite | Current scenarios | Coverage |
 | --- | ---: | --- |
 | native_editors | 9 | Four real engines, in-page editing/export, recovery, English UI, worker/media lifetime, distant cells, imported layout, resizing, formulas and zoom |
 | office_features | 4 | Word replacement, active/new sheets, PPTX order/pictures and PDF page rotation/order/history |
 | range_features | 2 | Finger range selection/format/clear/recalculation, Word color/indent/spacing, export and reopen |
+| clipboard_features | 3 | Real Android clipboard identity, cross-workbook/sheet style and formula paste, special modes, external Unicode TSV, export and undo |
 
 Flutter's host-side integration driver saves the existing screenshots directly
 under `build/android-qa/screenshots`. A screenshot must contain a PNG signature;
@@ -43,8 +44,8 @@ existing certificate. Emulator tests do not gain signing credentials.
 The default image does not prove operation on a device using actual 16-KiB memory
 pages, and a virtual Pixel does not replace testing on a physical Vivo. Complex
 Office fidelity and visual quality still need human review of the captured images
-and representative files. Existing offline preview behavior and app version are
-unchanged by this CI-only change.
+and representative files. The ordinary APK remains offline. Clipboard text and an opaque token use the
+Android clipboard; the rich source snapshot stays only in process memory.
 
 On a disposable Linux Android 16 x86_64 emulator, the runner can also be reproduced
 with `python3 tools/ci/run_android_checks.py --device emulator-5554` after installing
