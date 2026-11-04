@@ -323,7 +323,7 @@ class SheetViewportState extends State<SheetViewport>
     onLongPressCancel: _committingSize ? null : _clearResize,
     child: Semantics(
       hint: tr(context, 'Удерживайте и тяните для изменения размера'),
-      child: child,
+      child: ClipRect(child: child),
     ),
   );
   @override
