@@ -1,22 +1,15 @@
-English interface, spreadsheet gestures and a larger PDF workspace.
+# ArtOfficeCraft Mobile 0.15.0 — Language options, spreadsheet gestures and PDF layout
 
-Выбор языка: значок ⓘ на главной → «Язык / Language». Можно оставить язык Android
-или выбрать русский / English; выбор сохраняется после закрытия приложения.
-Перевод интерфейса не меняет содержимое документов, имена файлов и названия листов.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Таблицу теперь можно приближать двумя пальцами и перемещать. Масштаб 50–300%,
-готовые значения — в «Вид → Масштаб». Строка формул и инструменты сохраняют свой
-размер. Введённый, но ещё не применённый текст при масштабировании остаётся на месте.
+## What's New
 
-PDF открывается по ширине доступной области, с прокруткой и масштабированием.
-Миниатюры изначально скрыты и включаются отдельной кнопкой. В «Чтение → Масштаб»
-доступны «По ширине страницы» и «Вся страница». Редакторы учитывают отступ строки состояния
-Android при раскрытии инструментов. Утверждённая плашка и вложенные разделы сохранены.
+- Added English UI selection alongside Russian and Android system-language following, saved between launches.
+- Enabled spreadsheet pinch-to-zoom and panning from 50% to 300% without changing the tool-panel size.
+- Expanded the PDF viewport, added scrolling, optional thumbnails and fit-to-width/fit-to-page controls.
+- Adjusted editor layouts to respect Android system insets.
 
-Прошли 80 тестов Flutter и три сценария с настоящими движками на Android 16.
-В обычной APK проверены сохранение обоих языков и восстановление черновика после
-принудительного завершения процесса. Rust-движки и их закреплённые версии прежние.
+## Known Limitations
 
-Предварительная ARM64-сборка с прежней подписью разработки. На физическом Vivo
-не проверялась. Область таблицы пока 55 × 12; масштабирование её не расширяет.
-Отображение сложных Office-файлов и недостающие команды ещё требуют разработки.
+- The spreadsheet was still limited to 55 rows by 12 columns.
+- Complex Office rendering and several editor commands remained unfinished; no physical Vivo test was completed.

@@ -1,17 +1,15 @@
-Перенос утверждённого дизайна в Android-приложение: одна раскрывающаяся плашка
-во всех четырёх редакторах. Само название раздела открывает меню; вложенные
-инструменты и формы остаются внутри плашки. Возврат и сворачивание сохраняют
-рабочую область, ввод и прокрутку. Фиксированная панель значков и окно «Ещё» убраны.
+# ArtOfficeCraft Mobile 0.12.0 — Unified mobile editor controls
 
-Стартовые карточки создают файл сразу. Команды файла находятся в меню заголовка.
-Строка формул раскрывается независимо; листы, слайды и страницы сохраняют свои
-особенности. Неподключённые команды прямо отмечены и не имитируют результат.
-Версии Rust-движков и поддержка форматов не расширялись.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-53 теста Flutter и анализ кода проходят. Проверен сценарий настоящих движков
-на эмуляторе Android 16: DOCX с выделением, продолжением ввода, сохранением и
-отменой/повтором; формулы XLSX; текст PPTX в плашке; просмотр PDF.
+## What's New
 
-Предварительная оптимизированная ARM64-сборка с прежним сертификатом разработки.
-На физическом Vivo не проверялась. Полная вёрстка документов и недостающие
-редакторские операции остаются следующим этапом после согласования интерфейса.
+- Replaced the fixed icon strip with a single expandable, nested tool panel in all four editors.
+- Added file actions in the document title menu and direct creation from home-screen cards.
+- Kept document position and pending input when expanding or collapsing editor tools.
+- Clearly marked actions not yet connected to real editing functionality.
+
+## Known Limitations
+
+- Document layout fidelity and many editor operations remained incomplete.
+- This was an ARM64 development preview, not tested on a physical Vivo device.

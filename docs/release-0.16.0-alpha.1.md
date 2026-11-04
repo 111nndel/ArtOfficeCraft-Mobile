@@ -1,26 +1,16 @@
-Фундамент обработки документов и более надёжная отмена изменений.
+# ArtOfficeCraft Mobile 0.16.0 — Document worker and safer undo history
 
-Word, таблицы, презентации и PDF получили постоянный фоновый обработчик с очередью
-операций. Редактор получает изменённый файл вместе с проверенным представлением;
-при ошибке прежний документ и введённый текст остаются доступными.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Неизменённый снимок можно повторно использовать внутри обработчика. Картинки PPTX
-обрабатываются через него же, без отдельного запуска для каждого изображения.
-Закрытие редактора дожидается принятых операций и освобождения нативных буферов.
+## What's New
 
-Исправлено расходование шага отмены Word при неудачном восстановлении: повторная
-попытка остаётся доступной. Отмена и повтор теперь делят общий лимит истории
-24 МиБ / 10 шагов. Это лимит истории, а не всей памяти приложения.
+- Added long-lived background document workers for DOCX, XLSX, PPTX and PDF operations.
+- Keep the previous document and pending user input if an edit fails; reuse validated snapshots within a worker.
+- Route embedded PPTX image work through the document worker and release native buffers on editor close.
+- Fixed Word undo restoration so a failed attempt does not consume a history step.
+- Applied a shared 10-step / 24 MiB in-session undo/redo history budget.
 
-Прошли 91 тест Flutter и пять сценариев с настоящими движками на Android 16.
-Обычная APK проверена на сохранение языка, ввод в таблицу, масштабирование,
-восстановление черновика после принудительного завершения процесса и явный выход.
-Дополнительно через системные диалоги Android открыта презентация с PNG, изменена
-и сохранена отдельной копией. Проверка файла подтвердила новый текст, сохранность
-картинки и неизменность оригинала.
-Утверждённый интерфейс сохранён, версии Rust-движков не менялись.
+## Known Limitations
 
-Это первый шаг к постоянным моделям документов: Rust пока ещё разбирает и
-сохраняет файлы целиком. Ограничение области таблицы 55 × 12 пока сохраняется.
-Предварительная ARM64-сборка с прежней подписью разработки; на физическом Vivo
-не проверялась.
+- Native file parsing and serialization still occurred for many operations.
+- The 55-by-12 spreadsheet viewport limit still applied to this release; full device coverage was incomplete.

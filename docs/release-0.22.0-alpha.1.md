@@ -1,31 +1,16 @@
-ArtOfficeCraft Mobile 0.22.0 — рабочие команды во всех четырёх редакторах.
+# ArtOfficeCraft Mobile 0.22.0 — Practical editing across all four formats
 
-Word: подключён «Найти и заменить». Поддерживаются точный поиск с учётом
-регистра, переход между совпадениями, замена одного или всех совпадений и
-отмена/повтор. Неизменённые участки сохраняют оформление. Поиск пока работает
-по текстовым абзацам, без содержимого таблиц; защищённые совпадения не меняются.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Excel: можно создать лист с собственным именем. Сохраняются прежние ячейки,
-формулы, объединения и размеры. Незавершённый ввод применяется до создания
-листа. Отмена/повтор восстанавливает нужную вкладку; при открытии учитывается
-активный лист, сохранённый в XLSX. Масштаб и обычная сетка из 0.21 сохранены.
+## What's New
 
-PowerPoint: работают перестановка слайдов вверх/вниз и в начало/конец, отмена
-и повтор правок. Незавершённый текст применяется перед перестановкой, сохраняя
-выбранный для перемещения слайд. Слайды не перестраиваются из отображаемого
-текста: сохраняются их данные модели, включая доступные встроенные картинки.
+- Word: added case-sensitive Find and Replace, navigation between matches and replace-one/replace-all with undo/redo.
+- Excel: added named worksheet creation and restoration of the saved active sheet.
+- PowerPoint: added slide reordering with model preservation, undo and redo.
+- PDF: added undo/redo and page reordering, and fixed rotated-page fitting.
+- Kept editing history bounded to 10 steps and 24 MiB per editor session.
 
-PDF: подключены отмена/повтор и порядок страниц, включая перемещение к
-введённому номеру. Исправлено повторное применение поворота к размерам страницы
-во Flutter: повёрнутая страница правильно вписывается в окно. Ошибка чтения или
-отображения не расходует шаг отмены и не заменяет текущий документ.
+## Known Limitations
 
-История ограничена 10 шагами и 24 МиБ на редактор, существует в текущем сеансе.
-Черновики после закрытия процесса сохраняются прежним механизмом восстановления.
-Новые команды доступны в утверждённой вложенной панели; добавлены английские
-подписи. Это ещё не полный функционал Office: таблицы Word, диаграммы, сложные
-стили, полноценная вёрстка, формы PDF и ряд других инструментов не закончены.
-
-Движки закреплены прежними коммитами: WordCraft 0.15.1, GridCraft 0.16.0,
-DeckCraft 0.15.0 и PDFCraft 0.18.1. Новые зависимости не добавлены.
-APK использует прежнюю постоянную подпись и ставится обновлением.
+- Find and Replace does not yet search Word table contents.
+- Full Word layout, advanced spreadsheet styles and charts, PDF forms and some PPTX objects remain incomplete.

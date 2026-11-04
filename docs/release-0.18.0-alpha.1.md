@@ -1,28 +1,15 @@
-Исправлен выбор файлов и подключено оформление таблиц и изменение размеров пальцем.
+# ArtOfficeCraft Mobile 0.18.0 — File selection and touch-resizable spreadsheets
 
-Выбор DOCX, XLSX, PPTX или PDF теперь передаёт системному диалогу конкретный
-MIME-тип и допустимое расширение. Один механизм используется на главном экране
-и в меню каждого редактора. Старые DOC/XLS/PPT эта сборка не поддерживает.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Grid показывает исходные ширины столбцов и высоты строк, скрытые строки/столбцы,
-объединённые ячейки, состояние сетки и вертикальное выравнивание. Сохраняются
-поддержанные ранее цвета, заливки, границы, перенос и числовые форматы. Объединение
-показывается одной областью; выбор и правка ведут к его верхней левой ячейке.
-Содержимое выбранной ячейки доступно независимо от подгрузки соседнего участка.
+## What's New
 
-Удерживайте буквенный заголовок столбца и тяните по горизонтали, чтобы изменить
-ширину. Удерживайте номер строки и тяните вверх/вниз для изменения высоты.
-Размер виден во время движения, после отпускания он записывается в XLSX.
-Работают отмена, повтор и сохранение копии. Масштабирование двумя пальцами и
-перемещение по листу сохранены; предел увеличения расширен до 500%.
-Заголовки строк и столбцов остаются компактными при увеличении.
-Подсказка жестов находится в разделе «Вид». Утверждённая плашка сохранена.
+- Fixed Android file-picker filters for DOCX, XLSX, PPTX and PDF in all entry points.
+- Displayed imported row heights, column widths, hidden rows/columns, merged cells and supported spreadsheet formatting.
+- Added touch-and-drag resizing for row and column headers with XLSX persistence and undo/redo.
+- Extended spreadsheet pinch zoom to 500% while keeping compact sheet headings.
 
-Это ещё не полная совместимость с Excel: условные и табличные стили, диаграммы,
-изображения, закреплённые области, автоматический подбор высоты и ряд команд
-остаются недоделанными. Нестандартные шрифты могут заменяться Android-шрифтами.
-Rust по-прежнему разбирает книгу целиком для каждого запроса области.
-Физический Vivo и работа на устройстве с 16-КБ страницами памяти не проверялись.
+## Known Limitations
 
-Адаптер Rust 0.18.0 / ABI 1. Версии четырёх исходных движков не менялись.
-APK подписывается прежним сертификатом и устанавливается поверх предыдущей версии.
+- Legacy DOC/XLS/PPT files were not supported.
+- Conditional styles, charts, images, frozen panes and auto-fit remained incomplete; complex workbooks could use substantial processing.

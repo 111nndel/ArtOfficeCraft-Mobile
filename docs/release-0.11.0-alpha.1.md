@@ -1,25 +1,15 @@
-# ArtOfficeCraft Mobile 0.11.0 — ввод текста на странице
+# ArtOfficeCraft Mobile 0.11.0 — Direct Word text editing
 
-- DOCX: курсор, выделение и ввод прямо в абзаце документа.
-- Во время набора файл не пересобирается на каждую букву.
-- Жирный, курсив и подчёркивание применяются к выделению; без выделения кнопки
-  явно предлагают форматировать весь абзац.
-- «Оформление» сохраняет размер шрифта, выравнивание и межстрочный интервал.
-- «Сохранить» сначала применяет текущий ввод. Ошибка движка оставляет черновик
-  на экране и блокирует сохранение устаревших данных.
-- Новый абзац сразу открывается для ввода на странице.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-49 тестов Flutter, чистый анализ и сценарий настоящих движков на Android 16.
-Проверка экспорта текущего ввода использует тестовый обработчик Save As и
-реальный файл Android. Дополнительно на обычной оптимизированной сборке x86_64
-пройден настоящий системный диалог: создать DOCX → ввод с клавиатурой → сохранить
-в Downloads без «Готово» → открыть сохранённую копию и увидеть тот же текст.
-Целостность ZIP и текст внутри DOCX проверены отдельно.
+## What's New
 
-Это предварительная оптимизированная сборка ARM64 для Android 7 и новее,
-с прежним сертификатом разработки. На физическом Vivo не проверялась.
-Полная вёрстка DOCX, выделение между абзацами и восстановление несохранённого
-черновика после завершения процесса Android ещё не реализованы. Возможности
-XLSX/PPTX/PDF в этом обновлении не расширялись. Движки и их версии сохранены.
+- DOCX: place the cursor, select text, and type directly into a document paragraph without rebuilding the file on every keystroke.
+- Apply bold, italic and underline to selections; adjust font size, alignment and line spacing.
+- Save commits pending text first and keeps the draft visible if the native operation fails.
+- Verified a create/edit/Save As/reopen flow through Android's system file picker.
 
-Подробности: docs/validation-0.11.0.md. Контрольная сумма — в SHA256SUMS.txt.
+## Known Limitations
+
+- Complete DOCX page layout, cross-paragraph selection and recovery of unsaved drafts after process termination were not yet available.
+- XLSX, PPTX and PDF functionality was not extended in this version.

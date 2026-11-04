@@ -1,23 +1,15 @@
-Исправлено сохранение темы и расширена рабочая область таблиц.
+# ArtOfficeCraft Mobile 0.17.0 — Large spreadsheets and persistent themes
 
-Тёмная и светлая темы сохраняются локально и восстанавливаются при запуске.
-После обновления выберите нужную тему один раз: прежняя версия её не записывала.
-Проверены три принудительных завершения процесса и выход кнопкой «Назад».
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-В Excel убрана обрезанная область 55 × 12. Доступны координаты от A1 до
-XFD1048576; на экран выводятся только видимые строки и столбцы. Данные читаются
-через новый ограниченный запрос Rust к нужному участку, без прежнего отсечения
-после 1600 заполненных ячеек. Заголовки строк/столбцов остаются видимыми.
+## What's New
 
-«Вид → Перейти к ячейке» открывает переход по адресу внутри прежней плашки.
-Удержание ячейки открывает ввод через строку формул. Прокрутка не сбрасывает
-введённый текст. Применение, отмена, повтор и экспорт проверены для AA1000.
-Утверждённая навигация и крупные панели сохранены.
+- Persisted light and dark appearance across force-stop and restart.
+- Replaced the 55-by-12 spreadsheet viewport with bounded native queries across A1 through XFD1048576.
+- Added Go to Cell, long-press cell editing and virtualized rendering of only visible rows and columns.
+- Verified editing, undo/redo and export at AA1000.
 
-Это ещё не полное отображение Excel: объединения, размеры строк/столбцов,
-изображения/диаграммы и многие команды остаются недоделанными. Rust пока
-разбирает файл целиком при чтении области; постоянная модель книги — следующий
-уровень работы. На физическом Vivo эта сборка не проверялась.
+## Known Limitations
 
-Версии четырёх исходных движков не менялись. Ядро адаптера 0.17.0 / ABI 1.
-APK подписывается прежним сертификатом и устанавливается поверх прошлой версии.
+- Large and complex workbooks still required further compatibility work.
+- This remained a development preview rather than a complete Excel implementation.

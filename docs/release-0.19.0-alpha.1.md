@@ -1,28 +1,15 @@
-ArtOfficeCraft Mobile 0.19.0 — таблицы и обновление движков.
+# ArtOfficeCraft Mobile 0.19.0 — Spreadsheet formulas and engine updates
 
-Буквы столбцов и номера строк уменьшены до 11 логических пикселей. Верхняя
-полоса теперь 28 пикселей вместо 56, боковая — 46 вместо 64. Подписи сохраняют
-размер при системном увеличении текста и масштабе таблицы до 500%. Крупные
-кнопки и утверждённая вложенная плашка инструментов сохранены.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-В разделе «Формулы» работают «∑ Автосумма» и «Пересчитать». Автосумма записывает
-SUM для непрерывных чисел сверху; если их нет — слева. Нужна пустая,
-необъединённая ячейка. Заполненная ячейка не перезаписывается. Формулы сохраняются
-в XLSX; работают отмена, повтор и сохранение новой копии. Пересчёт обновляет
-кешированные результаты поддержанных движком формул.
+## What's New
 
-Подключено отображение параметра XLSX «уменьшить текст по ширине»; его также
-можно включить или выключить в формате ячейки. Перенос текста имеет приоритет.
+- Reduced spreadsheet row and column header sizes while retaining touch-friendly controls.
+- Added AutoSum and Recalculate actions for supported formulas.
+- Exposed XLSX shrink-to-fit cell formatting, with text wrapping taking precedence.
+- Updated pinned upstream engines to WordCraft 0.15.0, GridCraft 0.16.0, DeckCraft 0.15.0 and PDFCraft 0.18.0.
 
-Обновлены исходные движки: WordCraft 0.15.0, GridCraft 0.16.0, DeckCraft 0.15.0,
-PDFCraft 0.18.0. Версии закреплены точными коммитами. Для PDF сохранено
-исправление JBIG2 из оригинального репозитория; синхронизация проверяет путь и
-имя пакета. Будущие обновления проходят проверку исходников и сборку новой APK.
-Это не загрузка исполняемых библиотек в установленное приложение.
+## Known Limitations
 
-Полная совместимость с Excel ещё не достигнута: сложные и условные стили,
-диаграммы, изображения, закрепления и автоматический подбор размеров не
-доделаны. Нестандартные шрифты могут заменяться. Исходный проблемный файл
-пользователя и физический Vivo не проверялись.
-
-Адаптер Rust 0.19.0 / ABI 1. APK использует прежнюю постоянную подпись.
+- Charts, complex or conditional styles, images and automatic sizing remained incomplete.
+- Native engines are built into the APK; the installed app does not download executable libraries.

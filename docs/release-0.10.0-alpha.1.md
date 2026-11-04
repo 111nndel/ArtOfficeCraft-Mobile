@@ -1,27 +1,16 @@
-# ArtOfficeCraft Mobile 0.10.0 — Android development preview
+# ArtOfficeCraft Mobile 0.10.0 — Initial offline Android preview
 
-Русская тестовая версия для ARM64, Android 7 и новее; целевой Android 16.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-- Rust-операции вынесены из потока интерфейса.
-- DOCX: изменение существующего абзаца, базовое форматирование, отмена/повтор.
-- XLSX: убрано копирование карты ячеек при отрисовке каждой ячейки; строки создаются лениво.
-- Исправлены переполнения с крупным шрифтом и в альбомной ориентации.
-- PPTX: список текстовых объектов с удобными кнопками.
-- Добавлены версии встроенных движков и лицензии в разделе «О проекте».
+## What's New
 
-APK собрана в оптимизированном режиме profile, подписана прежним сертификатом
-разработки. Размер 37 727 638 байт. Это предварительная версия, а не готовая
-замена Word, Excel, PowerPoint или Acrobat. Полного соответствия макету пока нет.
+- Introduced an ARM64 Android 7+ development build with Flutter UI and Rust-backed document operations.
+- DOCX: edit existing paragraphs, apply basic formatting, and undo or redo changes.
+- XLSX: render rows lazily instead of copying the entire cell map for each cell.
+- Improved large-text and landscape layouts; added PPTX text-object navigation.
+- Displayed bundled engine versions and licence information inside the app.
 
-Проверено: 42 теста Flutter, 13 Rust, 4 теста обновлятора, сценарий всех четырёх
-движков на эмуляторе Android 16 с записью/чтением файлов и отменой/повтором DOCX.
-Отдельно проверены подпись APK, отсутствие сетевых разрешений и выравнивание
-нативных библиотек/APK для страниц памяти 16 КБ. На физическом Vivo и системе
-с памятью 16 КБ приложение пока не запускалось. Android Save As в этом прогоне
-не проверялся. Подробности и ограничения: docs/validation-0.10.0.md.
+## Known Limitations
 
-Все четыре оригинальных Rust-проекта перечислены в README и
-upstream/engines.lock.json с точными коммитами. Их версии в этой сборке не
-обновлялись. Нативные библиотеки из интернета приложение не загружает.
-
-APK SHA-256: `4a0adf369add53e978b46d0438293f70fd16c01d11570557fc941dc808d0cff9`
+- This is an early development preview, not a finished Office replacement.
+- The physical-device and 16 KiB page-size runs were not completed for this release.

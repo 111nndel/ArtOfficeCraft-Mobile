@@ -1,31 +1,15 @@
-ArtOfficeCraft Mobile 0.20.0 — обзор таблиц и поведение жестов.
+# ArtOfficeCraft Mobile 0.20.0 — Spreadsheet overview and gesture changes
 
-Буквы столбцов и номера строк теперь относятся к краям самого листа:
-при перемещении от края соответствующая плашка уходит за экран.
-В разделе «Вид» можно явно включить «Закрепить заголовки».
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Добавлены «Вся таблица» и «По ширине таблицы». Масштаб вычисляется по
-используемому диапазону и исходным размерам, включая объединения и скрытые
-линии. Ограничение уменьшения до 50% убрано. Режим подгонки пересчитывается
-при изменении размера экрана. Обзор центрируется, нажатие на участок открывает
-обычный масштаб и точные ячейки для редактирования. Переход по адресу
-ячейки тоже выходит из обзора, чтобы нужная ячейка была видна.
+## What's New
 
-При сильном уменьшении используется отдельное рисование обзора. Это устраняет
-запросы с недопустимым числом строк и создание огромного количества виджетов.
-Обзор передаёт не более 8 192 записей; для больших книг явно обозначается
-упрощение. Обычное редактирование использует точные ограниченные окна.
+- Aligned row and column headings with the sheet edges and added an explicit option to pin headings.
+- Introduced whole-sheet and fit-to-width overview options based on the used range.
+- Improved pinch-zoom origin, inertial scrolling and resizing of rows or columns by dragging their headings.
+- Used a bounded overview renderer for heavily zoomed-out worksheets.
 
-Исправлен начальный сдвиг при масштабировании двумя пальцами. Прокрутка
-сохраняет инерцию; новое касание останавливает движение. Размеры строк и
-столбцов по-прежнему меняются удержанием и перетаскиванием заголовка.
+## Known Limitations
 
-Движки: WordCraft 0.15.1, GridCraft 0.16.0, DeckCraft 0.15.0, PDFCraft 0.18.1.
-Два свежих исправляющих обновления Word/PDF проверены и закреплены точными
-коммитами; сохраняется оригинальное исправление PDF-декодера и сбор лицензий.
-
-Это разработческая версия. Полная совместимость с Office, условные стили,
-диаграммы, изображения, закрепление строк/столбцов документа, подбор размеров
-и ряд команд ещё не закончены. Закрепление подписей — отдельная настройка.
-Тесты устройства выполнены на эмуляторе Android 16; физический Vivo недоступен.
-APK использует прежнюю постоянную подпись и устанавливается обновлением.
+- Historical release: the separate overview modes introduced here were removed in v0.21.0 because of usability regressions.
+- Charts, conditional formatting and other advanced features remained incomplete.

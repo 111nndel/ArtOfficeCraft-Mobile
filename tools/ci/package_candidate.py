@@ -44,13 +44,27 @@ def main():
     (dest / 'build-info.json').write_text(json.dumps(metadata, indent=2) + '\n')
     (dest / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
     (dest / 'permissions.txt').write_text(permissions)
-    notes = Path('docs') / f'release-{name}-alpha.1.md'
-    (dest / 'release-notes.md').write_text(
-        (notes.read_text(encoding='utf-8') if notes.is_file() else f'ArtOfficeCraft Mobile {name} development preview.\n')
-        + '\n\nBuilt on GitHub Actions. Flutter unit/widget tests, Rust tests and APK package checks passed. '
-        'This workflow does not run Android emulator tests. The existing development signing certificate is used.\n'
-        + f'\nSource: {os.environ["GITHUB_SHA"]}\n'
-        + f'\nBuild: https://github.com/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{os.environ["GITHUB_RUN_ID"]}\n')
+    # Use the exact alpha tag first, then the canonical version notes.
+    # Reject non-English notes instead of publishing inconsistent release text.
+    from rewrite_release_metadata import notes_for
+    current_tag = tag or f'v{name}-alpha.1'
+    notes = notes_for(current_tag)
+    apk_name = f'ArtOfficeCraft-Mobile-{name}-arm64-preview.apk'
+    preview_url = (f'https://github.com/{os.environ["GITHUB_REPOSITORY"]}'
+                   f'/releases/download/{current_tag}/{apk_name}')
+    download = ('## Download\n\n'
+                f'- [Android ARM64 preview APK]({preview_url})\n'
+                '- Development preview; check the release assets for SHA-256 checksums.\n\n')
+    notes = notes.replace('## Known Limitations', download + '## Known Limitations', 1)
+    notes += ('\n\n## Build & Verification\n\n'
+              '- Flutter unit/widget tests, Rust tests and APK package checks passed.\n'
+              '- Android emulator test results are reported separately in the workflow logs; '
+              'this build alone does not prove complete editor fidelity.\n'
+              '- The existing development preview signing certificate is used.\n'
+              f'- Source commit: `{os.environ["GITHUB_SHA"]}`.\n'
+              f'- [GitHub Actions build logs](https://github.com/{os.environ["GITHUB_REPOSITORY"]}'
+              f'/actions/runs/{os.environ["GITHUB_RUN_ID"]}).\n')
+    (dest / 'release-notes.md').write_text(notes, encoding='utf-8')
     print(json.dumps(metadata, indent=2))
 
 

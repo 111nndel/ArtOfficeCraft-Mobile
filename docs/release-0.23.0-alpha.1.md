@@ -1,24 +1,16 @@
-ArtOfficeCraft Mobile 0.23.0 — диапазоны Excel и оформление Word.
+# ArtOfficeCraft Mobile 0.23.0 — Spreadsheet range selection and Word formatting
 
-Excel: удержание ячейки включает прямоугольное выделение. Круглые маркеры имеют
-область касания 44 dp; ими можно расширять и уменьшать диапазон. При удержании
-у края лист прокручивается, сохраняя масштаб. В «Данные → Выделить диапазон»
-можно ввести точный адрес, например A1:D10. Объединённые ячейки включаются
-целиком. Масштаб 10–500% и обычная сетка с пустыми ячейками сохранены.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Форматирование применяется ко всем выделенным ячейкам. «Главная → Очистить
-содержимое» удаляет значения и формулы, сохраняя оформление; зависимые формулы
-пересчитываются. Изменения проходят через Rust, сохраняются в XLSX и отменяются.
-Предел одной массовой операции — 4096 ячеек. Защищённые листы не изменяются.
+## What's New
 
-Word: подключены цвет выделенного текста, возврат к автоматическому цвету и
-отступ абзаца слева (0/12/24/36 pt). Исправлено отображение множителя
-межстрочного интервала: экран теперь учитывает сохранённое значение.
-Эти команды работают в прежней вложенной панели, без дополнительного редактора.
+- Excel: added rectangular touch-range selection with accessible 44 dp handles and edge auto-scrolling.
+- Added exact-range entry (for example A1:D10), including merged-cell handling, while retaining ordinary 10-500% sheet zoom.
+- Applied formatting or Clear Contents across selected cells (up to 4,096 cells per operation), with recalculation and undo.
+- Word: added selected-text color, automatic font-color reset and left paragraph indentation options.
+- Fixed the displayed line-spacing multiplier without introducing a separate editing screen.
 
-Добавлены английские подписи новых команд. Новые зависимости не добавлены;
-исходные версии четырёх Rust-движков остались прежними. PowerPoint и PDF в этом
-выпуске не получили новых функций. Полноценная вёрстка Word, сложные таблицы,
-диаграммы, точное отображение всех объектов PPTX и формы PDF ещё не завершены.
+## Known Limitations
 
-APK использует прежнюю постоянную подпись и устанавливается обновлением.
+- Complex Word page layout, advanced spreadsheets and charts, exact PPTX object rendering and PDF forms remain incomplete.
+- PowerPoint and PDF did not gain new editing features in this release.

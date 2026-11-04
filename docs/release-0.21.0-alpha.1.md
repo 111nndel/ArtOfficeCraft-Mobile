@@ -1,26 +1,15 @@
-ArtOfficeCraft Mobile 0.21.0 — исправление регрессий таблиц и последних файлов.
+# ArtOfficeCraft Mobile 0.21.0 — Restore the normal spreadsheet and recent files
 
-Убран отдельный обзор XLSX и команды подгонки в миниатюру. Масштабирование
-10–500% работает на обычном листе: пустые ячейки за заполненной областью
-остаются доступны, нет принудительного центрирования, нажатие выбирает
-ячейку без изменения масштаба. Жесты перемещения и масштабирования,
-компактные краевые заголовки и изменение размеров удержанием сохранены.
-При уменьшении отрисовываются точные ячейки видимой области, без выборки
-части данных и без создания десятков тысяч мелких виджетов.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Исправлена причина исчезновения последних файлов: открытие другого документа
-из меню редактора повторно использовало идентификатор предыдущей рабочей копии.
-Теперь успешное открытие или создание документа начинает отдельную запись
-во всех четырёх редакторах. Отмена открытия сохраняет текущую запись;
-последующее редактирование обновляет нужную копию. Предыдущие копии и
-избранное сохраняются после перезапуска. Исходные файлы на устройстве не
-перезаписывались. Уже заменённые старой версией рабочие копии не восстановить
-из истории приложения: исходный файл нужно открыть заново.
+## What's New
 
-Движки не менялись: WordCraft 0.15.1, GridCraft 0.16.0, DeckCraft 0.15.0,
-PDFCraft 0.18.1; исходники закреплены точными коммитами. APK использует прежнюю
-постоянную подпись и устанавливается обновлением.
+- Removed the separate XLSX thumbnail/overview mode and retained a normal editable sheet at 10-500% zoom.
+- Kept surrounding empty cells visible and preserved tap-to-select behavior at different scales.
+- Made visible-cell rendering precise and bounded while retaining touch pan, zoom and compact headings.
+- Fixed document-session identity reuse that caused recently opened files to disappear from history.
 
-Это разработческая версия. Полная совместимость с Office, диаграммы, условное
-форматирование и часть инструментов ещё не реализованы. Проверка Android
-выполняется на эмуляторе Android 16; физический Vivo недоступен.
+## Known Limitations
+
+- Working copies overwritten by earlier buggy versions cannot be reconstructed from app history; reopen the original file.
+- Charts, conditional formatting and complete Office compatibility were still in progress.

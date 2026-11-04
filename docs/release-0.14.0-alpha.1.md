@@ -1,22 +1,15 @@
-Восстановление работы после закрытия приложения Android.
+# ArtOfficeCraft Mobile 0.14.0 — Recover work after app termination
 
-В Word сохраняется ещё не применённый текст абзаца и выделение, в таблицах — ввод
-в текущей ячейке, в презентациях — открытая форма текста. PDF восстанавливается
-с изменениями и выбранной страницей. На стартовом экране появился раздел
-«Восстановить работу»: нажмите на черновик, чтобы продолжить.
+> Android ARM64 development preview. This is not a stable or feature-complete office suite.
 
-Отмена сохранения оставляет черновик; успешное сохранение копии или явный выход
-без сохранения удаляют его. Удаление черновика на главной требует подтверждения
-и оставляет исходный файл на месте. Утверждённая раскрывающаяся плашка инструментов
-и вложенные разделы редакторов сохранены.
+## What's New
 
-73 теста Flutter и два сценария с настоящими Rust-движками на Android 16 прошли.
-Отдельно проверены принудительное закрытие обычной APK, перезапуск и восстановление
-точного текста со стартового экрана.
-Rust-движки и их закреплённые версии не менялись.
+- Added recovery drafts for Word, spreadsheets, presentations and PDF sessions.
+- Restore unsaved paragraph or cell input, PPTX text dialogs and edited PDF page selection from the home screen.
+- Keep drafts after cancelled saves and require confirmation before discarding them.
+- Preserve original imported documents when removing a recovery draft.
 
-Это предварительная ARM64-сборка с прежней подписью разработки. На физическом Vivo
-не проверялась. Восстанавливается последний записанный черновик: при мгновенном
-завершении процесса самые последние символы могут не успеть записаться.
-История отмены между запусками не переносится. Ограничения редакторов, включая
-область таблицы 55 × 12, пока сохраняются.
+## Known Limitations
+
+- Only the last recorded draft can be restored; the final keystrokes may be missing after an abrupt process kill.
+- Undo history does not persist between runs; the early spreadsheet bounds still applied.
