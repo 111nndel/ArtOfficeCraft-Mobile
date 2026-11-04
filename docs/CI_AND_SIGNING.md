@@ -76,11 +76,14 @@ migration to avoid breaking updates for existing installations.
 
 ### Release without a contributor PC
 
-A push to `codex/release-v<VERSION>-alpha.<N>` is an explicit preview release
-request, in addition to the existing alpha-tag trigger. The exact version is
-validated against APK metadata. All Flutter/Rust/package and Android emulator
-jobs must succeed first. The isolated `android-preview` job retains its protected
-environment, existing certificate check and no source checkout. It creates a
-missing lightweight tag at the exact tested SHA, rejects any existing tag pointing
-elsewhere and refuses to overwrite a published release. No runner signing key is
-exported and no contributor machine is needed.
+A push to `release-request/v<VERSION>-alpha.<N>` requests a preview. A separate
+job, with no checkout and no signing environment, creates a missing tag at that
+exact SHA and dispatches the full CI workflow against the tag. An existing tag
+pointing elsewhere is rejected. The tag workflow repeats all Flutter/Rust/package
+and Android 16 checks before publication; old branch artifacts are not reused.
+
+Only the allowed tag context enters the protected `android-preview` environment.
+Its deployment rules and signing secret stay unchanged. The isolated publisher
+retains its no-checkout rule, existing certificate/hash/source checks and refusal
+to overwrite a published release. No signing key is exposed to the request job or
+test jobs. Ordinary branches and PRs cannot enter the signing environment.

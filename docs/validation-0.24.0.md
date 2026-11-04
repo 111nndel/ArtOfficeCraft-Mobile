@@ -31,3 +31,15 @@ transitive packages are added to the existing managed pin/notice workflow.
 Cloud build and physical-device results are recorded separately; do not infer
 Vivo hardware testing from local tests. The Android 16 gate includes 18 real-engine
 integration cases and ordinary-app file picker, touch resize and recent-file tests.
+
+
+## Initial hosted run
+
+Source `5c0607989df50cc6116e53a57eb311ce673b1a68`, run `41928355536`:
+all four test/build jobs passed, including 18 Android integration scenarios and
+ordinary-app picker/resize/recent-copy checks. The retained QA report says passed;
+25 integration PNGs and nine ordinary-app PNGs were retained. Representative
+Word/Grid/Deck/PDF and clipboard captures were visually reviewed. Publication did
+not run: environment rules correctly rejected the branch before any signing step.
+The release request path was corrected to use the allowed tag context, with a
+new full gate at that tag. App/native/editor source is unchanged by this CI fix.
