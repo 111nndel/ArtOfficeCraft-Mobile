@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.20.0 / core 0.20.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.21.0 / core 0.21.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/validation-0.20.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
+`docs/validation-0.21.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -25,13 +25,15 @@ existing undo/redo. Imported shrink-to-fit is displayed and can be changed in
 Cell format. Original PDFCraft vendored JBIG2 fixes are preserved by a managed
 root Cargo patch, resolved from the exact reviewed upstream source.
 
-0.20.0 makes coordinate headings follow the physical sheet edges by default;
-optional pinning stays in View. Fit entire sheet and Fit width use native used
-bounds and sparse imported dimensions. Deep zoom-out paints a bounded overview
-instead of mounting an enormous cell grid; tapping it opens exact editable cells.
-Overview responses cap sparse records at 8,192 and label sampling on huge books.
-Regular window/selection requests retain their 128 × 32 limit. Pinch uses its
-initial pointer focal point; panning keeps inertia and touch-down cancels it.
+0.21.0 removes the 0.20 thumbnail overview and automatic centering. The sheet
+stays editable at 10–500%, including surrounding empty cells. Reduced zoom paints
+only the viewport, with the same exact native window data and hit-testing; tapping
+does not change zoom. Exact queries allow up to 262,144 visible intersections
+(8,192 rows / 2,048 columns per axis), with no sampling or text truncation.
+Coordinate headings still follow physical sheet edges by default; optional pinning
+stays in View. Inertial pan, focal-point pinch and touch resizing are preserved.
+Successful imports and new documents reset the workspace identity in all four
+editors, preventing a new import from overwriting the previous recent copy.
 
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.

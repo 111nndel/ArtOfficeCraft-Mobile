@@ -329,7 +329,7 @@ void main() {
 
       final info = await readNativeBuildInfo();
       expect(info!['abi'], 1);
-      expect(info['coreVersion'], '0.20.0');
+      expect(info['coreVersion'], '0.21.0');
       expect((info['engines'] as Map).keys.toSet(), {
         'wordcraft',
         'gridcraft',
@@ -1121,7 +1121,7 @@ void main() {
     },
   );
   testWidgets(
-    'Whole-sheet overview, edge headings, pinch, tap-to-edit and export use real Rust',
+    'Continuous sheet zoom, empty cells, editing and export use real Rust',
     (tester) async {
       final backend = NativeDocumentBackend(NativeDocumentKind.grid);
       addTearDown(() => backend.close());
@@ -1156,41 +1156,18 @@ void main() {
         of: find.byKey(const Key('formula-input')),
         matching: find.byType(TextField),
       );
-      await tester.enterText(formula, 'Keep pending overview input');
-      await tester.tap(find.byKey(const Key('tool-section-caption')));
+      await tester.enterText(formula, 'Keep pending zoom input');
+      viewport.setZoom(.1);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Вид'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Вся таблица'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('grid-overview')), findsOneWidget);
-      final fitted = viewport.zoom;
-      expect(fitted, lessThan(.25));
-      final size = tester.getSize(find.byKey(const Key('sheet-viewport')));
+      expect(find.byKey(const Key('grid-cells-canvas')), findsOneWidget);
+      expect(viewport.screenPoint(Offset.zero), const Offset(46, 28));
       final layout = (await backend.inspectGrid(
         bytes,
         const GridWindow(0, 0, 0),
         'A1',
       ))['layout'];
       final gridLayout = GridLayout.fromJson(layout as Map);
-      expect(
-        viewport.documentPoint(Offset(size.width, size.height)).dy,
-        greaterThanOrEqualTo(gridLayout.rows.offset(232)),
-      );
-      expect(
-        viewport.documentPoint(Offset(size.width, size.height)).dx,
-        greaterThanOrEqualTo(gridLayout.columns.offset(11)),
-      );
-      expect(
-        tester.widget<TextField>(formula).controller!.text,
-        'Keep pending overview input',
-      );
-      await tester.tap(find.byTooltip('Развернуть инструменты'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('По ширине таблицы'));
-      await tester.pumpAndSettle();
-      expect(viewport.zoom, greaterThan(fitted));
-      viewport.fitUsedRange();
+      viewport.goToCell(200, 2);
       await tester.pumpAndSettle();
       final origin = tester.getTopLeft(find.byKey(const Key('sheet-viewport')));
       await tester.tapAt(
@@ -1203,8 +1180,7 @@ void main() {
             ),
       );
       await tester.pumpAndSettle();
-      expect(viewport.zoom, 1);
-      expect(find.byKey(const ValueKey('grid-cell-C201')), findsOneWidget);
+      expect(viewport.zoom, .1);
       for (var tries = 0; tries < 100; tries++) {
         if (!tester.widget<TextField>(formula).readOnly &&
             find.text('C201').evaluate().isNotEmpty) {
@@ -1216,7 +1192,7 @@ void main() {
       expect(find.text('C201'), findsOneWidget);
       await tester.tap(formula);
       await tester.pumpAndSettle();
-      await tester.enterText(formula, 'Edited after overview');
+      await tester.enterText(formula, 'Edited at reduced zoom');
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Применить'));
       await tester.pumpAndSettle();
@@ -1237,14 +1213,14 @@ void main() {
           const GridWindow(0, 200, 2),
           'C201',
         );
-        expect(selected['selection']['input'], 'Edited after overview');
+        expect(selected['selection']['input'], 'Edited at reduced zoom');
         expect(
           (await backend.inspectGrid(
             exported!,
             const GridWindow(0, 0, 0),
             'A1',
           ))['selection']['input'],
-          'Keep pending overview input',
+          'Keep pending zoom input',
         );
         expect(
           (await backend.inspectGrid(
@@ -1260,7 +1236,7 @@ void main() {
       }
       await binding.convertFlutterSurfaceToImage();
       await tester.pumpAndSettle();
-      await capture(tester, 'overview-to-edited-cell');
+      await capture(tester, 'continuous-zoom-edited-cell');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     },

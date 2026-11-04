@@ -61,6 +61,48 @@ void main() {
       expect(directory.listSync().whereType<File>().length, 3);
     },
   );
+  for (final kind in EditorKind.values) {
+    test(
+      'Opening another ${kind.name} document preserves previous recents after restart',
+      () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'aoc-switch-test-',
+        );
+        addTearDown(() => directory.delete(recursive: true));
+        final store = WorkspaceStore(directory: directory);
+        await store.load();
+        final session = WorkspaceDocumentSession(store, kind);
+        await session.remember(
+          Uint8List.fromList([1]),
+          'First.${kind.extension}',
+        );
+        final first = session.id;
+        await store.toggleFavorite(store.files.single);
+        session.startDocument();
+        // Same filenames can be different imports; names are not file identities.
+        await session.remember(
+          Uint8List.fromList([2]),
+          'First.${kind.extension}',
+        );
+        final second = session.id;
+        expect(second, isNot(first));
+        await session.remember(
+          Uint8List.fromList([3]),
+          'Saved copy.${kind.extension}',
+        );
+        expect(session.id, second);
+        final restored = WorkspaceStore(directory: directory);
+        await restored.load();
+        expect(restored.files, hasLength(2));
+        final old = restored.files.singleWhere((f) => f.id == first);
+        final updated = restored.files.singleWhere((f) => f.id == second);
+        expect(await restored.read(old), [1]);
+        expect(old.favorite, true);
+        expect(await restored.read(updated), [3]);
+        expect(updated.name, 'Saved copy.${kind.extension}');
+      },
+    );
+  }
   test(
     'Damaged index is preserved and cannot be silently overwritten',
     () async {

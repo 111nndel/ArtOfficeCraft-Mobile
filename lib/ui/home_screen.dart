@@ -93,41 +93,53 @@ class _HomeScreenState extends State<HomeScreen> {
         launch = EditorLaunch(bytes: await store.read(entry), name: entry.name);
       }
       if (!mounted) return;
-      String? id = recovered?.workspaceId ?? entry?.id;
+      final documentSession = WorkspaceDocumentSession(
+        store,
+        kind,
+        id: recovered?.workspaceId ?? entry?.id,
+      );
       session = DraftSession(
         recoveryStore,
         kind,
         id: recovered?.id,
-        workspaceId: id,
+        workspaceId: documentSession.id,
         onError: () => message(
           'Не удалось записать локальный черновик. Сохраните копию через меню файла.',
         ),
       );
+      void documentChanged() {
+        documentSession.startDocument();
+        session?.workspaceId = null;
+      }
+
       Future<void> remember(Uint8List bytes, String name) async {
-        final saved = await store.remember(kind, bytes, name, id: id);
-        id = saved.id;
-        session?.workspaceId = id;
+        await documentSession.remember(bytes, name);
+        session?.workspaceId = documentSession.id;
       }
 
       final screen = switch (kind) {
         EditorKind.word => NativeWordScreen(
           launch: launch,
           onRemember: remember,
+          onDocumentChanged: documentChanged,
           draft: session,
         ),
         EditorKind.excel => NativeGridScreen(
           launch: launch,
           onRemember: remember,
+          onDocumentChanged: documentChanged,
           draft: session,
         ),
         EditorKind.slides => NativeDeckScreen(
           launch: launch,
           onRemember: remember,
+          onDocumentChanged: documentChanged,
           draft: session,
         ),
         EditorKind.pdf => NativePdfScreen(
           launch: launch,
           onRemember: remember,
+          onDocumentChanged: documentChanged,
           draft: session,
         ),
       };

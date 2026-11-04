@@ -25,11 +25,13 @@ class NativeDeckScreen extends StatefulWidget {
     super.key,
     this.launch,
     this.onRemember,
+    this.onDocumentChanged,
     this.draft,
     this.backend,
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
   @override
@@ -183,6 +185,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
           : translated('Новая презентация.pptx'),
       changed: true,
     );
+    widget.onDocumentChanged?.call();
   });
   Future<void> open() => action(() async {
     if (!await discard()) return;
@@ -193,6 +196,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       throw const FormatException('Файл больше 64 МБ');
     }
     await load(await file.readAsBytes(), name: importedFilename(path, 'pptx'));
+    widget.onDocumentChanged?.call();
     await rememberCurrent();
     message('PPTX открыт через DeckCraft');
   });

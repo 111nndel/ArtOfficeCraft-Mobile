@@ -28,8 +28,9 @@ class SheetViewport extends StatefulWidget {
        columnHeaderExtent = rowExtent,
        layout = null,
        onResize = null,
-       overviewBuilder = null,
-       onOverviewTap = null,
+       compactCellsBuilder = null,
+       onCellTap = null,
+       onCellLongPress = null,
        freezeHeadings = false;
   const SheetViewport.cells({
     super.key,
@@ -42,8 +43,9 @@ class SheetViewport extends StatefulWidget {
     this.onWindowChanged,
     this.layout,
     this.onResize,
-    this.overviewBuilder,
-    this.onOverviewTap,
+    this.compactCellsBuilder,
+    this.onCellTap,
+    this.onCellLongPress,
     this.freezeHeadings = false,
     this.rowExtent = 56,
     this.columnExtent = 116,
@@ -64,8 +66,9 @@ class SheetViewport extends StatefulWidget {
   final Widget Function(BuildContext, int row, int column)? cellBuilder;
   final Widget? header, corner;
   final GridLayout? layout;
-  final WidgetBuilder? overviewBuilder;
-  final void Function(int row, int column)? onOverviewTap;
+  final Widget Function(BuildContext, Rect, GridAxis, GridAxis)?
+  compactCellsBuilder;
+  final void Function(int row, int column)? onCellTap, onCellLongPress;
   final bool freezeHeadings;
   final ValueChanged<GridWindow>? onWindowChanged;
   final Future<void> Function(bool row, int index, double size)? onResize;
@@ -135,13 +138,8 @@ class SheetViewportState extends State<SheetViewport>
   }
 
   double _gestureScale = 1;
-  bool _overviewActive = false;
-  int _fitMode = 0;
-  bool _fitQueued = false;
-  double get minimumZoom => widget.overviewBuilder == null ? .5 : .000001;
-  Offset paddingAt(double scale) =>
-      widget.cellBuilder == null ||
-          scale < .25 && widget.overviewBuilder != null
+  double get minimumZoom => widget.cellBuilder == null ? .5 : .1;
+  Offset paddingAt(double scale) => widget.cellBuilder == null
       ? Offset.zero
       : Offset(widget.rowHeaderExtent, _heading);
   Offset get _padding => paddingAt(zoom);
@@ -155,39 +153,16 @@ class SheetViewportState extends State<SheetViewport>
       Offset(transform.value.storage[12], transform.value.storage[13]);
   void _matrix(double scale, double x, double y) {
     final padding = paddingAt(scale);
-    final bounds = scale < .25
-        ? widget.layout?.usedBounds?.pixels(rows, columns)
-        : null;
-    double constrain(double value, double viewport, double origin, double end) {
-      final length = (end - origin) * scale;
-      if (bounds != null && length <= viewport) {
-        return (viewport - length) / 2 - origin * scale;
-      }
-      return value
-          .clamp(
-            math.min(-origin * scale, viewport - end * scale),
-            -origin * scale,
-          )
-          .toDouble();
-    }
+    double constrain(double value, double viewport, double end) =>
+        value.clamp(math.min(0.0, viewport - end * scale), 0.0).toDouble();
 
     transform.value = Matrix4.identity()
       ..setEntry(0, 0, scale)
       ..setEntry(1, 1, scale)
       ..setEntry(2, 2, scale)
       ..setTranslationRaw(
-        constrain(
-          x,
-          _size.width - padding.dx,
-          bounds?.left ?? 0,
-          bounds?.right ?? _width,
-        ),
-        constrain(
-          y,
-          _size.height - padding.dy,
-          bounds?.top ?? 0,
-          bounds?.bottom ?? _height,
-        ),
+        constrain(x, _size.width - padding.dx, _width),
+        constrain(y, _size.height - padding.dy, _height),
         0,
       );
   }
@@ -200,7 +175,6 @@ class SheetViewportState extends State<SheetViewport>
 
   void _scaleUpdate(ScaleUpdateDetails details) {
     if (_resizingRow != null) return;
-    _fitMode = 0;
     final scale = (_gestureScale * details.scale)
         .clamp(minimumZoom, 5.0)
         .toDouble();
@@ -210,24 +184,6 @@ class SheetViewportState extends State<SheetViewport>
       details.localFocalPoint.dx - padding.dx - _gestureScene.dx * scale,
       details.localFocalPoint.dy - padding.dy - _gestureScene.dy * scale,
     );
-  }
-
-  void fitUsedRange({bool widthOnly = false}) {
-    _inertia.stop();
-    final bounds = widget.layout?.usedBounds;
-    if (bounds == null || _size.isEmpty) return;
-    final rect = bounds.pixels(rows, columns);
-    if (rect.width <= 0 || rect.height <= 0) return;
-    _fitMode = widthOnly ? 2 : 1;
-    var scale = math.min(5.0, (_size.width - 16) / rect.width);
-    if (!widthOnly) scale = math.min(scale, (_size.height - 16) / rect.height);
-    var padding = paddingAt(scale);
-    scale = math.min(5.0, (_size.width - padding.dx - 16) / rect.width);
-    if (!widthOnly) {
-      scale = math.min(scale, (_size.height - padding.dy - 16) / rect.height);
-    }
-    scale = scale.clamp(minimumZoom, 5.0).toDouble();
-    _translate(rect.left, rect.top, scale);
   }
 
   void _report(GridWindow region) {
@@ -266,15 +222,13 @@ class SheetViewportState extends State<SheetViewport>
       : rows.total;
   void reset() {
     _inertia.stop();
-    _fitMode = 0;
     _lastRegion = null;
     transform.value = Matrix4.identity();
   }
 
   void goToCell(int row, int column) {
     _inertia.stop();
-    _fitMode = 0;
-    final scale = _overviewActive ? math.max(1.0, zoom * 2) : zoom;
+    final scale = zoom;
     _translate(
       widget.cellBuilder == null
           ? column * widget.columnExtent
@@ -290,7 +244,6 @@ class SheetViewportState extends State<SheetViewport>
 
   void setZoom(double value) {
     _inertia.stop();
-    _fitMode = 0;
     final scene = widget.cellBuilder == null
         ? transform.toScene(Offset.zero)
         : documentPoint(_padding);
@@ -437,40 +390,43 @@ class SheetViewportState extends State<SheetViewport>
     ),
   );
 
-  Widget _overview() {
-    _overviewActive = true;
-    final bounds = widget.layout?.usedBounds ?? const GridBounds(0, 0, 0, 0);
-    _report(
-      GridWindow(
-        0,
-        bounds.row,
-        bounds.column,
-        rows: bounds.endRow - bounds.row + 1,
-        columns: bounds.endColumn - bounds.column + 1,
-        overview: true,
-      ),
-    );
-    return SizedBox(
-      width: _width,
-      height: _height,
-      child: widget.overviewBuilder!(context),
-    );
-  }
-
   Widget _cells(Rect rect) {
-    if (zoom < .25 && widget.overviewBuilder != null) return _overview();
     final top = math.max(0.0, rect.top), left = math.max(0.0, rect.left);
     final bottom = rect.bottom, right = rect.right;
     final rowAxis = rows, colAxis = columns;
     final rowList = rowAxis.visible(top, bottom),
         colList = colAxis.visible(left, right);
-    if (widget.overviewBuilder != null &&
-        (rowList.length > 128 || colList.length > 32)) {
-      return _overview();
-    }
-    _overviewActive = false;
     if (rowList.isNotEmpty && colList.isNotEmpty && _resizingRow == null) {
       _report(GridWindow.visible(0, rowList, colList));
+    }
+
+    if (zoom < .5 && widget.compactCellsBuilder != null) {
+      final visible = Rect.fromLTRB(
+        left,
+        top,
+        math.min(right, _width),
+        math.min(bottom, _height),
+      );
+      return SizedBox(
+        width: _width,
+        height: _height,
+        child: Stack(
+          children: [
+            Positioned(
+              left: visible.left,
+              top: visible.top,
+              width: visible.width,
+              height: visible.height,
+              child: widget.compactCellsBuilder!(
+                context,
+                visible,
+                rowAxis,
+                colAxis,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     // Filter once per frame instead of scanning every imported merge per cell.
@@ -556,24 +512,34 @@ class SheetViewportState extends State<SheetViewport>
       onScaleStart: _scaleStart,
       onScaleUpdate: _scaleUpdate,
       onScaleEnd: _scaleEnd,
-      onTapUp: widget.onOverviewTap == null
-          ? null
-          : (details) {
-              if (!_overviewActive) return;
-              final point = documentPoint(details.localPosition);
-              final bounds = widget.layout?.usedBounds?.pixels(rows, columns);
-              if (bounds != null &&
-                  (point.dx < bounds.left ||
-                      point.dx >= bounds.right ||
-                      point.dy < bounds.top ||
-                      point.dy >= bounds.bottom)) {
-                return;
-              }
-              final row = rows.indexAt(point.dy),
-                  col = columns.indexAt(point.dx);
-              goToCell(row, col);
-              widget.onOverviewTap!(row, col);
-            },
+      onTapUp: (details) {
+        if (zoom >= .5 || widget.compactCellsBuilder == null) return;
+        final point = documentPoint(details.localPosition);
+        if (point.dx < 0 ||
+            point.dy < 0 ||
+            point.dx >= _width ||
+            point.dy >= _height) {
+          return;
+        }
+        widget.onCellTap?.call(
+          rows.indexAt(point.dy),
+          columns.indexAt(point.dx),
+        );
+      },
+      onLongPressStart: (details) {
+        if (zoom >= .5 || widget.compactCellsBuilder == null) return;
+        final point = documentPoint(details.localPosition);
+        if (point.dx < 0 ||
+            point.dy < 0 ||
+            point.dx >= _width ||
+            point.dy >= _height) {
+          return;
+        }
+        widget.onCellLongPress?.call(
+          rows.indexAt(point.dy),
+          columns.indexAt(point.dx),
+        );
+      },
       child: ValueListenableBuilder<Matrix4>(
         valueListenable: transform,
         builder: (context, matrix, _) {
@@ -601,7 +567,7 @@ class SheetViewportState extends State<SheetViewport>
                   child: cells,
                 ),
               ),
-              if (zoom >= .25) _headings(),
+              _headings(),
             ],
           );
         },
@@ -617,8 +583,8 @@ class SheetViewportState extends State<SheetViewport>
       final scale = zoom, rowAxis = rows, colAxis = columns;
       final top = documentPoint(Offset.zero),
           bottom = documentPoint(Offset(_size.width, _size.height));
-      final rowList = rowAxis.visible(top.dy, bottom.dy).take(128),
-          colList = colAxis.visible(top.dx, bottom.dx).take(32);
+      final rowList = rowAxis.visible(top.dy, bottom.dy),
+          colList = colAxis.visible(top.dx, bottom.dx);
       final edgeX = widget.freezeHeadings ? 0.0 : matrix.storage[12];
       final edgeY = widget.freezeHeadings ? 0.0 : matrix.storage[13];
       return Stack(
@@ -682,15 +648,7 @@ class SheetViewportState extends State<SheetViewport>
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
       final cellMode = widget.cellBuilder != null;
-      final changedSize = _size != box.biggest;
       _size = box.biggest;
-      if (changedSize && _fitMode != 0 && !_fitQueued) {
-        _fitQueued = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _fitQueued = false;
-          if (mounted && _fitMode != 0) fitUsedRange(widthOnly: _fitMode == 2);
-        });
-      }
       return ClipRect(
         child: ColoredBox(
           color: Colors.white,

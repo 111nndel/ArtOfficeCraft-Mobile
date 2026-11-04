@@ -3,10 +3,18 @@ import 'package:flutter/material.dart';
 import '../native/grid_layout.dart';
 import '../native/grid_window.dart';
 
-/// Bounded, non-editing overview. Fine editing uses the normal cell viewport.
-/// Paint sparse native records instead of mounting thousands of text fields.
-class GridOverviewPainter extends CustomPainter {
-  GridOverviewPainter(this.layout, this.cells, this.selected);
+/// The same editable sheet at reduced zoom, with visible empty cells and exact
+/// native records. Painting avoids thousands of tiny widget layouts.
+class GridCellsPainter extends CustomPainter {
+  GridCellsPainter(
+    this.layout,
+    this.cells,
+    this.selected, {
+    required this.viewport,
+    required this.scale,
+  });
+  final Rect viewport;
+  final double scale;
   final GridLayout layout;
   final Map<String, dynamic> cells;
   final String selected;
@@ -32,6 +40,54 @@ class GridOverviewPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final fill = Paint(), line = Paint()..style = PaintingStyle.stroke;
     final text = TextPainter(textDirection: TextDirection.ltr);
+    canvas.save();
+    canvas.translate(-viewport.left, -viewport.top);
+    canvas.clipRect(viewport);
+    canvas.drawRect(viewport, Paint()..color = Colors.white);
+    if (layout.showGridlines) {
+      final grid = Paint()
+        ..color = const Color(0xffe5e9ef)
+        ..strokeWidth = .7 / scale;
+      for (final row in layout.rows.visible(
+        viewport.top,
+        viewport.bottom,
+        buffer: 0,
+      )) {
+        final y = layout.rows.offset(row);
+        canvas.drawLine(
+          Offset(viewport.left, y),
+          Offset(viewport.right, y),
+          grid,
+        );
+      }
+      for (final column in layout.columns.visible(
+        viewport.left,
+        viewport.right,
+        buffer: 0,
+      )) {
+        final x = layout.columns.offset(column);
+        canvas.drawLine(
+          Offset(x, viewport.top),
+          Offset(x, viewport.bottom),
+          grid,
+        );
+      }
+    }
+    // Clear interior gridlines of merges, including empty merge anchors.
+    for (final merge in layout.merges) {
+      final rect = cellRect(merge.row, merge.column);
+      if (!rect.overlaps(viewport)) continue;
+      canvas.drawRect(rect, Paint()..color = Colors.white);
+      if (layout.showGridlines) {
+        canvas.drawRect(
+          rect,
+          Paint()
+            ..color = const Color(0xffe5e9ef)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = .7 / scale,
+        );
+      }
+    }
     try {
       for (final entry in cells.entries) {
         final at = gridAddress(entry.key);
@@ -43,7 +99,7 @@ class GridOverviewPainter extends CustomPainter {
         }
         final item = entry.value as Map;
         final rect = cellRect(at.row, at.column);
-        if (rect.isEmpty) continue;
+        if (rect.isEmpty || !rect.overlaps(viewport)) continue;
         final style = item['style'] as Map? ?? const {};
         fill.color = rgb(style['fill']) ?? Colors.white;
         canvas.drawRect(rect, fill);
@@ -78,7 +134,7 @@ class GridOverviewPainter extends CustomPainter {
         text.text = TextSpan(
           text: value,
           style: TextStyle(
-            fontSize: ((style['fontSize'] as num?)?.toDouble() ?? 11) * 4 / 3,
+            fontSize: ((style['fontSize'] as num?)?.toDouble() ?? 12) * 4 / 3,
             height: 1.1,
             color: rgb(style['color']) ?? const Color(0xff172634),
             fontFamily: style['fontName'] as String?,
@@ -94,7 +150,9 @@ class GridOverviewPainter extends CustomPainter {
             ]),
           ),
         );
-        final available = rect.width - 6;
+        final indent = ((style['indent'] as num?)?.toDouble() ?? 0) * 8;
+        final available = rect.width - 6 - indent;
+        if (available <= 0) continue;
         text.layout(
           maxWidth: style['wrap'] == true ? available : double.infinity,
         );
@@ -108,6 +166,7 @@ class GridOverviewPainter extends CustomPainter {
         final x =
             rect.left +
             3 +
+            indent +
             (align == TextAlign.right
                 ? available - width
                 : align == TextAlign.center
@@ -117,8 +176,8 @@ class GridOverviewPainter extends CustomPainter {
             rect.top +
             switch (style['verticalAlign']) {
               'top' => 0.0,
-              'center' => (rect.height - height) / 2,
-              _ => rect.height - height,
+              'bottom' => rect.height - height,
+              _ => (rect.height - height) / 2,
             };
         canvas.save();
         canvas.clipRect(rect.deflate(1));
@@ -136,12 +195,15 @@ class GridOverviewPainter extends CustomPainter {
       }
     } finally {
       text.dispose();
+      canvas.restore();
     }
   }
 
   @override
-  bool shouldRepaint(GridOverviewPainter old) =>
+  bool shouldRepaint(GridCellsPainter old) =>
       !identical(layout, old.layout) ||
       !identical(cells, old.cells) ||
-      selected != old.selected;
+      selected != old.selected ||
+      viewport != old.viewport ||
+      scale != old.scale;
 }

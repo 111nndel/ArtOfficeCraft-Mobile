@@ -32,19 +32,16 @@ class GridWindow {
     this.column, {
     this.rows = 64,
     this.columns = 16,
-    this.overview = false,
   }) : rowIndices = null,
        columnIndices = null;
   GridWindow.visible(this.sheet, List<int> rowList, List<int> columnList)
-    : overview = false,
-      rowIndices = List.unmodifiable(rowList),
+    : rowIndices = List.unmodifiable(rowList),
       columnIndices = List.unmodifiable(columnList),
       row = rowList.first,
       column = columnList.first,
       rows = rowList.last - rowList.first + 1,
       columns = columnList.last - columnList.first + 1;
   final int sheet, row, column, rows, columns;
-  final bool overview;
   final List<int>? rowIndices, columnIndices;
   Iterable<int> get requestedRows =>
       rowIndices ?? List.generate(rows, (i) => row + i);
@@ -58,7 +55,6 @@ class GridWindow {
       (rowIndices == null || rowIndices!.contains(r)) &&
       (columnIndices == null || columnIndices!.contains(c));
   bool covers(GridWindow other) =>
-      overview == other.overview &&
       sheet == other.sheet &&
       other.requestedRows.every(
         (r) =>
@@ -73,7 +69,6 @@ class GridWindow {
             (columnIndices == null || columnIndices!.contains(c)),
       );
   GridWindow get buffered {
-    if (overview) return this;
     if (rowIndices != null) return this;
     final height = (rows + 32).clamp(64, 128);
     final width = (columns + 8).clamp(16, 32);
@@ -89,7 +84,6 @@ class GridWindow {
     'rows': rows,
     'columns': columns,
     'selected': selected,
-    if (overview) 'overview': true,
     if (rowIndices != null) 'rowIndices': rowIndices,
     if (columnIndices != null) 'columnIndices': columnIndices,
   };

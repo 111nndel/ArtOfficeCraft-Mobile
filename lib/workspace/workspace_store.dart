@@ -173,3 +173,15 @@ class WorkspaceStore extends ChangeNotifier {
     return file.readAsBytes();
   }
 }
+
+/// A file opened from inside an editor must not overwrite the previous import.
+class WorkspaceDocumentSession {
+  WorkspaceDocumentSession(this.store, this.kind, {this.id});
+  final WorkspaceStore store;
+  final EditorKind kind;
+  String? id;
+  void startDocument() => id = null;
+  Future<void> remember(Uint8List bytes, String name) async {
+    id = (await store.remember(kind, bytes, name, id: id)).id;
+  }
+}

@@ -28,11 +28,13 @@ class NativeWordScreen extends StatefulWidget {
     super.key,
     this.launch,
     this.onRemember,
+    this.onDocumentChanged,
     this.draft,
     this.backend,
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
   @override
@@ -288,6 +290,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
           : translated('Новый документ.docx');
       changed = true;
     });
+    widget.onDocumentChanged?.call();
     history.clear();
   });
 
@@ -311,6 +314,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       }
       changed = false;
     });
+    widget.onDocumentChanged?.call();
     await rememberCurrent();
     history.clear();
     inform('Файл открыт локальным движком WordCraft');

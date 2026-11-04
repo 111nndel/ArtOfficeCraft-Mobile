@@ -26,12 +26,14 @@ class NativePdfScreen extends StatefulWidget {
     super.key,
     this.launch,
     this.onRemember,
+    this.onDocumentChanged,
     this.draft,
     this.backend,
     this.renderer,
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
+  final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
   final PdfPageRenderer? renderer;
@@ -186,6 +188,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       edited: true,
     );
     tip('Создан PDF с одной страницей');
+    widget.onDocumentChanged?.call();
   });
   Future<void> open() => execute(() async {
     if (!await discard()) return;
@@ -196,6 +199,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       throw const FormatException('Слишком большой PDF (>64 МБ)');
     }
     await load(await f.readAsBytes(), name: importedFilename(path, 'pdf'));
+    widget.onDocumentChanged?.call();
     await rememberCurrent();
     tip('Структура PDF прочитана');
   });
