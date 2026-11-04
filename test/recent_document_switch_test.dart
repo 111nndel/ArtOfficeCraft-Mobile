@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -15,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'draft_test_io.dart';
 import 'loaded_editors_test.dart' show FakeDocumentBackend;
 
 void main() {
@@ -43,6 +45,7 @@ void main() {
         const files = MethodChannel('flutter_file_dialog');
         const pdf = MethodChannel('artofficecraft/pdf_renderer');
         final calls = <String>[];
+        final initialRemember = Completer<void>();
         String? pick = second.path;
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(files, (call) async => pick);
@@ -74,6 +77,7 @@ void main() {
         Future<void> remember(Uint8List bytes, String name) async {
           calls.add('remember');
           await session.remember(bytes, name);
+          if (!initialRemember.isCompleted) initialRemember.complete();
         }
 
         final launch = EditorLaunch(
@@ -112,37 +116,28 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         await tester.pumpWidget(MaterialApp(home: screen));
-        Future<void> settleFileIO() async {
-          for (var i = 0; i < 20; i++) {
-            await tester.runAsync(
-              () => Future<void>.delayed(const Duration(milliseconds: 10)),
-            );
-            await tester.pump(const Duration(milliseconds: 50));
-          }
-          await tester.pumpAndSettle();
-        }
-
-        await settleFileIO();
+        await waitDraftIO(tester, () => initialRemember.future);
+        await tester.pumpAndSettle();
         expect(store.files, hasLength(1));
         expect(calls, ['remember']);
         final firstId = session.id;
-        void open() {
+        Future<void> open() async {
           final menu = tester.widget<EditorFileMenu>(
             find.byType(EditorFileMenu),
           );
-          menu.commands
+          final dynamic command = menu.commands
               .firstWhere((c) => c.label.startsWith('Открыть'))
-              .onPressed!();
+              .onPressed!;
+          await waitDraftIO(tester, () => command() as Future<void>);
+          await tester.pumpAndSettle();
         }
 
-        open();
-        await settleFileIO();
+        await open();
         expect(calls, ['remember', 'replace', 'remember']);
         expect(session.id, isNot(firstId));
         expect(store.files, hasLength(2));
         pick = null;
-        open();
-        await settleFileIO();
+        await open();
         expect(calls, [
           'remember',
           'replace',
