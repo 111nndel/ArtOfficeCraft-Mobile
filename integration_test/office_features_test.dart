@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
@@ -60,7 +59,7 @@ void main() {
         );
     final i = p.sections.indexWhere((s) => s.label == section);
     final j = p.sections[i].tools.indexWhere((t) => t.label == name);
-    state.openTool(i, [j, if (child != null) child]);
+    state.openTool(i, [j, ?child]);
     await tester.pumpAndSettle();
   }
 
