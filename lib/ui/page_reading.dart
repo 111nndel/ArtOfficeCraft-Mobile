@@ -8,6 +8,94 @@ import 'package:flutter/services.dart';
 import '../l10n/app_strings.dart';
 import 'editor_tools.dart';
 
+EditorTool pageJumpTool({
+  required String label,
+  required String fieldLabel,
+  required int current,
+  required int count,
+  required ValueChanged<int>? onJump,
+}) => EditorTool(
+  label,
+  Icons.pin_outlined,
+  builder: (_) => _PageJump(
+    label: label,
+    fieldLabel: fieldLabel,
+    current: current,
+    count: count,
+    onJump: onJump,
+  ),
+);
+
+class _PageJump extends StatefulWidget {
+  const _PageJump({
+    required this.label,
+    required this.fieldLabel,
+    required this.current,
+    required this.count,
+    required this.onJump,
+  });
+
+  final String label, fieldLabel;
+  final int current, count;
+  final ValueChanged<int>? onJump;
+
+  @override
+  State<_PageJump> createState() => _PageJumpState();
+}
+
+class _PageJumpState extends State<_PageJump> {
+  late final input = TextEditingController(text: '${widget.current + 1}');
+  bool invalid = false;
+
+  @override
+  void dispose() {
+    input.dispose();
+    super.dispose();
+  }
+
+  void jump() {
+    final target = int.tryParse(input.text.trim());
+    if (target == null || target < 1 || target > widget.count) {
+      setState(() => invalid = true);
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    widget.onJump?.call(target - 1);
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextField(
+        key: const Key('reader-jump-number'),
+        controller: input,
+        enabled: widget.onJump != null,
+        keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.go,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: InputDecoration(
+          labelText: tr(context, widget.fieldLabel),
+          helperText: '1–${widget.count}',
+          errorText: invalid
+              ? tr(context, 'Введите число от 1 до ${widget.count}')
+              : null,
+        ),
+        onChanged: (_) {
+          if (invalid) setState(() => invalid = false);
+        },
+        onSubmitted: (_) => jump(),
+      ),
+      const SizedBox(height: 12),
+      FilledButton(
+        style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+        onPressed: widget.onJump == null ? null : jump,
+        child: UiText(widget.label),
+      ),
+    ],
+  );
+}
+
 enum ReadingMode {
   horizontal,
   vertical,

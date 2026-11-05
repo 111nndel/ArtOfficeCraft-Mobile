@@ -683,7 +683,21 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     sections: officeSections(
       'deck',
       leading: {
-        'Вид': [readingModeTool(reading)],
+        'Вид': [
+          readingModeTool(reading),
+          pageJumpTool(
+            label: 'Перейти к слайду',
+            fieldLabel: 'Номер слайда',
+            current: index,
+            count: slides.length,
+            onJump: busy
+                ? null
+                : (target) {
+                    selectSlide(target);
+                    toolPanel.currentState?.setExpanded(false);
+                  },
+          ),
+        ],
         'Главная': [
           EditorTool(
             'Текст',

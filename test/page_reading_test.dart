@@ -62,6 +62,57 @@ void main() {
     messenger.setMockMethodCallHandler(rendererChannel, null);
   });
 
+  testWidgets('PDF searches the outline and jumps by bookmark or number', (
+    tester,
+  ) async {
+    final backend = FeaturesBackend({
+      'pages': [
+        for (var i = 0; i < 40; i++)
+          {'width': 595, 'height': 842, 'rotation': 0},
+      ],
+      'bookmarks': [
+        {'title': 'Введение', 'page': 1, 'depth': 0},
+        {'title': 'Приложение', 'page': 37, 'depth': 1},
+        {'title': 'Без перехода', 'page': null, 'depth': 0},
+      ],
+    });
+    await setup(
+      tester,
+      const Size(393, 873),
+      1,
+      NativePdfScreen(
+        backend: backend,
+        renderer: PdfPageRenderer(allowNonAndroidForTesting: true),
+        launch: EditorLaunch(bytes: await backend.create()),
+      ),
+    );
+    await changeMode(tester, 'Чтение', ReadingMode.continuous);
+    await tool(tester, 'Чтение', 'Оглавление');
+    await tester.enterText(
+      find.byKey(const Key('pdf-bookmark-search')),
+      'ПРИЛОЖ',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Введение'), findsNothing);
+    await press(tester, 'Приложение');
+    await tester.pumpAndSettle();
+    expect(find.text('Страница 38 из 40'), findsOneWidget);
+    expect(renders, contains(37));
+
+    await tool(tester, 'Чтение', 'Перейти к странице');
+    final number = find.byKey(const Key('reader-jump-number'));
+    await tester.enterText(number, '41');
+    await press(tester, 'Перейти к странице');
+    await tester.pumpAndSettle();
+    expect(find.text('Введите число от 1 до 40'), findsOneWidget);
+    await tester.enterText(number, '2');
+    await press(tester, 'Перейти к странице');
+    await tester.pumpAndSettle();
+    expect(find.text('Страница 2 из 40'), findsOneWidget);
+    expect(renders, contains(1));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'PDF turns along the chosen axis, pans a tall page, and keeps its place in the lazy strip',
     (tester) async {

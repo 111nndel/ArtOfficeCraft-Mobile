@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.28.0 / core 0.28.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.29.0 / core 0.29.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/release-0.28.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
+`docs/release-0.29.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -76,6 +76,10 @@ All four original engine source pins and their bundled notices are updated.
 The background worker reads options, writes the real XLSX filter and verifies
 the view before the editor commits an undo step. Rows hidden by a filter keep
 their cells and styles. The four engine pins match their latest stable tags.
+
+0.29.0 adds searchable PDF bookmarks and direct page/slide number navigation.
+PDFCraft's pinned organize crate resolves local destinations on the worker.
+The viewer uses the resolved page numbers and titles for navigation.
 
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.

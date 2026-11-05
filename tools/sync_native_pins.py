@@ -28,7 +28,7 @@ def pdf_patch_block(folder, cargo_base):
     manifest = tomllib.loads((folder / 'Cargo.toml').read_text(encoding='utf-8-sig'))
     patches = manifest.get('patch', {}).get('crates-io', {})
     lines = [PATCH_BEGIN, '[patch.crates-io]']
-    for name in ('hayro-jbig2',):
+    for name in ('hayro-jbig2','hayro-syntax'):
         entry = patches.get(name)
         if not isinstance(entry, dict) or set(entry) != {'path'}:
             raise RuntimeError(f'{name}: upstream patch changed; review required')
@@ -99,7 +99,7 @@ def main():
             raise RuntimeError('DeckCraft Cargo dependency missing: '+crate)
     pdf=pins['pdfcraft']
     pdfbase='../../upstream/staged/pdfcraft/'+pdf['tag']+'-'+pdf['commit'][:12]+'/crates/'
-    for name in ('cos','model'):
+    for name in ('cos','model','organize'):
         crate='pdfcraft-'+name
         cargo,count=re.subn(
             r'('+re.escape(crate)+r'\s*=\s*\{\s*path\s*=\s*")[^"]+',

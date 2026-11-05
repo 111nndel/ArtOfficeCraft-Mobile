@@ -3,6 +3,7 @@ import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../ui/pdf_viewport.dart';
 import '../ui/page_reading.dart';
+import 'pdf_outline_panel.dart';
 import '../workspace/draft_store.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
@@ -76,6 +77,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   final targetPage = TextEditingController();
   Uint8List? contents;
   List<Map<String, dynamic>> pages = [];
+  List<PdfBookmark> bookmarks = [];
+  bool outlineLimited = false;
   List<Size> pageSizes = [];
   String filename = 'Новый документ.pdf';
   int selected = 0;
@@ -96,6 +99,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     }
     setState(() => selected = page);
     queueDraft();
+  }
+
+  void jumpToPage(int page) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    selectPage(page);
+    toolPanel.currentState?.setExpanded(false);
   }
 
   Future<Uint8List> raster(int page) {
@@ -150,6 +159,15 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     if (raw is! List || raw.isEmpty) {
       throw const FormatException('Страницы PDF не найдены');
     }
+    final outline = [
+      for (final item in summary['bookmarks'] as List? ?? const [])
+        if (item case {
+          'title': String title,
+          'page': int? target,
+          'depth': int depth,
+        })
+          (title: title, page: target, depth: depth),
+    ];
     final newSession = await _pageRenderer.open(data);
     if (!mounted) {
       await _pageRenderer.close(newSession);
@@ -160,6 +178,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       _session = newSession;
       contents = data;
       pages = raw.map((x) => Map<String, dynamic>.from(x as Map)).toList();
+      bookmarks = outline;
+      outlineLimited = summary['outlineLimited'] == true;
       pageSizes = pages.map(pageSize).toList(growable: false);
       selected = page.clamp(0, pages.length - 1);
       changed = edited;
@@ -461,6 +481,13 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       'pdf',
       leading: {
         'Чтение': [
+          pageJumpTool(
+            label: 'Перейти к странице',
+            fieldLabel: 'Номер страницы',
+            current: selected,
+            count: pages.length,
+            onJump: busy ? null : jumpToPage,
+          ),
           EditorTool(
             'Предыдущая',
             Icons.chevron_left,
@@ -486,6 +513,16 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       },
       overrides: {
         'Режим чтения': readingModeTool(reading),
+        'Оглавление': EditorTool(
+          'Оглавление',
+          Icons.list_alt_outlined,
+          builder: (_) => PdfOutlinePanel(
+            key: ObjectKey(contents),
+            entries: bookmarks,
+            limited: outlineLimited,
+            onJump: busy ? null : jumpToPage,
+          ),
+        ),
         'Порядок страниц': EditorTool(
           'Порядок страниц',
           Icons.reorder,

@@ -1,5 +1,5 @@
 //! Pinned PDFCraft COS + model integration. Limited page-structure edits.
-//! The desktop organize crate is not linked by this mobile adapter.
+//! Navigation reads the upstream outline without executing bookmark actions.
 use std::sync::Arc;
 use pdfcraft_cos::{Document,Dict,Object,SaveOptions,write_full};
 use pdfcraft_model::{pages,Page};
@@ -80,9 +80,17 @@ pub extern "C" fn ac_pdf_inspect(data:*const u8,n:usize)->AcResult{
             let (w,h)=p.display_size(&doc);
             json!({"index":i,"width":w,"height":h,"rotation":p.rotation(&doc)})
         }).collect();
+        let outline = pdfcraft_organize::bookmark_page(&doc, 0, 4096);
+        let bookmarks: Vec<J> = outline.bookmarks.into_iter().map(|entry| json!({
+            "title": entry.title.chars().take(512).collect::<String>(),
+            "page": entry.page.filter(|&page| page < all.len()),
+            "depth": entry.path.len().saturating_sub(1),
+        })).collect();
         serde_json::to_vec(&json!({
             "type":"pdf","engine":"pdfcraft-cos-model","pageCount":meta.len(),
             "pages":meta,
+            "bookmarks":bookmarks,
+            "outlineLimited":outline.next.is_some(),
             "warnings":[
                 "Page contents are not rendered in this preview.",
                 "Structure edits to complex PDF may alter forms, bookmarks, annotations or metadata.",
@@ -214,5 +222,19 @@ mod tests{
         let request=json!({"action":"move_to","page":0,"to":3}).to_string();
         assert!(result(ac_pdf_edit(rotated.as_ptr(),rotated.len(),request.as_ptr(),request.len())).is_err());
         let original=parse(&rotated).unwrap();assert_eq!(pages(&original)[0].rotation(&original),90);
+    }
+
+    #[test]
+    fn inspection_reports_local_bookmark_destinations_in_page_order() {
+        let initial = result(ac_pdf_create(std::ptr::null(), 0)).unwrap();
+        let two = edit(&initial, "insert_blank", 0);
+        let mut doc = parse(&two).unwrap();
+        pdfcraft_organize::add_bookmark(&mut doc, &[], 0, "Вторая страница", 1).unwrap();
+        let bytes = save(&doc).unwrap();
+        let info = result(ac_pdf_inspect(bytes.as_ptr(), bytes.len())).unwrap();
+        let value: J = serde_json::from_slice(&info).unwrap();
+        assert_eq!(value["bookmarks"], json!([
+            {"title":"Вторая страница","page":1,"depth":0}
+        ]));
     }
 }
