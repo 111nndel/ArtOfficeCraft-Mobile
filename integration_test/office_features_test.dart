@@ -20,6 +20,8 @@ import 'worker_media_fixture.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  var screenshotSurfaceReady = false;
+  setUp(() => screenshotSurfaceReady = false);
   Future<void> until(
     WidgetTester tester,
     bool Function() done,
@@ -112,7 +114,11 @@ void main() {
   }
 
   Future<void> capture(WidgetTester tester, String name) async {
-    await binding.convertFlutterSurfaceToImage();
+    // The integration binding restores the surface at the end of each test.
+    if (!screenshotSurfaceReady) {
+      await binding.convertFlutterSurfaceToImage();
+      screenshotSurfaceReady = true;
+    }
     await tester.pumpAndSettle();
     final bytes = await binding.takeScreenshot(name);
     final path = '${Directory.systemTemp.path}/aoc-$name.png';
