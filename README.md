@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview: alpha 0.24.0 — not a finished office suite.**
+**Current preview: alpha 0.25.0 — not a finished office suite.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -12,7 +12,7 @@ About. Spreadsheets support pinch zoom and pan; PDF opens at page width in the
 full available canvas, with optional thumbnails and fit controls. Large editor
 tool targets and the approved nested slab navigation remain unchanged. Light/dark
 appearance is saved locally and restored before the first Flutter frame.
-See [0.24.0 validation and limits](docs/validation-0.24.0.md).
+See the [0.25.0 release notes and limits](docs/release-0.25.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
@@ -20,7 +20,7 @@ future tagged publication requires that job to pass. See
 | Format | Current capability |
 | --- | --- |
 | DOCX / WordCraft | Create/read DOCX, edit plain paragraphs directly on the page with cursor/selection, selected bold/italic/underline/font size/color and paragraph alignment/spacing/left indent; undo/redo; exact case-sensitive find/replace in text paragraphs, with run preservation; save a new copy. Tables are excluded from search. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
-| XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; edge headings with optional pinning and Go to cell inside View. Imported dimensions/hidden rows and columns/merged regions; finger-driven row/column resizing with undo/redo and saved XLSX sizes. Compact edge headings, imported shrink-to-fit and AutoSum/recalculate commands. Continuous 10–500% zoom, surrounding empty cells, exact visible-cell queries and touch inertia; no thumbnail/overview mode. Touch range handles with edge scrolling, range style/clear operations (4096 cells), named new sheets, positional undo/redo and reopening the saved active sheet are connected. Copy/paste ranges across files/sheets with rebased formulas and styles; values/formulas/formats-only modes and external TSV. Charts and complex styles remain incomplete. |
+| XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; edge headings with optional pinning and Go to cell inside View. Imported dimensions/hidden rows and columns/merged regions; finger-driven row/column resizing with undo/redo and saved XLSX sizes. Compact edge headings, imported shrink-to-fit and AutoSum/recalculate commands. Continuous 10–500% zoom, surrounding empty cells, exact visible-cell queries and touch inertia; no thumbnail/overview mode. Touch range handles with edge scrolling, range style/clear operations (4096 cells), named new sheets, positional undo/redo and reopening the saved active sheet are connected. Copy/paste ranges across files/sheets with rebased formulas and styles; values/formulas/formats-only modes and external TSV. Insert/delete whole rows and columns from the selected range, with adjusted references across sheets and undo/redo. Charts and complex styles remain incomplete. |
 | PPTX / DeckCraft | Create/import PPTX, add/delete/reorder slides, add/edit text, undo/redo and Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
 | PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model page ordering (including direct page-number moves), undo/redo and Save As. Rotated pages use their displayed geometry once. Complex editing/forms/signing not complete. |
 

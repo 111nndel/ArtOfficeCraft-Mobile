@@ -116,6 +116,208 @@ void main() {
     debugPrint('DESIGN_SCREENSHOT $path');
   }
 
+  String cellInput(WidgetTester tester) => tester
+      .widget<TextField>(
+        find.descendant(
+          of: find.byKey(const Key('formula-input')),
+          matching: find.byType(TextField),
+        ),
+      )
+      .controller!
+      .text;
+
+  Future<void> selectRange(
+    WidgetTester tester,
+    String range,
+    String expectedInput,
+  ) async {
+    await tool(tester, 'Данные', 'Выделить диапазон');
+    await tester.enterText(find.byKey(const Key('grid-range-input')), range);
+    await press(tester, 'Выделить ячейки');
+    await until(
+      tester,
+      () => cellInput(tester) == expectedInput,
+      'range anchor',
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Future<Map<String, dynamic>> inspectCell(
+    NativeDocumentBackend backend,
+    Uint8List bytes,
+    String address, {
+    int sheet = 0,
+  }) async =>
+      (await backend.inspectGrid(
+            bytes,
+            GridWindow(sheet, 0, 0),
+            address,
+          ))['selection']
+          as Map<String, dynamic>;
+
+  testWidgets(
+    'Insert and delete whole rows from the tool panel with cross-sheet references and undo',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      var original = await backend.create();
+      for (final entry in {
+        'A1': '10',
+        'A2': '20',
+        'A3': '30',
+        'F1': '=SUM(A1:A3)',
+        'AA2': 'Outside the selection',
+      }.entries) {
+        original = await backend.edit(original, {
+          'sheet': 0,
+          'address': entry.key,
+          'value': entry.value,
+        });
+      }
+      original = await backend.edit(original, {
+        'action': 'add_sheet',
+        'sheet': 0,
+        'address': 'A1',
+        'name': 'Summary',
+      });
+      original = await backend.edit(original, {
+        'sheet': 1,
+        'address': 'A1',
+        'value': r'=Sheet1!$A$3*2',
+      });
+      await present(
+        tester,
+        NativeGridScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: original, name: 'Rows.xlsx'),
+        ),
+      );
+      await press(tester, 'Sheet1');
+      await until(
+        tester,
+        () => cellInput(tester) == '10',
+        'selected source sheet',
+      );
+      await selectRange(tester, 'A2:B3', '20');
+      await tool(tester, 'Главная', 'Строки и столбцы');
+      expect(find.text('Строки 2–3'), findsOneWidget);
+      await capture(tester, 'grid-lines-pane-025');
+      await press(tester, 'Вставить строки выше');
+      await until(tester, () => panel(tester).undo != null, 'insert rows');
+      final inserted = await save(tester, 'Сохранить копию');
+      expect((await inspectCell(backend, inserted, 'A2'))['input'], '');
+      expect(
+        (await inspectCell(backend, inserted, 'AA4'))['input'],
+        'Outside the selection',
+      );
+      expect(
+        (await inspectCell(backend, inserted, 'F1'))['input'],
+        '=SUM(A1:A5)',
+      );
+      expect(
+        (await inspectCell(backend, inserted, 'A1', sheet: 1))['input'],
+        r'=Sheet1!$A$5*2',
+      );
+      await history(tester, true);
+      final undone = await save(tester, 'Сохранить копию');
+      expect(
+        (await inspectCell(backend, undone, 'F1'))['input'],
+        '=SUM(A1:A3)',
+      );
+      expect(
+        (await inspectCell(backend, undone, 'AA2'))['input'],
+        'Outside the selection',
+      );
+      await history(tester, false);
+      await selectRange(tester, 'A4', '20');
+      await tool(tester, 'Главная', 'Строки и столбцы');
+      await press(tester, 'Удалить строки');
+      expect(find.text('Будут удалены строки 4 целиком.'), findsOneWidget);
+      await press(tester, 'Удалить');
+      await until(
+        tester,
+        () => cellInput(tester) == '30',
+        'delete row and refresh active cell',
+      );
+      final deleted = await save(tester, 'Сохранить копию');
+      expect((await inspectCell(backend, deleted, 'F1'))['display'], '40');
+      expect((await inspectCell(backend, deleted, 'AA4'))['input'], '');
+      expect(
+        (await inspectCell(backend, deleted, 'A1', sheet: 1))['input'],
+        r'=Sheet1!$A$4*2',
+      );
+      expect(
+        (await inspectCell(backend, original, 'AA2'))['input'],
+        'Outside the selection',
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Insert columns and delete a referenced column while preserving styles and a valid XLSX',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      var original = await backend.create();
+      for (final entry in {'B1': '11', 'C1': '12', 'D1': '=B1+C1'}.entries) {
+        original = await backend.edit(original, {
+          'sheet': 0,
+          'address': entry.key,
+          'value': entry.value,
+        });
+      }
+      original = await backend.edit(original, {
+        'sheet': 0,
+        'address': 'D1',
+        'action': 'format',
+        'style': {'bold': true},
+      });
+      await present(
+        tester,
+        NativeGridScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: original, name: 'Columns.xlsx'),
+        ),
+      );
+      await selectRange(tester, 'B1:C2', '11');
+      await tool(tester, 'Главная', 'Строки и столбцы');
+      expect(find.text('Столбцы B–C'), findsOneWidget);
+      await press(tester, 'Вставить столбцы слева');
+      await until(tester, () => panel(tester).undo != null, 'insert columns');
+      final inserted = await save(tester, 'Сохранить копию');
+      expect((await inspectCell(backend, inserted, 'F1'))['input'], '=D1+E1');
+      expect((await inspectCell(backend, inserted, 'F1'))['display'], '23');
+      expect(
+        (await inspectCell(backend, inserted, 'F1'))['style']['bold'],
+        true,
+      );
+      await selectRange(tester, 'D1', '11');
+      await tool(tester, 'Главная', 'Строки и столбцы');
+      await press(tester, 'Удалить столбцы');
+      expect(find.text('Будут удалены столбцы D целиком.'), findsOneWidget);
+      await capture(tester, 'grid-delete-column-025');
+      await press(tester, 'Удалить');
+      await until(tester, () => cellInput(tester) == '12', 'delete column');
+      final deleted = await save(tester, 'Сохранить копию');
+      final result = await inspectCell(backend, deleted, 'E1');
+      expect(result['input'], '=#REF!+D1');
+      expect(result['display'], '#REF!');
+      expect(result['style']['bold'], true);
+      await present(
+        tester,
+        NativeGridScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: deleted, name: 'Reopened.xlsx'),
+        ),
+      );
+      expect((await inspectCell(backend, deleted, 'D1'))['input'], '12');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets(
     'Touch range formatting and clearing preserve styles and formulas through Rust export and undo',
     (tester) async {

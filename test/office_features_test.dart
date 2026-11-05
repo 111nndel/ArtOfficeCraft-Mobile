@@ -15,6 +15,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'loaded_editors_test.dart' show setup;
 import 'office_features_backend.dart';
 
+class _RejectedLineEditBackend extends FeaturesBackend {
+  _RejectedLineEditBackend()
+    : super({
+        'sheets': [
+          {'name': 'Sheet1', 'cells': <String, dynamic>{}},
+        ],
+      });
+
+  @override
+  Future<Uint8List> edit(Uint8List bytes, Map<String, dynamic> request) async {
+    final result = await super.edit(bytes, request);
+    if (request['action'] == 'line_structure') failInspect = true;
+    return result;
+  }
+}
+
 Future<void> tool(WidgetTester tester, String section, String name) async {
   final panel = tester.widget<EditorToolPanel>(find.byType(EditorToolPanel));
   final i = panel.sections.indexWhere((s) => s.label == section);
@@ -42,6 +58,57 @@ Future<void> historyAction(WidgetTester tester, bool undo) async {
 }
 
 void main() {
+  testWidgets(
+    'Whole-line delete confirms exact selection and a failed preview leaves the pending edit undoable',
+    (tester) async {
+      final backend = _RejectedLineEditBackend();
+      await setup(
+        tester,
+        const Size(320, 800),
+        1.6,
+        NativeGridScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: await backend.create()),
+        ),
+      );
+      await tool(tester, 'Данные', 'Выделить диапазон');
+      await tester.enterText(
+        find.byKey(const Key('grid-range-input')),
+        'A1:B2',
+      );
+      await press(tester, 'Выделить ячейки');
+      final formula = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(formula, 'Draft');
+      await tool(tester, 'Главная', 'Строки и столбцы');
+      await press(tester, 'Удалить строки');
+      expect(find.text('Будут удалены строки 1–2 целиком.'), findsOneWidget);
+      expect(backend.requests, isEmpty);
+      tester.state<EditorToolPanelState>(find.byType(EditorToolPanel)).back();
+      await tester.pumpAndSettle();
+      expect(backend.requests, isEmpty);
+      await press(tester, 'Удалить строки');
+      await press(tester, 'Удалить');
+      expect(backend.requests, hasLength(2));
+      expect(backend.requests.first['value'], 'Draft');
+      expect(backend.requests.last, {
+        'action': 'line_structure',
+        'sheet': 0,
+        'address': 'A1',
+        'axis': 'rows',
+        'operation': 'delete',
+        'start': 0,
+        'count': 2,
+      });
+      expect(tester.widget<TextField>(formula).controller!.text, 'Draft');
+      await historyAction(tester, true);
+      expect(tester.widget<TextField>(formula).controller!.text, '');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'Word replacement is one undo step, supports Unicode and preserves state on failure',
     (tester) async {

@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.24.0 / core 0.24.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.25.0 / core 0.25.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/validation-0.24.0.md` and `design/INTERACTION_SPEC.md` for the validated state.
+`docs/release-0.25.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -52,6 +52,14 @@ commands and rebasing/style interning. Partial merges, protected destinations,
 array/spill ranges and format-only merged sources are guarded. Upstream source
 pins remain unchanged; nine transitive packages are newly resolved and their
 notices are bundled. Word/Deck/PDF have no new feature in this release.
+
+0.25.0 connects the four pinned GridCraft whole-row and whole-column operations
+through the existing edit ABI. The selection supplies a contiguous span, and
+native serialization preserves the shifted model and rewritten supported formula
+references. The worker checks the resulting view before the editor records one
+undo step. Deletion lists the exact lines in the same nested panel. The app
+bounds each operation to 256 lines and keeps both snapshots within the existing
+24 MiB history budget. No dependency or upstream pin changes are required.
 
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.

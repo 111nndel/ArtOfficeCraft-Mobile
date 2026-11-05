@@ -3,10 +3,10 @@
 use std::sync::Arc;
 use serde_json::{json, Value as J};
 use gridcraft_core::{CellRef, RangeRef};
-use gridcraft_engine::{Session, DocState, Clipboard, Trust};
+use gridcraft_engine::{Clipboard, Trust};
 use gridcraft_model::Workbook;
 use super::{AcResult, decode, protect, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
-use super::grid::{workbook, write};
+use super::grid::{command_session, workbook, write};
 
 pub(super) const MAX_CLIP_BYTES: usize = 24 * 1024 * 1024;
 const MAX_TEXT: usize = 256 * 1024;
@@ -35,14 +35,6 @@ fn check_area(wb:&Workbook, idx:usize, area:RangeRef, edit:bool, anchor_only:boo
 fn footprint(at:CellRef, rows:u32, cols:u32)->Result<RangeRef,String> {
     if rows==0 || cols==0 || u64::from(rows)*u64::from(cols)>MAX_CELLS {return Err("Select at most 4096 cells per operation".into())}
     Ok(RangeRef::new(at,at.offset(i64::from(rows)-1,i64::from(cols)-1).ok_or("Pasted range does not fit in the sheet")?))
-}
-fn session(mut wb:Workbook, idx:usize, at:CellRef)->Result<Session,String> {
-    wb.sheet(idx).ok_or("Sheet index out of bounds")?;
-    wb.set_active_sheet(idx);
-    let mut s=Session::new();
-    s.add_document(DocState::from_saved(wb,None,"Mobile workbook".into(),Trust::FromFile));
-    s.doc_mut().map_err(|e|e.to_string())?.selection=gridcraft_engine::Selection::at(at);
-    Ok(s)
 }
 
 fn bounded_text(wb:&Workbook,idx:usize,area:RangeRef)->Result<String,String> {
@@ -95,7 +87,7 @@ pub extern "C" fn ac_xlsx_paste_range(data:*const u8,n:usize,source:*const u8,sn
         if matches!(mode,"values"|"formulas") && !dest.is_single() && wb.sheet(idx).unwrap().merges.iter().any(|m|m.intersects(&dest)) {
             return Err("Paste values into an unmerged range or a single merged-cell anchor".into())
         }
-        let mut s=session(wb,idx,at)?;
+        let mut s=command_session(wb,idx,at)?;
         s.clipboard=Some(Clipboard {wb:Arc::new(src),sheet:src_idx,range:area,selected:area,cut:false,doc_uid:0,text:String::new(),areas:Vec::new(),trust:Trust::FromFile});
         s.execute("edit.pasteSpecial",json!({"sheet":idx,"at":at.a1(),"what":mode})).map_err(|e|e.to_string())?;
         write(&s.doc().map_err(|e|e.to_string())?.wb)
@@ -133,7 +125,7 @@ pub(super) fn paste_text(wb:Workbook, req:&J)->Result<Vec<u8>,String> {
     let (rows,cols)=tsv_shape(text)?;let dest=footprint(at,rows,cols)?;
     check_area(&wb,idx,dest,true,true)?;
     if !dest.is_single() && wb.sheet(idx).unwrap().merges.iter().any(|m|m.intersects(&dest)) {return Err("Paste text into an unmerged range or a single merged-cell anchor".into())}
-    let mut s=session(wb,idx,at)?;
+    let mut s=command_session(wb,idx,at)?;
     s.execute("edit.paste",json!({"sheet":idx,"at":at.a1(),"text":text})).map_err(|e|e.to_string())?;
     write(&s.doc().map_err(|e|e.to_string())?.wb)
 }

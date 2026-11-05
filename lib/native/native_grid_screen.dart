@@ -632,6 +632,169 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     inputFocus.unfocus();
   });
 
+  ({int first, int count, String label}) lineSpan(bool rows) {
+    final cell = gridAddress(selected)!;
+    final range = rangeSelection;
+    final first = rows ? range?.row ?? cell.row : range?.column ?? cell.column;
+    final last = rows
+        ? range?.endRow ?? cell.row
+        : range?.endColumn ?? cell.column;
+    String name(int index) => rows ? '${index + 1}' : gridColumnName(index);
+    return (
+      first: first,
+      count: last - first + 1,
+      label: first == last ? name(first) : '${name(first)}–${name(last)}',
+    );
+  }
+
+  String? get lineEditBlocked {
+    if (sheets.isNotEmpty && sheets[sheetIndex]['protected'] == true) {
+      return 'Лист защищён';
+    }
+    if (book != null && book!.length > history.byteBudget) {
+      return 'Для отмены изменений размер книги должен быть не больше 24 МиБ';
+    }
+    return null;
+  }
+
+  Future<void> editLines(bool rows, bool insert) => run(() async {
+    if (book == null) return;
+    final blocked = lineEditBlocked;
+    final span = lineSpan(rows);
+    if (blocked != null || span.count > 256) {
+      tip(blocked ?? 'Выберите не больше 256 строк или столбцов');
+      return;
+    }
+    await flushInput();
+    if (!mounted) return;
+    final previous = book!, window = loadedWindow;
+    if (previous.length > history.byteBudget) {
+      tip('Для отмены изменений размер книги должен быть не больше 24 МиБ');
+      return;
+    }
+    final updated = await bridge!.editAndInspectGrid(
+      previous,
+      {
+        'action': 'line_structure',
+        'sheet': sheetIndex,
+        'address': selected,
+        'axis': rows ? 'rows' : 'columns',
+        'operation': insert ? 'insert' : 'delete',
+        'start': span.first,
+        'count': span.count,
+      },
+      window,
+      selected,
+    );
+    if (updated.bytes.length > history.byteBudget) {
+      tip('Результат превышает 24 МиБ и не помещается в историю отмены');
+      return;
+    }
+    await acceptEdit(previous, updated, window);
+    if (!mounted) return;
+    setState(() {
+      rangeSelection = null;
+      rangeInput.clear();
+    });
+    inputFocus.unfocus();
+    tip(switch ((rows, insert)) {
+      (true, true) => 'Строки вставлены',
+      (true, false) => 'Строки удалены',
+      (false, true) => 'Столбцы вставлены',
+      (false, false) => 'Столбцы удалены',
+    });
+  });
+
+  EditorTool lineTool() {
+    final reason = lineEditBlocked;
+    return EditorTool(
+      'Строки и столбцы',
+      Icons.table_rows_outlined,
+      children: [
+        EditorTool(
+          'Строки и столбцы',
+          Icons.info_outline,
+          inline: true,
+          builder: (_) => reason == null
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: UiText(reason),
+                ),
+        ),
+        ...lineAxisTools(true),
+        ...lineAxisTools(false),
+      ],
+    );
+  }
+
+  List<EditorTool> lineAxisTools(bool rows) {
+    final span = lineSpan(rows);
+    final enabled =
+        book != null && lineEditBlocked == null && span.count <= 256;
+    final label = rows ? 'Строки ${span.label}' : 'Столбцы ${span.label}';
+    return [
+      EditorTool(
+        label,
+        Icons.table_rows_outlined,
+        inline: true,
+        builder: (_) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(
+                label,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              if (span.count > 256)
+                const UiText('Выберите не больше 256 строк или столбцов'),
+            ],
+          ),
+        ),
+      ),
+      EditorTool(
+        rows ? 'Вставить строки выше' : 'Вставить столбцы слева',
+        Icons.add_box_outlined,
+        onPressed: enabled && !busy ? () => editLines(rows, true) : null,
+      ),
+      EditorTool(
+        rows ? 'Удалить строки' : 'Удалить столбцы',
+        Icons.delete_outline,
+        builder: enabled
+            ? (context) {
+                final colors = Theme.of(context).colorScheme;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    UiText(
+                      rows
+                          ? 'Будут удалены строки ${span.label} целиком.'
+                          : 'Будут удалены столбцы ${span.label} целиком.',
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: colors.error,
+                        foregroundColor: colors.onError,
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () {
+                              toolPanel.currentState?.back();
+                              editLines(rows, false);
+                            },
+                      icon: const Icon(Icons.delete_outline),
+                      label: const UiText('Удалить'),
+                    ),
+                  ],
+                );
+              }
+            : null,
+      ),
+    ];
+  }
+
   GridSelection get clipboardSelection {
     final cell = gridAddress(selected)!;
     return rangeSelection ??
@@ -1214,6 +1377,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ],
         },
         overrides: {
+          'Строки и столбцы': lineTool(),
           'Копировать': EditorTool(
             'Копировать',
             Icons.copy,

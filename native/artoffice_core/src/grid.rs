@@ -17,6 +17,25 @@ pub(super) fn workbook(bytes: &[u8]) -> Result<Workbook,String> {
 pub(super) fn write(w: &Workbook) -> Result<Vec<u8>,String> {
     gridcraft_xlsx::write_xlsx(w).map_err(|e|format!("GridCraft XLSX write: {e}"))
 }
+
+pub(super) fn command_session(
+    workbook: Workbook,
+    sheet: usize,
+    active: CellRef,
+) -> Result<gridcraft_engine::Session, String> {
+    workbook.sheet(sheet).ok_or("Sheet index out of bounds")?;
+    workbook.set_active_sheet(sheet);
+    let mut session = gridcraft_engine::Session::new();
+    session.add_document(gridcraft_engine::DocState::from_saved(
+        workbook,
+        None,
+        "Mobile workbook".into(),
+        gridcraft_engine::Trust::FromFile,
+    ));
+    session.doc_mut().map_err(|e| e.to_string())?.selection =
+        gridcraft_engine::Selection::at(active);
+    Ok(session)
+}
 fn put(w: &mut Workbook, sheet_index: usize, a1: &str, value: &str) -> Result<(),String> {
     if w.protected_structure {return Err("Workbook structure is protected".into());}
     let reference=CellRef::parse(a1).ok_or("Invalid A1 reference")?;
@@ -205,6 +224,9 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
+        if action == "line_structure" {
+            return super::grid_structure::edit(wb, idx, address, &req);
+        }
         if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet"|"format_range"|"clear_range"|"paste_text") {return Err("Unknown cell action".into())}
         if matches!(action,"autosum"|"recalculate"|"add_sheet") && req.get("value").is_some() {
             return Err("Calculation actions do not accept a cell value".into())
