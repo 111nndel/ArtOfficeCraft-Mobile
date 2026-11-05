@@ -71,7 +71,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
 
   final findText = TextEditingController(),
       replaceText = TextEditingController();
-  final paragraphKeys = <int, GlobalKey>{};
+  static const _documentCenter = ValueKey('word-document-center');
+  int _anchorBlock = 0, _scrollRevision = 0;
   int findCursor = -1;
   List<({int block, int start, int end, bool editable})> get findMatches {
     final query = findText.text;
@@ -114,16 +115,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     } else {
       setState(() => selectedBlock = match.block);
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final target = paragraphKeys[match.block]?.currentContext;
-      if (mounted && target != null) {
-        Scrollable.ensureVisible(
-          target,
-          alignment: .2,
-          duration: const Duration(milliseconds: 150),
-        );
-      }
-    });
+    revealBlock(match.block);
   });
 
   Future<void> replaceFound(bool all) => guarded(() async {
@@ -240,7 +232,6 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   List<Map<String, dynamic>> blocks = [];
   int? selectedBlock;
   Uint8List? document;
-  List<String> paragraphs = [];
   String filename = 'Документ.docx';
   int tables = 0;
   bool changed = false;
@@ -363,6 +354,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   Future<void> updatePreview(
     Uint8List bytes, {
     Map<String, dynamic>? preview,
+    bool newDocument = false,
   }) async {
     bytes = immutableDocumentBytes(bytes);
     final summary = preview ?? await engine!.inspect(bytes);
@@ -373,10 +365,13 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     }
     setState(() {
       document = bytes;
-      paragraphs = lines.map((item) => item.toString()).toList();
       blocks = (summary['blocks'] as List? ?? [])
           .map((b) => Map<String, dynamic>.from(b as Map))
           .toList();
+      if (newDocument || _anchorBlock >= blocks.length) {
+        _anchorBlock = 0;
+        _scrollRevision++;
+      }
       selectedBlock =
           blocks.where((b) => b['editable'] == true).firstOrNull?['block']
               as int?;
@@ -448,7 +443,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         });
       }
     }
-    await updatePreview(bytes);
+    await updatePreview(bytes, newDocument: true);
     setState(() {
       filename = widget.launch?.template == true
           ? translated('План проекта.docx')
@@ -471,7 +466,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       );
     }
     final data = await file.readAsBytes();
-    await updatePreview(data);
+    await updatePreview(data, newDocument: true);
     setState(() {
       filename = importedFilename(selected, 'docx');
       if (!filename.toLowerCase().endsWith('.docx')) {
@@ -496,6 +491,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     if (!mounted) return;
     history.push(previous);
     setState(() => changed = true);
+    revealBlock(blocks.last['block'] as int);
     startInline(blocks.last);
   });
 
@@ -570,7 +566,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         if (!mounted) return;
         if (request.bytes != null) {
           guarded(() async {
-            await updatePreview(request.bytes!);
+            await updatePreview(request.bytes!, newDocument: true);
             setState(() {
               filename = request.name ?? filename;
               changed = false;
@@ -598,7 +594,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         );
       }
       inline.load(block);
-      activeBlock = id as int;
+      revealBlock(id as int);
+      activeBlock = id;
       selectedBlock = activeBlock;
       inline.text = state['text'] as String;
       final base = (state['baseOffset'] as int? ?? inline.text.length).clamp(
@@ -774,6 +771,140 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     );
   }
 
+  // Two lazy slivers meet at the requested paragraph. A far search result can
+  // be mounted immediately, while earlier paragraphs remain scrollable.
+  void revealBlock(int id) {
+    final position = blocks.indexWhere((block) => block['block'] == id);
+    if (position < 0) return;
+    setState(() {
+      _anchorBlock = position;
+      _scrollRevision++;
+    });
+  }
+
+  Widget documentViewport() => ColoredBox(
+    color: const Color(0xffdce1e8),
+    child: CustomScrollView(
+      key: ValueKey(('word-document', _scrollRevision)),
+      center: _documentCenter,
+      slivers: [
+        if (_anchorBlock > 0) paragraphSliver(before: true),
+        paragraphSliver(before: false),
+        const SliverPadding(
+          padding: EdgeInsets.fromLTRB(14, 0, 14, 14),
+          sliver: SliverFillRemaining(
+            hasScrollBody: false,
+            child: ColoredBox(color: Colors.white),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget paragraphSliver({required bool before}) => SliverPadding(
+    key: before ? null : _documentCenter,
+    padding: EdgeInsets.fromLTRB(
+      14,
+      before || _anchorBlock == 0 ? 14 : 0,
+      14,
+      0,
+    ),
+    sliver: DecoratedSliver(
+      decoration: const BoxDecoration(color: Colors.white),
+      sliver: SliverPadding(
+        padding: EdgeInsets.fromLTRB(
+          26,
+          before || _anchorBlock == 0 ? 32 : 0,
+          26,
+          before ? 0 : 32,
+        ),
+        sliver: SliverList.builder(
+          itemCount: before ? _anchorBlock : blocks.length - _anchorBlock,
+          itemBuilder: (_, offset) => paragraph(
+            blocks[before ? _anchorBlock - 1 - offset : _anchorBlock + offset],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget paragraph(Map<String, dynamic> block) {
+    final alignment = switch (block['align']) {
+      'left' => TextAlign.left,
+      'center' => TextAlign.center,
+      'right' => TextAlign.right,
+      _ => TextAlign.justify,
+    };
+    final style = TextStyle(
+      fontFamily: 'serif',
+      color: const Color(0xff27313d),
+      fontSize: 17,
+      height: ((block['lineSpacing'] as num?)?.toDouble() ?? 1.5)
+          .clamp(.5, 8.0)
+          .toDouble(),
+    );
+    final runs = block['runs'] as List? ?? const [];
+    final text = block['text']?.toString() ?? '';
+    return Padding(
+      key: ValueKey(('word-paragraph', block['block'])),
+      padding: EdgeInsets.only(
+        left:
+            ((block['indentLeft'] as num?)?.toDouble() ?? 0).clamp(
+              0.0,
+              2000.0,
+            ) *
+            4 /
+            3,
+        bottom: (block['spaceAfter'] as num?)?.toDouble() ?? 12,
+      ),
+      child: InkWell(
+        onTap: busy || block['editable'] != true
+            ? null
+            : () => editParagraph(block),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: activeBlock == block['block']
+              ? TextField(
+                  key: const Key('word-inline-input'),
+                  controller: inline,
+                  focusNode: inlineFocus,
+                  readOnly: busy,
+                  minLines: 1,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) => setState(
+                    () => inlineDirty = inline.text != block['text'],
+                  ),
+                  textAlign: alignment,
+                  style: style,
+                  decoration: InputDecoration.collapsed(
+                    hintText: tr(context, 'Начните писать'),
+                  ),
+                )
+              : Text.rich(
+                  TextSpan(
+                    text: runs.isEmpty
+                        ? (text.isNotEmpty
+                              ? text
+                              : tr(context, 'Коснитесь, чтобы начать писать'))
+                        : null,
+                    children: [
+                      for (final run in runs)
+                        TextSpan(
+                          text: run['text']?.toString() ?? '',
+                          style: WordInlineController.runStyle(run as Map),
+                        ),
+                    ],
+                  ),
+                  textAlign: alignment,
+                  style: style,
+                ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final enabled = engine != null;
@@ -854,162 +985,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
                   ),
                 )
               else if (document != null) ...[
-                Expanded(
-                  child: Container(
-                    color: const Color(0xffdce1e8),
-                    child: ListView(
-                      padding: const EdgeInsets.all(14),
-                      children: [
-                        Container(
-                          constraints: const BoxConstraints(minHeight: 480),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 26,
-                            vertical: 32,
-                          ),
-                          color: Colors.white,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              for (final block in blocks)
-                                Padding(
-                                  key: paragraphKeys.putIfAbsent(
-                                    block['block'] as int,
-                                    () => GlobalKey(),
-                                  ),
-                                  padding: EdgeInsets.only(
-                                    left:
-                                        ((block['indentLeft'] as num?)
-                                                    ?.toDouble() ??
-                                                0)
-                                            .clamp(0.0, 2000.0) *
-                                        4 /
-                                        3,
-                                    bottom:
-                                        (block['spaceAfter'] as num?)
-                                            ?.toDouble() ??
-                                        12,
-                                  ),
-                                  child: InkWell(
-                                    onTap: busy || block['editable'] != true
-                                        ? null
-                                        : () => editParagraph(block),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 7,
-                                      ),
-                                      child: activeBlock == block['block']
-                                          ? TextField(
-                                              key: const Key(
-                                                'word-inline-input',
-                                              ),
-                                              controller: inline,
-                                              focusNode: inlineFocus,
-                                              readOnly: busy,
-                                              minLines: 1,
-                                              maxLines: null,
-                                              keyboardType:
-                                                  TextInputType.multiline,
-                                              textCapitalization:
-                                                  TextCapitalization.sentences,
-                                              onChanged: (_) => setState(
-                                                () => inlineDirty =
-                                                    inline.text !=
-                                                    block['text'],
-                                              ),
-                                              textAlign:
-                                                  switch (block['align']) {
-                                                    'left' => TextAlign.left,
-                                                    'center' =>
-                                                      TextAlign.center,
-                                                    'right' => TextAlign.right,
-                                                    _ => TextAlign.justify,
-                                                  },
-                                              style: TextStyle(
-                                                fontFamily: 'serif',
-                                                color: Color(0xff27313d),
-                                                fontSize: 17,
-                                                height:
-                                                    ((block['lineSpacing']
-                                                                    as num?)
-                                                                ?.toDouble() ??
-                                                            1.5)
-                                                        .clamp(.5, 8.0)
-                                                        .toDouble(),
-                                              ),
-                                              decoration:
-                                                  InputDecoration.collapsed(
-                                                    hintText: tr(
-                                                      context,
-                                                      'Начните писать',
-                                                    ),
-                                                  ),
-                                            )
-                                          : Text.rich(
-                                              TextSpan(
-                                                children: [
-                                                  for (final run
-                                                      in (block['runs']
-                                                              as List? ??
-                                                          []))
-                                                    TextSpan(
-                                                      text:
-                                                          run['text']
-                                                              ?.toString() ??
-                                                          '',
-                                                      style:
-                                                          WordInlineController.runStyle(
-                                                            run as Map,
-                                                          ),
-                                                    ),
-                                                  if ((block['runs'] as List? ??
-                                                          [])
-                                                      .isEmpty)
-                                                    TextSpan(
-                                                      text:
-                                                          block['text']
-                                                                  ?.toString()
-                                                                  .isNotEmpty ==
-                                                              true
-                                                          ? block['text']
-                                                                .toString()
-                                                          : tr(
-                                                              context,
-                                                              'Коснитесь, чтобы начать писать',
-                                                            ),
-                                                    ),
-                                                ],
-                                              ),
-                                              textAlign:
-                                                  switch (block['align']) {
-                                                    'left' => TextAlign.left,
-                                                    'center' =>
-                                                      TextAlign.center,
-                                                    'right' => TextAlign.right,
-                                                    _ => TextAlign.justify,
-                                                  },
-                                              style: TextStyle(
-                                                fontFamily: 'serif',
-                                                color: Color(0xff27313d),
-                                                fontSize: 17,
-                                                height:
-                                                    ((block['lineSpacing']
-                                                                    as num?)
-                                                                ?.toDouble() ??
-                                                            1.5)
-                                                        .clamp(.5, 8.0)
-                                                        .toDouble(),
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                Expanded(child: documentViewport()),
               ],
               if (busy) const LinearProgressIndicator(),
             ],

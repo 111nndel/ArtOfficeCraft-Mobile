@@ -58,6 +58,56 @@ Future<void> historyAction(WidgetTester tester, bool undo) async {
 }
 
 void main() {
+  testWidgets('Word lazily mounts paragraphs and finds a match near the end', (
+    tester,
+  ) async {
+    const count = 4747;
+    final lines = List.generate(count, (index) => 'Абзац ${index + 1}');
+    final backend = FeaturesBackend({
+      'paragraphs': lines,
+      'tables': 0,
+      'blocks': [
+        for (var i = 0; i < count; i++)
+          {'block': i, 'text': lines[i], 'editable': true},
+      ],
+    });
+    await setup(
+      tester,
+      const Size(393, 873),
+      1,
+      NativeWordScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: await backend.create()),
+      ),
+    );
+    final paragraphs = find.byWidgetPredicate(
+      (widget) => switch (widget.key) {
+        ValueKey(value: ('word-paragraph', int _)) => true,
+        _ => false,
+      },
+    );
+    expect(paragraphs.evaluate().length, lessThan(60));
+    expect(
+      find.byKey(const ValueKey(('word-paragraph', count - 1))),
+      findsNothing,
+    );
+    await tool(tester, 'Рецензирование', 'Найти и заменить');
+    await tester.enterText(
+      find.byKey(const Key('word-find-input')),
+      lines.last,
+    );
+    await tester.pumpAndSettle();
+    await press(tester, 'Следующее совпадение');
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('word-inline-input')),
+    );
+    expect(field.controller!.text, lines.last);
+    expect(field.controller!.selection.start, 0);
+    expect(field.controller!.selection.end, lines.last.length);
+    expect(paragraphs.evaluate().length, lessThan(60));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'Whole-line delete confirms exact selection and a failed preview leaves the pending edit undoable',
     (tester) async {

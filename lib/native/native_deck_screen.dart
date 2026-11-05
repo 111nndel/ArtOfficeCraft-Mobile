@@ -77,6 +77,11 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   final slideTransform = TransformationController();
   final reading = ReadingModePreference('deck');
   bool toolsExpanded = false;
+  bool objectEditing = false;
+  int? selectedObject;
+  final objectPreview = ValueNotifier<Rect?>(null);
+  Rect? _objectStart;
+  Offset _objectDelta = Offset.zero;
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.deck);
   final history = DocumentHistory();
@@ -142,6 +147,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
         history.clear();
         filename = name;
         textEdit = null;
+        objectEditing = false;
+        selectedObject = null;
       }
     });
     slideTransform.value = Matrix4.identity();
@@ -304,6 +311,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     if (widget.draft != null) unawaited(widget.draft!.close());
     deckText.dispose();
     slideTransform.dispose();
+    objectPreview.dispose();
     reading.dispose();
     if (widget.backend == null) unawaited(closeDocumentBackend(engine));
     super.dispose();
@@ -322,8 +330,123 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   void selectSlide(int slide) {
     if (busy || slide == index || slide < 0 || slide >= slides.length) return;
     slideTransform.value = Matrix4.identity();
-    setState(() => index = slide);
+    setState(() {
+      index = slide;
+      selectedObject = null;
+    });
     queueDraft();
+  }
+
+  void toggleObjectEditing() {
+    if (busy || objectPreview.value != null) return;
+    slideTransform.value = Matrix4.identity();
+    setState(() {
+      objectEditing = !objectEditing;
+      selectedObject = null;
+    });
+  }
+
+  Rect shapeRect(Map shape) {
+    final rect = shape['rect'] as Map;
+    double read(String key) => (rect[key] as num?)?.toDouble() ?? 0;
+    return Rect.fromLTWH(read('x'), read('y'), read('w'), read('h'));
+  }
+
+  void beginObjectDrag(int id, Rect original) {
+    if (busy) return;
+    setState(() => selectedObject = id);
+    _objectStart = original;
+    _objectDelta = Offset.zero;
+    objectPreview.value = original;
+  }
+
+  void updateObjectDrag(
+    Offset delta,
+    double width,
+    double height, {
+    bool resize = false,
+    bool proportional = false,
+  }) {
+    final original = _objectStart;
+    if (original == null) return;
+    _objectDelta += Offset(delta.dx * pageW / width, delta.dy * pageH / height);
+    if (!resize) {
+      final x = (original.left + _objectDelta.dx).clamp(
+        0.0,
+        math.max(0.0, pageW - original.width),
+      );
+      final y = (original.top + _objectDelta.dy).clamp(
+        0.0,
+        math.max(0.0, pageH - original.height),
+      );
+      objectPreview.value = Rect.fromLTWH(
+        x.toDouble(),
+        y.toDouble(),
+        original.width,
+        original.height,
+      );
+      return;
+    }
+    final maxW = math.max(1.0, pageW - original.left);
+    final maxH = math.max(1.0, pageH - original.top);
+    final minW = math.min(8.0, maxW), minH = math.min(8.0, maxH);
+    var w = (original.width + _objectDelta.dx).clamp(minW, maxW);
+    var h = (original.height + _objectDelta.dy).clamp(minH, maxH);
+    if (proportional) {
+      final x = _objectDelta.dx / original.width;
+      final y = _objectDelta.dy / original.height;
+      final upper = math.min(maxW / original.width, maxH / original.height);
+      final lower = math.min(
+        upper,
+        math.max(minW / original.width, minH / original.height),
+      );
+      final scale = (1 + (x.abs() > y.abs() ? x : y)).clamp(lower, upper);
+      w = original.width * scale;
+      h = original.height * scale;
+    }
+    objectPreview.value = Rect.fromLTWH(original.left, original.top, w, h);
+  }
+
+  void cancelObjectDrag() {
+    _objectStart = null;
+    objectPreview.value = null;
+  }
+
+  void finishObjectDrag() {
+    final old = _objectStart;
+    final next = objectPreview.value;
+    final id = selectedObject;
+    final slide = index;
+    _objectStart = null;
+    if (busy || next == null || next == old || id == null || data == null) {
+      cancelObjectDrag();
+      return;
+    }
+    action(() async {
+      try {
+        await applyPendingText();
+        if (!mounted) return;
+        final previous = data!;
+        final updated = await engine!.editAndInspect(previous, {
+          'action': 'transform_shape',
+          'slide': slide,
+          'shape': id,
+          'x': next.left,
+          'y': next.top,
+          'w': next.width,
+          'h': next.height,
+        });
+        await load(
+          updated.bytes,
+          preview: updated.preview,
+          selected: slide,
+          changed: true,
+        );
+        if (mounted) history.push(previous, position: slide);
+      } finally {
+        if (mounted) cancelObjectDrag();
+      }
+    });
   }
 
   Future<void> removeSlide() => action(() async {
@@ -434,28 +557,89 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final shapes = raw is List
         ? raw.whereType<Map>().map((x) => Map<String, dynamic>.from(x)).toList()
         : <Map<String, dynamic>>[];
+    final interactive = slideIndex == null || allowEdit;
+    final editing = interactive && slideNumber == index && objectEditing;
     return AspectRatio(
       aspectRatio: pageW / pageH,
       child: LayoutBuilder(
-        builder: (ctx, size) => Container(
-          color: Colors.white,
-          child: Stack(
-            clipBehavior: Clip.hardEdge,
-            children: [
-              for (final shape in shapes)
-                if (shape['rect'] is Map &&
-                    ((shape['text']?.toString() ?? '').isNotEmpty ||
-                        shape['fillRgb'] != null ||
-                        shape['strokeRgb'] != null ||
-                        shape['imageId'] is int))
-                  _paintShape(
-                    shape,
-                    size.maxWidth,
-                    size.maxHeight,
-                    slide: slideNumber,
-                    interactive: slideIndex == null || allowEdit,
-                  ),
-            ],
+        builder: (ctx, size) {
+          final w = size.maxWidth, h = size.maxHeight;
+          Widget surface(Rect? preview) => Container(
+            color: Colors.white,
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                for (final shape in shapes)
+                  if (shape['rect'] is Map &&
+                      ((shape['text']?.toString() ?? '').isNotEmpty ||
+                          shape['fillRgb'] != null ||
+                          shape['strokeRgb'] != null ||
+                          shape['imageId'] is int))
+                    _paintShape(
+                      shape,
+                      w,
+                      h,
+                      slide: slideNumber,
+                      interactive: interactive,
+                      editing: editing,
+                      preview: editing && shape['id'] == selectedObject
+                          ? preview
+                          : null,
+                    ),
+                if (editing)
+                  for (final shape in shapes)
+                    if (shape['movable'] == true &&
+                        shape['id'] == selectedObject)
+                      resizeHandle(shape, preview ?? shapeRect(shape), w, h),
+              ],
+            ),
+          );
+          return editing
+              ? ValueListenableBuilder<Rect?>(
+                  valueListenable: objectPreview,
+                  builder: (_, preview, _) => surface(preview),
+                )
+              : surface(null);
+        },
+      ),
+    );
+  }
+
+  Widget resizeHandle(
+    Map<String, dynamic> shape,
+    Rect rect,
+    double w,
+    double h,
+  ) {
+    final id = shape['id'] as int;
+    return Positioned(
+      left: (rect.right * w / pageW - 22).clamp(0.0, math.max(0.0, w - 44)),
+      top: (rect.bottom * h / pageH - 22).clamp(0.0, math.max(0.0, h - 44)),
+      width: 44,
+      height: 44,
+      child: GestureDetector(
+        key: const Key('deck-object-resize'),
+        behavior: HitTestBehavior.opaque,
+        onPanStart: busy ? null : (_) => beginObjectDrag(id, shapeRect(shape)),
+        onPanUpdate: busy
+            ? null
+            : (event) => updateObjectDrag(
+                event.delta,
+                w,
+                h,
+                resize: true,
+                proportional: shape['kind'] == 'picture',
+              ),
+        onPanEnd: busy ? null : (_) => finishObjectDrag(),
+        onPanCancel: busy ? null : cancelObjectDrag,
+        child: Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Theme.of(context).colorScheme.primary,
+              border: Border.all(color: Colors.white, width: 2),
+            ),
+            child: const SizedBox.square(dimension: 16),
           ),
         ),
       ),
@@ -496,13 +680,14 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     double height, {
     required int slide,
     required bool interactive,
+    required bool editing,
+    Rect? preview,
   }) {
-    final r = shape['rect'] as Map;
-    double read(String key) => ((r[key] as num?)?.toDouble() ?? 0);
-    final x = read('x') * width / pageW;
-    final y = read('y') * height / pageH;
-    final w = read('w') * width / pageW;
-    final h = read('h') * height / pageH;
+    final original = shapeRect(shape), rect = preview ?? original;
+    final x = rect.left * width / pageW;
+    final y = rect.top * height / pageH;
+    final w = rect.width * width / pageW;
+    final h = rect.height * height / pageH;
     if (!x.isFinite ||
         !y.isFinite ||
         !w.isFinite ||
@@ -515,6 +700,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final stroke = _rgb(shape['strokeRgb']);
     final text = (shape['text'] ?? '').toString();
     final editable = shape['editableText'] == true;
+    final id = shape['id'];
+    final canDrag = editing && !busy && shape['movable'] == true && id is int;
+    final picked = editing && id == selectedObject;
     final geometry = (shape['geometry'] ?? '').toString().toLowerCase();
     final isOval = geometry.contains('ellipse') || geometry.contains('oval');
     final radius = isOval
@@ -531,12 +719,22 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       width: w,
       height: h,
       child: GestureDetector(
-        onTap: interactive && editable
+        key: interactive ? ValueKey('deck-object-$slide-$id') : null,
+        behavior: canDrag ? HitTestBehavior.opaque : null,
+        onTap: canDrag
+            ? () => setState(() => selectedObject = id)
+            : interactive && editable && !editing
             ? () {
                 selectSlide(slide);
                 changeText(shape);
               }
             : null,
+        onPanStart: canDrag ? (_) => beginObjectDrag(id, original) : null,
+        onPanUpdate: canDrag
+            ? (event) => updateObjectDrag(event.delta, width, height)
+            : null,
+        onPanEnd: canDrag ? (_) => finishObjectDrag() : null,
+        onPanCancel: canDrag ? cancelObjectDrag : null,
         child: Container(
           clipBehavior: Clip.hardEdge,
           padding: EdgeInsets.all(text.isEmpty ? 0 : 4),
@@ -545,9 +743,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
             borderRadius: radius,
             border: Border.all(
               color:
-                  stroke ??
+                  (picked ? Theme.of(context).colorScheme.primary : stroke) ??
                   (editable ? const Color(0xffd4dce5) : Colors.transparent),
-              width: stroke == null ? 0.7 : 1.5,
+              width: picked ? 2 : (stroke == null ? 0.7 : 1.5),
             ),
           ),
           child: Stack(
@@ -907,12 +1105,43 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                         horizontal: 16,
                         vertical: 4,
                       ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: UiText(
-                          'Слайд ${index + 1} из ${slides.length}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          const key = Key('deck-object-editing');
+                          final label = objectEditing
+                              ? 'Готово'
+                              : 'Правка объектов';
+                          final icon = Icon(
+                            objectEditing ? Icons.check : Icons.open_with,
+                          );
+                          final onPressed = busy ? null : toggleObjectEditing;
+                          final textScale =
+                              MediaQuery.textScalerOf(context).scale(14) / 14;
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: UiText(
+                                  'Слайд ${index + 1} из ${slides.length}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              if (constraints.maxWidth < 260 * textScale)
+                                IconButton(
+                                  key: key,
+                                  tooltip: tr(context, label),
+                                  onPressed: onPressed,
+                                  icon: icon,
+                                )
+                              else
+                                TextButton.icon(
+                                  key: key,
+                                  onPressed: onPressed,
+                                  icon: icon,
+                                  label: UiText(label),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                     if (!compact && !toolsExpanded)
@@ -973,7 +1202,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   }
 
   Widget readingCanvas() {
-    if (reading.value == ReadingMode.continuous) {
+    if (!objectEditing && reading.value == ReadingMode.continuous) {
       return ContinuousPages(
         key: stripViewport,
         sizes: slideSizes,
@@ -998,6 +1227,22 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
           width: width,
           height: height,
         );
+        final slide = Center(
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.black12),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black26, blurRadius: 8),
+                ],
+              ),
+              child: slideCanvas(),
+            ),
+          ),
+        );
+        if (objectEditing) return IgnorePointer(ignoring: busy, child: slide);
         return IgnorePointer(
           ignoring: busy,
           child: PageTurnGesture(
@@ -1017,21 +1262,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
               alignment: Alignment.topLeft,
               minScale: 1,
               maxScale: 4,
-              child: Center(
-                child: SizedBox(
-                  width: width,
-                  height: height,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.black12),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black26, blurRadius: 8),
-                      ],
-                    ),
-                    child: slideCanvas(),
-                  ),
-                ),
-              ),
+              child: slide,
             ),
           ),
         );

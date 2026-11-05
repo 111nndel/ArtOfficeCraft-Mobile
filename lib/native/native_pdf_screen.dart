@@ -75,9 +75,11 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf);
   final history = DocumentHistory();
   final targetPage = TextEditingController();
+  final noteText = TextEditingController();
   Uint8List? contents;
   List<Map<String, dynamic>> pages = [];
   List<PdfBookmark> bookmarks = [];
+  List<({int page, String text})> notes = [];
   bool outlineLimited = false;
   List<Size> pageSizes = [];
   String filename = 'Новый документ.pdf';
@@ -168,6 +170,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         })
           (title: title, page: target, depth: depth),
     ];
+    final comments = [
+      for (final item in summary['notes'] as List? ?? const [])
+        if (item case {'page': int page, 'text': String text}
+            when page >= 0 && page < raw.length)
+          (page: page, text: text),
+    ];
     final newSession = await _pageRenderer.open(data);
     if (!mounted) {
       await _pageRenderer.close(newSession);
@@ -179,6 +187,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       contents = data;
       pages = raw.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       bookmarks = outline;
+      notes = comments;
       outlineLimited = summary['outlineLimited'] == true;
       pageSizes = pages.map(pageSize).toList(growable: false);
       selected = page.clamp(0, pages.length - 1);
@@ -188,6 +197,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       if (name != null) {
         history.clear();
         filename = name;
+        noteText.clear();
       }
     });
     if (previousSession != null) {
@@ -200,6 +210,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     widget.draft?.removeListener(draftStatusChanged);
     if (widget.draft != null) unawaited(widget.draft!.close());
     targetPage.dispose();
+    noteText.dispose();
     reading.dispose();
     final previous = _session;
     if (previous != null) {
@@ -277,58 +288,66 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     await rememberCurrent();
     tip('Копия PDF сохранена. Подписи могут стать недействительными.');
   });
-  Future<void> edit(String action, {int? to}) => execute(() async {
-    if (contents == null) return;
-    if (action == 'delete') {
-      if (pages.length <= 1) {
-        tip('Последнюю страницу удалить нельзя');
-        return;
-      }
-      final yes = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: const UiText('Удалить страницу?'),
-          content: const UiText(
-            'Оригинал PDF не изменяется, сохранение только в новую копию.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const UiText('Отмена'),
+  Future<void> edit(String action, {int? to, String? text}) =>
+      execute(() async {
+        if (contents == null) return;
+        if (action == 'delete') {
+          if (pages.length <= 1) {
+            tip('Последнюю страницу удалить нельзя');
+            return;
+          }
+          final yes = await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              title: const UiText('Удалить страницу?'),
+              content: const UiText(
+                'Оригинал PDF не изменяется, сохранение только в новую копию.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(c, false),
+                  child: const UiText('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(c, true),
+                  child: const UiText('Удалить'),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(c, true),
-              child: const UiText('Удалить'),
-            ),
-          ],
-        ),
-      );
-      if (yes != true) return;
-    }
-    {
-      final previous = contents!, previousPage = selected;
-      final updated = await engine!.editAndInspect(previous, {
-        'action': action,
-        'page': selected,
-        'to': ?to,
+          );
+          if (yes != true) return;
+        }
+        {
+          final previous = contents!, previousPage = selected;
+          final updated = await engine!.editAndInspect(previous, {
+            'action': action,
+            'page': selected,
+            'to': ?to,
+            'text': ?text,
+          });
+          var next = action == 'move_to' ? to! : selected;
+          if (action == 'move_up') next--;
+          if (action == 'move_down' ||
+              action == 'duplicate' ||
+              action == 'insert_blank') {
+            next++;
+          }
+          await load(
+            updated.bytes,
+            preview: updated.preview,
+            page: next,
+            edited: true,
+          );
+          if (!mounted) return;
+          history.push(previous, position: previousPage);
+          if (action == 'add_note') {
+            noteText.clear();
+            tip('Заметка добавлена');
+          } else {
+            tip('Структура PDF изменена');
+          }
+        }
       });
-      var next = action == 'move_to' ? to! : selected;
-      if (action == 'move_up') next--;
-      if (action == 'move_down' ||
-          action == 'duplicate' ||
-          action == 'insert_blank') {
-        next++;
-      }
-      await load(
-        updated.bytes,
-        preview: updated.preview,
-        page: next,
-        edited: true,
-      );
-      if (mounted) history.push(previous, position: previousPage);
-      tip('Структура PDF изменена');
-    }
-  });
 
   Future<void> restoreHistory(bool undo) => execute(() async {
     final target = undo ? history.undoTarget : history.redoTarget;
@@ -353,6 +372,58 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     }
     edit('move_to', to: page - 1);
   }
+
+  Widget addNotePanel() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      UiText('Заметка на странице ${selected + 1}'),
+      const SizedBox(height: 8),
+      TextField(
+        key: const Key('pdf-note-text'),
+        controller: noteText,
+        readOnly: busy,
+        minLines: 2,
+        maxLines: 4,
+        maxLength: 1000,
+        decoration: InputDecoration(labelText: tr(context, 'Текст заметки')),
+      ),
+      const SizedBox(height: 8),
+      ValueListenableBuilder<TextEditingValue>(
+        valueListenable: noteText,
+        builder: (_, value, _) => FilledButton.icon(
+          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: busy || value.text.trim().isEmpty
+              ? null
+              : () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  edit('add_note', text: value.text);
+                },
+          icon: const Icon(Icons.add_comment_outlined),
+          label: const UiText('Добавить заметку'),
+        ),
+      ),
+    ],
+  );
+
+  Widget notesPanel() => notes.isEmpty
+      ? const UiText('В этом PDF нет текстовых заметок')
+      : SizedBox(
+          height: (notes.length * 88.0).clamp(88.0, 248.0),
+          child: ListView.builder(
+            primary: false,
+            itemCount: notes.length,
+            itemBuilder: (_, index) {
+              final note = notes[index];
+              return ListTile(
+                minTileHeight: 56,
+                leading: const Icon(Icons.sticky_note_2_outlined),
+                title: UiText('Страница ${note.page + 1}'),
+                subtitle: Text(note.text),
+                onTap: busy ? null : () => jumpToPage(note.page),
+              );
+            },
+          ),
+        );
 
   Future<Uint8List> thumbnailFor(int index) {
     final old = _thumbnailImages[index];
@@ -513,6 +584,16 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       },
       overrides: {
         'Режим чтения': readingModeTool(reading),
+        'Комментарий': EditorTool(
+          'Комментарий',
+          Icons.add_comment_outlined,
+          builder: (_) => addNotePanel(),
+        ),
+        'Все комментарии': EditorTool(
+          'Все комментарии',
+          Icons.comment_outlined,
+          builder: (_) => notesPanel(),
+        ),
         'Оглавление': EditorTool(
           'Оглавление',
           Icons.list_alt_outlined,

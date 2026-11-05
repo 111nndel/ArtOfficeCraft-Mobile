@@ -16,7 +16,7 @@ x86_64 image with the Pixel 7 hardware profile and KVM acceleration.
 | Suite | Current scenarios | Coverage |
 | --- | ---: | --- |
 | native_editors | 9 | Four real engines, in-page editing/export, recovery, English UI, worker/media lifetime, distant cells, imported layout, resizing, formulas and zoom |
-| office_features | 6 | Word replacement, active/new sheets, PPTX order and pictures, PDF rotation and order, touch reading modes, saved PDF mode, page and slide number navigation |
+| office_features | 8 | Word replacement, active/new sheets, PPTX order and touch object editing, PDF rotation and saved notes, touch reading modes, page and slide number navigation |
 | range_features | 6 | Touch range selection/format/clear, sort direction and header, worksheet filtering by value and blanks, whole rows and columns, cross-sheet formulas, undo/redo, Word color/indent/spacing, export and reopen |
 | clipboard_features | 3 | Real Android clipboard identity, cross-workbook/sheet style and formula paste, special modes, external Unicode TSV, export and undo |
 

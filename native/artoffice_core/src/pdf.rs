@@ -1,6 +1,7 @@
 //! Pinned PDFCraft COS + model integration. Limited page-structure edits.
 //! Navigation reads the upstream outline without executing bookmark actions.
 use std::sync::Arc;
+use pdfcraft_annot::{Meta, NewAnnotation, NoteIcon, Shape, Style, add_annotation};
 use pdfcraft_cos::{Document,Dict,Object,SaveOptions,write_full};
 use pdfcraft_model::{pages,Page};
 use serde_json::{json,Value as J};
@@ -60,6 +61,25 @@ fn blank_page(doc:&mut Document,width:f64,height:f64)->Page{
     let obj=doc.add(d.clone());
     Page{obj,dict:d}
 }
+
+fn text_notes(doc: &Document, all: &[Page]) -> Vec<J> {
+    let mut notes = Vec::new();
+    for (page, source) in all.iter().enumerate() {
+        let Some(entries) = source.dict.get(b"Annots").map(|value| doc.resolve(value)) else { continue };
+        let Some(entries) = entries.as_array() else { continue };
+        for entry in entries.iter().take(4096) {
+            let item = doc.resolve(entry);
+            let Some(dict) = item.as_dict() else { continue };
+            if dict.name(b"Subtype") != Some(b"Text") { continue; }
+            let Some(value) = dict.get(b"Contents").map(|value| doc.resolve(value)) else { continue };
+            let Some(text) = value.as_string().filter(|text| text.bytes.len() <= 16 * 1024) else { continue };
+            notes.push(json!({"page":page,"text":text.to_text()}));
+            if notes.len() == 1024 { return notes; }
+        }
+    }
+    notes
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_pdf_create(_: *const u8,_:usize)->AcResult{
     protect(||{
@@ -90,6 +110,7 @@ pub extern "C" fn ac_pdf_inspect(data:*const u8,n:usize)->AcResult{
             "type":"pdf","engine":"pdfcraft-cos-model","pageCount":meta.len(),
             "pages":meta,
             "bookmarks":bookmarks,
+            "notes":text_notes(&doc, &all),
             "outlineLimited":outline.next.is_some(),
             "warnings":[
                 "Page contents are not rendered in this preview.",
@@ -114,6 +135,22 @@ pub extern "C" fn ac_pdf_edit(data:*const u8,n:usize,req:*const u8,req_len:usize
         if all.len()>10000{return Err("PDF too many pages".into());}
         if index>=all.len(){return Err("PDF page out of range".into());}
         match action {
+            "add_note" => {
+                let text = j["text"].as_str().map(str::trim)
+                    .filter(|text| !text.is_empty() && text.len() <= 4096 && !text.contains('\0'))
+                    .ok_or("Expected a non-empty PDF note up to 4096 bytes")?;
+                let [left, bottom, right, top] = all[index].crop(&doc);
+                let margin = 12.0_f64.min((right-left).abs()/4.0).min((top-bottom).abs()/4.0);
+                let shape = Shape::Note { at: [left+margin, top-margin], icon: NoteIcon::Comment };
+                let note = NewAnnotation {
+                    page: index,
+                    style: Style::default_for(&shape),
+                    shape,
+                    contents: text.to_owned(),
+                    author: String::new(),
+                };
+                add_annotation(&mut doc, &note, &Meta::default()).map_err(|err| err.to_string())?;
+            },
             "rotate_cw"|"rotate_ccw"=>{
                 let p=index_page(&doc,index)?;
                 let old=p.rotation(&doc);

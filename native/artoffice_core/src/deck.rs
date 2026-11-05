@@ -46,6 +46,16 @@ fn add_text(p: &mut Presentation, index:usize, text:&str, is_title:bool)->Result
 pub extern "C" fn ac_pptx_create(_: *const u8, _:usize)->AcResult {
     protect(||save(&Presentation::default()))
 }
+
+fn movable(shape: &Shape) -> bool {
+    !shape.locked
+        && matches!(shape.kind, ShapeKind::Shape | ShapeKind::Picture { .. })
+        && shape.xfrm.is_some_and(|rect| {
+            [rect.x, rect.y, rect.w, rect.h].into_iter().all(f64::is_finite)
+                && rect.w > 0.0 && rect.h > 0.0 && rect.rot == 0.0
+        })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_pptx_inspect(data:*const u8,n:usize)->AcResult {
     protect(||{
@@ -98,6 +108,7 @@ pub extern "C" fn ac_pptx_inspect(data:*const u8,n:usize)->AcResult {
                     "strokeRgb":stroke_rgb,
                     "text":shape.text.as_ref().map(|t|t.text()).unwrap_or_default(),
                     "rect":rect,
+                    "movable":movable(shape),
                     "editableText":shape.text.is_some() && !shape.locked,
                 })
             }).collect();
@@ -200,6 +211,24 @@ pub extern "C" fn ac_pptx_edit(data:*const u8,n:usize, request:*const u8, req_le
                 if shape.locked {return Err("Shape is locked".into())}
                 let body=shape.text.as_mut().ok_or("Shape is not a text shape")?;
                 *body=TextBody::from_text(text);
+            },
+            "transform_shape" => {
+                let id = value["shape"].as_u64().and_then(|n| u32::try_from(n).ok())
+                    .ok_or("Missing shape identifier")?;
+                let slide = value["slide"].as_u64().and_then(|n| usize::try_from(n).ok())
+                    .and_then(|i| p.slides.get_mut(i)).ok_or("Slide index out of bounds")?;
+                let shape = Arc::make_mut(slide).shapes.iter_mut().find(|shape| shape.id == ShapeId(id))
+                    .filter(|shape| movable(shape)).ok_or("Shape cannot be moved or resized")?;
+                let coordinate = |key| value[key].as_f64()
+                    .filter(|n| n.is_finite() && n.abs() <= 1_000_000.0)
+                    .ok_or("Invalid shape coordinates");
+                let (x, y, w, h) = (coordinate("x")?, coordinate("y")?, coordinate("w")?, coordinate("h")?);
+                if w < 1.0 || h < 1.0 { return Err("Shape size must be positive".into()); }
+                let rect = shape.xfrm.as_mut().ok_or("Missing shape geometry")?;
+                rect.x = x;
+                rect.y = y;
+                rect.w = w;
+                rect.h = h;
             },
             "move_slide"=>{
                 let source=value.get("slide").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Missing slide index")?;

@@ -126,6 +126,16 @@ void main() {
     debugPrint('DESIGN_SCREENSHOT $path');
   }
 
+  Future<void> readingMode(
+    WidgetTester tester,
+    String section,
+    String mode,
+  ) async {
+    await tool(tester, section, 'Режим чтения');
+    await press(tester, mode);
+    await collapse(tester);
+  }
+
   testWidgets(
     'Word exact Unicode replacement is saved, undoable and reopened through Rust',
     (tester) async {
@@ -297,6 +307,108 @@ void main() {
   );
 
   testWidgets(
+    'PPTX touch gestures move text and pictures and resize a picture on export',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.deck);
+      addTearDown(backend.close);
+      final original = workerMediaDeck;
+      final initial = await backend.inspect(original);
+      Map shape(Map summary, int slide, bool picture) =>
+          (summary['slides'][slide]['shapes'] as List).cast<Map>().firstWhere(
+            (s) => picture ? s['imageId'] != null : s['editableText'] == true,
+          );
+      final text = shape(initial, 1, false);
+      final picture = shape(initial, 1, true);
+      await present(
+        tester,
+        NativeDeckScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: original, name: 'Touch.pptx'),
+        ),
+      );
+      await readingMode(tester, 'Вид', 'По одной, горизонтально');
+      await tool(tester, 'Вид', 'Перейти к слайду');
+      await tester.enterText(find.byKey(const Key('reader-jump-number')), '2');
+      await press(tester, 'Перейти к слайду');
+      await collapse(tester);
+      await tester.tap(find.byKey(const Key('deck-object-editing')));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(ValueKey("deck-object-1-${text['id']}")),
+        const Offset(40, 36),
+      );
+      await until(tester, () => panel(tester).undo != null, 'text moved');
+      final moved = await save(tester, 'Сохранить копию PPTX');
+      final movedText = shape(await backend.inspect(moved), 1, false);
+      expect(movedText['rect']['x'] as num, greaterThan(text['rect']['x']));
+      expect(movedText['rect']['y'] as num, greaterThan(text['rect']['y']));
+      expect(movedText['text'], text['text']);
+      final pictureView = find.byKey(
+        ValueKey("deck-object-1-${picture['id']}"),
+      );
+      await tester.drag(pictureView, const Offset(-44, 0));
+      await tester.pumpAndSettle();
+      final movedPicture = shape(
+        await backend.inspect(await save(tester, 'Сохранить копию PPTX')),
+        1,
+        true,
+      );
+      expect(movedPicture['rect']['x'] as num, lessThan(picture['rect']['x']));
+      final handle = find.byKey(const Key('deck-object-resize'));
+      expect(handle, findsOneWidget);
+      await capture(tester, 'deck-object-030');
+      await tester.drag(handle, const Offset(32, 26));
+      await tester.pumpAndSettle();
+      final resized = await save(tester, 'Сохранить копию PPTX');
+      final after = shape(await backend.inspect(resized), 1, true);
+      expect(after['rect']['w'] as num, greaterThan(picture['rect']['w']));
+      expect(
+        await backend.image(resized, 1, after['imageId'] as int),
+        workerMediaPng,
+      );
+      await history(tester, true);
+      final undo = await save(tester, 'Сохранить копию PPTX');
+      expect(
+        shape(await backend.inspect(undo), 1, true)['rect'],
+        movedPicture['rect'],
+      );
+    },
+  );
+
+  testWidgets('PDF text notes persist with Unicode and are restored by redo', (
+    tester,
+  ) async {
+    final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+    addTearDown(backend.close);
+    await present(
+      tester,
+      NativePdfScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: await backend.create(), name: 'Notes.pdf'),
+      ),
+    );
+    await tool(tester, 'Комментарии', 'Комментарий');
+    const note = 'Заметка для проверки ✓';
+    await tester.enterText(find.byKey(const Key('pdf-note-text')), note);
+    await tester.pumpAndSettle();
+    await press(tester, 'Добавить заметку');
+    await until(tester, () => panel(tester).undo != null, 'note added');
+    final saved = await save(tester, 'Сохранить PDF');
+    expect((await backend.inspect(saved))['notes'], [
+      {'page': 0, 'text': note},
+    ]);
+    await history(tester, true);
+    expect(
+      (await backend.inspect(await save(tester, 'Сохранить PDF')))['notes'],
+      isEmpty,
+    );
+    await history(tester, false);
+    await tool(tester, 'Комментарии', 'Все комментарии');
+    expect(find.text(note), findsOneWidget);
+    await capture(tester, 'pdf-note-030');
+  });
+
+  testWidgets(
     'PDF native rotation fits landscape, arbitrary reorder and undo survive export',
     (tester) async {
       final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
@@ -347,16 +459,6 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-
-  Future<void> readingMode(
-    WidgetTester tester,
-    String section,
-    String mode,
-  ) async {
-    await tool(tester, section, 'Режим чтения');
-    await press(tester, mode);
-    await collapse(tester);
-  }
 
   testWidgets(
     'Android PDF swipes on both axes, scrolls a lazy strip, and remembers its mode',
