@@ -1,6 +1,6 @@
 [package]
 name = "artoffice_core"
-version = "0.25.0"
+version = "0.27.0"
 edition = "2024"
 publish = false
 license = "MIT OR Apache-2.0"
@@ -9,21 +9,21 @@ license = "MIT OR Apache-2.0"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wordcraft-doc = { path = "../../upstream/staged/wordcraft/v0.15.1-08afab50b6a1/crates/doc" }
-wordcraft-docx = { path = "../../upstream/staged/wordcraft/v0.15.1-08afab50b6a1/crates/docx" }
+wordcraft-doc = { path = "../../upstream/staged/wordcraft/v0.15.2-edfea6810122/crates/doc" }
+wordcraft-docx = { path = "../../upstream/staged/wordcraft/v0.15.2-edfea6810122/crates/docx" }
 serde_json = "1"
-pdfcraft-cos = { path = "../../upstream/staged/pdfcraft/v0.18.1-8bb0528bed78/crates/cos" }
-pdfcraft-model = { path = "../../upstream/staged/pdfcraft/v0.18.1-8bb0528bed78/crates/model" }
-deckcraft-model = { path = "../../upstream/staged/deckcraft/v0.15.0-3e178d8f5a59/crates/model" }
-deckcraft-pptx = { path = "../../upstream/staged/deckcraft/v0.15.0-3e178d8f5a59/crates/pptx" }
-gridcraft-core = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/core" }
-gridcraft-model = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/model" }
-gridcraft-xlsx = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/xlsx" }
-gridcraft-calc = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/calc" }
-gridcraft-numfmt = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/numfmt" }
-gridcraft-engine = { path = "../../upstream/staged/gridcraft/v0.16.0-85e51e009c24/crates/engine" }
+pdfcraft-cos = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/crates/cos" }
+pdfcraft-model = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/crates/model" }
+deckcraft-model = { path = "../../upstream/staged/deckcraft/v0.15.1-9bac60ff5302/crates/model" }
+deckcraft-pptx = { path = "../../upstream/staged/deckcraft/v0.15.1-9bac60ff5302/crates/pptx" }
+gridcraft-core = { path = "../../upstream/staged/gridcraft/v0.16.1-e581bc95b2a1/crates/core" }
+gridcraft-model = { path = "../../upstream/staged/gridcraft/v0.16.1-e581bc95b2a1/crates/model" }
+gridcraft-xlsx = { path = "../../upstream/staged/gridcraft/v0.16.1-e581bc95b2a1/crates/xlsx" }
+gridcraft-calc = { path = "../../upstream/staged/gridcraft/v0.16.1-e581bc95b2a1/crates/calc" }
+gridcraft-numfmt = { path = "../../upstream/staged/gridcraft/v0.16.1-e581bc95b2a1/crates/numfmt" }
+gridcraft-engine = { path = "../../upstream/staged/gridcraft/v0.16.1-e581bc95b2a1/crates/engine" }
 
 # BEGIN ArtOfficeCraft reviewed PDF dependency patches
 [patch.crates-io]
-hayro-jbig2 = { path = "../../upstream/staged/pdfcraft/v0.18.1-8bb0528bed78/vendor/hayro-jbig2" }
+hayro-jbig2 = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/vendor/hayro-jbig2" }
 # END ArtOfficeCraft reviewed PDF dependency patches

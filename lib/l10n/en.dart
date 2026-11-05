@@ -287,6 +287,20 @@ const english = <String, String>{
   "Данные": "Data",
   "Фильтр": "Filter",
   "Сортировать": "Sort",
+  "Сортировать диапазон": "Sort range",
+  "Диапазон отсортирован": "Range sorted",
+  "Столбец сортировки": "Sort column",
+  "Порядок": "Order",
+  "По возрастанию": "Ascending",
+  "По убыванию": "Descending",
+  "Первая строка — заголовок": "First row is a header",
+  "Выберите минимум две строки с данными": "Select at least two data rows",
+  "Выберите не больше 128 столбцов для сортировки":
+      "Select up to 128 columns to sort",
+  "Строки перемещаются внутри выделенного диапазона.":
+      "Rows move within the selected range.",
+  "Выделите диапазон минимум из двух строк. Удерживайте ячейку и потяните за маркер.":
+      "Select at least two rows. Touch and hold a cell, then drag a handle.",
   "Выделить диапазон": "Select range",
   "Проверка данных": "Data validation",
   "Условный формат": "Conditional formatting",

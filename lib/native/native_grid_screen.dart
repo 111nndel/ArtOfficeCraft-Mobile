@@ -647,7 +647,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     );
   }
 
-  String? get lineEditBlocked {
+  String? get undoableEditBlocked {
     if (sheets.isNotEmpty && sheets[sheetIndex]['protected'] == true) {
       return 'Лист защищён';
     }
@@ -657,41 +657,45 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return null;
   }
 
-  Future<void> editLines(bool rows, bool insert) => run(() async {
-    if (book == null) return;
-    final blocked = lineEditBlocked;
-    final span = lineSpan(rows);
-    if (blocked != null || span.count > 256) {
-      tip(blocked ?? 'Выберите не больше 256 строк или столбцов');
-      return;
-    }
+  Future<bool> applyUndoableEdit(Map<String, dynamic> request) async {
     await flushInput();
-    if (!mounted) return;
+    if (!mounted) return false;
     final previous = book!, window = loadedWindow;
     if (previous.length > history.byteBudget) {
       tip('Для отмены изменений размер книги должен быть не больше 24 МиБ');
-      return;
+      return false;
     }
     final updated = await bridge!.editAndInspectGrid(
       previous,
-      {
-        'action': 'line_structure',
-        'sheet': sheetIndex,
-        'address': selected,
-        'axis': rows ? 'rows' : 'columns',
-        'operation': insert ? 'insert' : 'delete',
-        'start': span.first,
-        'count': span.count,
-      },
+      {'sheet': sheetIndex, 'address': selected, ...request},
       window,
       selected,
     );
     if (updated.bytes.length > history.byteBudget) {
       tip('Результат превышает 24 МиБ и не помещается в историю отмены');
-      return;
+      return false;
     }
     await acceptEdit(previous, updated, window);
-    if (!mounted) return;
+    return mounted;
+  }
+
+  Future<void> editLines(bool rows, bool insert) => run(() async {
+    if (book == null) return;
+    final blocked = undoableEditBlocked;
+    final span = lineSpan(rows);
+    if (blocked != null || span.count > 256) {
+      tip(blocked ?? 'Выберите не больше 256 строк или столбцов');
+      return;
+    }
+    if (!await applyUndoableEdit({
+      'action': 'line_structure',
+      'axis': rows ? 'rows' : 'columns',
+      'operation': insert ? 'insert' : 'delete',
+      'start': span.first,
+      'count': span.count,
+    })) {
+      return;
+    }
     setState(() {
       rangeSelection = null;
       rangeInput.clear();
@@ -706,7 +710,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
 
   EditorTool lineTool() {
-    final reason = lineEditBlocked;
+    final reason = undoableEditBlocked;
     return EditorTool(
       'Строки и столбцы',
       Icons.table_rows_outlined,
@@ -731,7 +735,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   List<EditorTool> lineAxisTools(bool rows) {
     final span = lineSpan(rows);
     final enabled =
-        book != null && lineEditBlocked == null && span.count <= 256;
+        book != null && undoableEditBlocked == null && span.count <= 256;
     final label = rows ? 'Строки ${span.label}' : 'Столбцы ${span.label}';
     return [
       EditorTool(
@@ -794,6 +798,57 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       ),
     ];
   }
+
+  Future<void> sortRange(
+    GridSelection range,
+    String column,
+    String order,
+    bool header,
+  ) => run(() async {
+    if (book == null) return;
+    final blocked = undoableEditBlocked;
+    if (blocked != null) {
+      tip(blocked);
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (await applyUndoableEdit({
+      'action': 'sort_range',
+      'range': range.address,
+      'column': column,
+      'order': order,
+      'header': header,
+    })) {
+      tip('Диапазон отсортирован');
+    }
+  });
+
+  EditorTool sortTool() => EditorTool(
+    'Сортировать',
+    Icons.sort,
+    builder: (_) {
+      final range = rangeSelection;
+      final reason = undoableEditBlocked;
+      if (reason != null) return UiText(reason);
+      if (range == null || range.endRow == range.row) {
+        return const UiText(
+          'Выделите диапазон минимум из двух строк. Удерживайте ячейку и потяните за маркер.',
+        );
+      }
+      if (range.endColumn - range.column >= 128) {
+        return const UiText('Выберите не больше 128 столбцов для сортировки');
+      }
+      return _GridSortOptions(
+        key: ValueKey((sheetIndex, range.address)),
+        range: range,
+        onSort: busy
+            ? null
+            : (column, order, header) {
+                sortRange(range, column, order, header);
+              },
+      );
+    },
+  );
 
   GridSelection get clipboardSelection {
     final cell = gridAddress(selected)!;
@@ -1378,6 +1433,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         },
         overrides: {
           'Строки и столбцы': lineTool(),
+          'Сортировать': sortTool(),
           'Копировать': EditorTool(
             'Копировать',
             Icons.copy,
@@ -1793,6 +1849,95 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 ),
         ),
       ),
+    );
+  }
+}
+
+class _GridSortOptions extends StatefulWidget {
+  const _GridSortOptions({
+    super.key,
+    required this.range,
+    required this.onSort,
+  });
+
+  final GridSelection range;
+  final void Function(String column, String order, bool header)? onSort;
+
+  @override
+  State<_GridSortOptions> createState() => _GridSortOptionsState();
+}
+
+class _GridSortOptionsState extends State<_GridSortOptions> {
+  late String column = gridColumnName(widget.range.column);
+  String order = 'asc';
+  bool header = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final range = widget.range;
+    final onSort = widget.onSort;
+    final enoughRows = range.endRow - range.row >= (header ? 2 : 1);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(range.address, style: Theme.of(context).textTheme.titleMedium),
+        const UiText('Строки перемещаются внутри выделенного диапазона.'),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: column,
+          isExpanded: true,
+          menuMaxHeight: 320,
+          decoration: InputDecoration(
+            labelText: tr(context, 'Столбец сортировки'),
+          ),
+          items: [
+            for (var index = range.column; index <= range.endColumn; index++)
+              DropdownMenuItem(
+                value: gridColumnName(index),
+                child: Text(gridColumnName(index)),
+              ),
+          ],
+          onChanged: onSort == null
+              ? null
+              : (value) {
+                  if (value != null) setState(() => column = value);
+                },
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: order,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: tr(context, 'Порядок')),
+          items: const [
+            DropdownMenuItem(value: 'asc', child: UiText('По возрастанию')),
+            DropdownMenuItem(value: 'desc', child: UiText('По убыванию')),
+          ],
+          onChanged: onSort == null
+              ? null
+              : (value) {
+                  if (value != null) setState(() => order = value);
+                },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const UiText('Первая строка — заголовок'),
+          value: header,
+          onChanged: onSort == null
+              ? null
+              : (value) {
+                  setState(() => header = value);
+                },
+        ),
+        if (!enoughRows) const UiText('Выберите минимум две строки с данными'),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: onSort == null || !enoughRows
+              ? null
+              : () => onSort(column, order, header),
+          icon: const Icon(Icons.sort),
+          label: const UiText('Сортировать диапазон'),
+        ),
+      ],
     );
   }
 }

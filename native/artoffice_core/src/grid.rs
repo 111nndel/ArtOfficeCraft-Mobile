@@ -227,6 +227,9 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         if action == "line_structure" {
             return super::grid_structure::edit(wb, idx, address, &req);
         }
+        if action == "sort_range" {
+            return super::grid_sort::edit(wb, idx, address, &req);
+        }
         if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet"|"format_range"|"clear_range"|"paste_text") {return Err("Unknown cell action".into())}
         if matches!(action,"autosum"|"recalculate"|"add_sheet") && req.get("value").is_some() {
             return Err("Calculation actions do not accept a cell value".into())

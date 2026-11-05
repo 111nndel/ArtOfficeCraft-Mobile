@@ -17,7 +17,7 @@ x86_64 image with the Pixel 7 hardware profile and KVM acceleration.
 | --- | ---: | --- |
 | native_editors | 9 | Four real engines, in-page editing/export, recovery, English UI, worker/media lifetime, distant cells, imported layout, resizing, formulas and zoom |
 | office_features | 6 | Word replacement, active/new sheets, PPTX order and pictures, PDF rotation and order, touch reading modes and saved PDF mode |
-| range_features | 4 | Touch range selection/format/clear, whole rows and columns, cross-sheet formulas, undo/redo, Word color/indent/spacing, export and reopen |
+| range_features | 5 | Touch range selection/format/clear, sort direction and header, whole rows and columns, cross-sheet formulas, undo/redo, Word color/indent/spacing, export and reopen |
 | clipboard_features | 3 | Real Android clipboard identity, cross-workbook/sheet style and formula paste, special modes, external Unicode TSV, export and undo |
 
 Flutter's host-side integration driver saves the existing screenshots directly

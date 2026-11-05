@@ -54,7 +54,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "artoffice_core"
-version = "0.25.0"
+version = "0.27.0"
 dependencies = [
  "deckcraft-model",
  "deckcraft-pptx",
@@ -241,14 +241,14 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-color"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "deckcraft-geom"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "kurbo",
  "serde",
@@ -256,7 +256,7 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-model"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "deckcraft-color",
  "deckcraft-geom",
@@ -268,7 +268,7 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-pptx"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "deckcraft-color",
  "deckcraft-geom",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-calc"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-chart"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-core",
@@ -435,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-core"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "chrono",
  "js-sys",
@@ -445,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-engine"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-chart",
@@ -467,7 +467,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-formula"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "gridcraft-core",
  "serde",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-functions"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "gridcraft-core",
  "regex",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-math"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "ratex-font",
  "ratex-layout",
@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-model"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -507,18 +507,18 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-numfmt"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "gridcraft-core",
 ]
 
 [[package]]
 name = "gridcraft-pdf"
-version = "0.16.0"
+version = "0.16.1"
 
 [[package]]
 name = "gridcraft-xlsx"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "aes",
  "gridcraft-core",
@@ -728,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-cos"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "chrono",
  "pdfcraft-crypt",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-crypt"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "aes",
  "md-5",
@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-filters"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "fax",
  "flate2",
@@ -760,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-model"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "pdfcraft-cos",
 ]
@@ -1346,7 +1346,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wordcraft-doc"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "base64",
  "log",
@@ -1359,7 +1359,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docx"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "aes",
  "base64",
@@ -1381,7 +1381,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-geom"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "serde",
 ]

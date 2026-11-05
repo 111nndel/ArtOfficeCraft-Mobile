@@ -1,11 +1,11 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.26.0 / core 0.25.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.27.0 / core 0.27.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
 slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/release-0.26.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
+`docs/release-0.27.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
 English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
 Native backends now own persistent Dart workers with ordered processing, checked
 edit/view snapshots and explicit shutdown. Word history restoration is guarded;
@@ -67,16 +67,21 @@ visible pages and tracks the active page for the editor tools and thumbnails.
 Reading preferences are stored per format in Android's private settings.
 DOCX currently provides an editable continuous paragraph view.
 
+0.27.0 connects GridCraft range sorting through the existing edit ABI.
+The Data panel accepts a sort column, direction and an optional header row.
+The Dart worker validates the new XLSX view before committing an undo step.
+All four original engine source pins and their bundled notices are updated.
+
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.
 
 ## Source and provenance
 
 Pinned upstream repositories:
-- WordCraft v0.15.1, commit `08afab50b6a1ed19f9af55bb9f74d18f5e17bfa0`.
-- GridCraft v0.16.0, commit `85e51e009c24fad47575f04d3c08f12342615d82`.
-- DeckCraft v0.15.0, commit `3e178d8f5a59c787a6a53a7ed0f052b3e4a1489f`.
-- PDFCraft v0.18.1, commit `8bb0528bed785283452263b0290321ccf95859be`.
+- WordCraft v0.15.2, commit `edfea68101220c9bdc4b2b0ccf4acd9612bedb6e`.
+- GridCraft v0.16.1, commit `e581bc95b2a17d2a744a115478a20a1c2ad1ef72`.
+- DeckCraft v0.15.1, commit `9bac60ff53029039c82083ee574c22d74c1541f1`.
+- PDFCraft v0.18.2, commit `7faa4f35cefb0dea04137ec475bdc770945c22cd`.
 
 All repositories are downloaded and checked against pinned SHAs; original ZIP files untouched.
 

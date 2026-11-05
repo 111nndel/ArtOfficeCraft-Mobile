@@ -184,6 +184,71 @@ void main() {
           as Map<String, dynamic>;
 
   testWidgets(
+    'Sort selected rows by a chosen column and preserve the header, formulas and undo',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      var original = await backend.create();
+      for (final entry in {
+        'A1': 'Product',
+        'B1': 'Price',
+        'A2': 'Tea',
+        'B2': '10',
+        'C2': '=B2*2',
+        'A3': 'Coffee',
+        'B3': '30',
+        'C3': '=B3*2',
+        'A4': 'Juice',
+        'B4': '20',
+        'C4': '=B4*2',
+        'D2': 'Keep',
+      }.entries) {
+        original = await backend.edit(original, {
+          'sheet': 0,
+          'address': entry.key,
+          'value': entry.value,
+        });
+      }
+      await present(
+        tester,
+        NativeGridScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: original, name: 'Prices.xlsx'),
+        ),
+      );
+      await selectRange(tester, 'A1:C4', 'Product');
+      await tool(tester, 'Данные', 'Сортировать');
+      final dropdowns = find.byType(DropdownButtonFormField<String>);
+      await tester.ensureVisible(dropdowns.first);
+      await tester.tap(dropdowns.first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('B').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(dropdowns.last);
+      await tester.tap(dropdowns.last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По убыванию').last);
+      await tester.pumpAndSettle();
+      await press(tester, 'Первая строка — заголовок');
+      await tester.pumpAndSettle();
+      await capture(tester, 'grid-sort-027');
+      await press(tester, 'Сортировать диапазон');
+      await until(tester, () => panel(tester).undo != null, 'range sort');
+      final sorted = await save(tester, 'Сохранить копию');
+      expect((await inspectCell(backend, sorted, 'A1'))['input'], 'Product');
+      expect((await inspectCell(backend, sorted, 'A2'))['input'], 'Coffee');
+      expect((await inspectCell(backend, sorted, 'A3'))['input'], 'Juice');
+      expect((await inspectCell(backend, sorted, 'C2'))['input'], '=B2*2');
+      expect((await inspectCell(backend, sorted, 'C2'))['display'], '60');
+      expect((await inspectCell(backend, sorted, 'D2'))['input'], 'Keep');
+      await history(tester, true);
+      await selectVisibleCell(tester, 'A2', 'Tea');
+      await history(tester, false);
+      await selectVisibleCell(tester, 'A2', 'Coffee');
+    },
+  );
+
+  testWidgets(
     'Insert and delete whole rows from the tool panel with cross-sheet references and undo',
     (tester) async {
       final backend = NativeDocumentBackend(NativeDocumentKind.grid);
