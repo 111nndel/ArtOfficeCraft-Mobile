@@ -612,7 +612,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await selectCell(address);
     if (!mounted || busy || selected != address) return;
     updateRange(value);
-    inputFocus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
     gridViewport.currentState?.goToCell(value.row, value.column);
   }
 

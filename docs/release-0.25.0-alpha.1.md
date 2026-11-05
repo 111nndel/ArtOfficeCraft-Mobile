@@ -8,6 +8,7 @@
 - Delete rows or columns through an in-panel confirmation that lists the affected lines, including cells beyond the visible area.
 - GridCraft shifts values, styles, hidden lines, sizes and merges. It adjusts supported formula references across sheets and named ranges. A reference to a deleted cell becomes `#REF!`.
 - Structural edits apply pending input first, support undo and redo and save into a real XLSX copy. The sheet retains its zoom.
+- Selecting an exact range dismisses the keyboard so the selected cells remain visible.
 - The Android 16 release gate includes row and column scenarios through the mobile UI and the real Rust engine.
 
 ## Known Limitations

@@ -132,14 +132,42 @@ void main() {
     String expectedInput,
   ) async {
     await tool(tester, 'Данные', 'Выделить диапазон');
-    await tester.enterText(find.byKey(const Key('grid-range-input')), range);
+    final field = find.byKey(const Key('grid-range-input'));
+    await tester.enterText(field, range);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(field).controller!.text, range);
     await press(tester, 'Выделить ячейки');
     await until(
       tester,
       () => cellInput(tester) == expectedInput,
-      'range anchor',
+      'range $range applied',
     );
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: field, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      false,
+    );
+  }
+
+  Future<void> selectVisibleCell(
+    WidgetTester tester,
+    String address,
+    String expectedInput,
+  ) async {
+    await collapse(tester);
+    final cell = find.byKey(ValueKey('grid-cell-$address')).hitTestable();
+    await until(tester, () => cell.evaluate().isNotEmpty, 'visible $address');
+    await tester.tap(cell);
+    await until(
+      tester,
+      () => cellInput(tester) == expectedInput,
+      'selected $address',
+    );
   }
 
   Future<Map<String, dynamic>> inspectCell(
@@ -229,7 +257,7 @@ void main() {
         'Outside the selection',
       );
       await history(tester, false);
-      await selectRange(tester, 'A4', '20');
+      await selectVisibleCell(tester, 'A4', '20');
       await tool(tester, 'Главная', 'Строки и столбцы');
       await press(tester, 'Удалить строки');
       expect(find.text('Будут удалены строки 4 целиком.'), findsOneWidget);
@@ -293,7 +321,7 @@ void main() {
         (await inspectCell(backend, inserted, 'F1'))['style']['bold'],
         true,
       );
-      await selectRange(tester, 'D1', '11');
+      await selectVisibleCell(tester, 'D1', '11');
       await tool(tester, 'Главная', 'Строки и столбцы');
       await press(tester, 'Удалить столбцы');
       expect(find.text('Будут удалены столбцы D целиком.'), findsOneWidget);
