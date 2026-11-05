@@ -341,4 +341,118 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  Future<void> readingMode(
+    WidgetTester tester,
+    String section,
+    String mode,
+  ) async {
+    await tool(tester, section, 'Режим чтения');
+    await press(tester, mode);
+    await collapse(tester);
+  }
+
+  testWidgets(
+    'Android PDF swipes on both axes, scrolls a lazy strip, and remembers its mode',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+      addTearDown(backend.close);
+      var bytes = await backend.create();
+      for (var i = 0; i < 4; i++) {
+        bytes = await backend.edit(bytes, {
+          'action': 'insert_blank',
+          'page': i,
+        });
+      }
+      Widget pdf() => NativePdfScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: bytes, name: 'Reading.pdf'),
+      );
+      await present(tester, pdf());
+      await readingMode(tester, 'Чтение', 'По одной, горизонтально');
+      final canvas = find.byKey(const Key('pdf-viewport'));
+      await tester.drag(canvas, const Offset(-170, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Страница 2 из 5'), findsOneWidget);
+
+      await readingMode(tester, 'Чтение', 'По одной, вертикально');
+      await tool(tester, 'Чтение', 'Масштаб');
+      await press(tester, 'Вся страница');
+      await collapse(tester);
+      await tester.drag(canvas, const Offset(0, -190));
+      await tester.pumpAndSettle();
+      expect(find.text('Страница 3 из 5'), findsOneWidget);
+
+      await readingMode(tester, 'Чтение', 'Непрерывно вниз');
+      final strip = find.byKey(const Key('continuous-pages'));
+      expect(find.text('Страница 3 из 5'), findsOneWidget);
+      expect(
+        find.byType(PdfPageImage).evaluate().length,
+        greaterThanOrEqualTo(2),
+      );
+      await capture(tester, 'pdf-continuous-026');
+      for (var i = 0; i < 2; i++) {
+        await tester.drag(strip, const Offset(0, -320));
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('Страница 3 из 5'), findsNothing);
+      await present(tester, pdf());
+      await until(tester, () => strip.evaluate().isNotEmpty, 'saved PDF mode');
+      expect(find.text('Страница 1 из 5'), findsOneWidget);
+      await readingMode(tester, 'Чтение', 'По одной, горизонтально');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Android PPTX canvas swipes slides horizontally, vertically and in a continuous strip',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.deck);
+      addTearDown(backend.close);
+      var bytes = await backend.create();
+      for (var i = 2; i <= 5; i++) {
+        bytes = await backend.edit(bytes, {
+          'action': 'add_slide',
+          'text': 'Slide $i',
+        });
+      }
+      await present(
+        tester,
+        NativeDeckScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: bytes, name: 'Reading.pptx'),
+        ),
+      );
+      await readingMode(tester, 'Вид', 'По одной, горизонтально');
+      final canvas = find.byKey(const Key('deck-viewport'));
+      await tester.drag(canvas, const Offset(-170, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Слайд 2 из 5'), findsOneWidget);
+      await readingMode(tester, 'Вид', 'По одной, вертикально');
+      await tester.drag(canvas, const Offset(0, -170));
+      await tester.pumpAndSettle();
+      expect(find.text('Слайд 3 из 5'), findsOneWidget);
+      await tool(tester, 'Вид', 'Режим чтения');
+      await capture(tester, 'deck-reader-modes-026');
+      await press(tester, 'Непрерывно вниз');
+      await collapse(tester);
+      final strip = find.byKey(const Key('continuous-pages'));
+      expect(find.text('Слайд 3 из 5'), findsOneWidget);
+      expect(
+        find
+            .descendant(of: strip, matching: find.byType(AspectRatio))
+            .evaluate()
+            .length,
+        greaterThanOrEqualTo(2),
+      );
+      await tester.drag(strip, const Offset(0, -290));
+      await tester.pumpAndSettle();
+      expect(find.text('Слайд 3 из 5'), findsNothing);
+      await capture(tester, 'deck-continuous-026');
+      await readingMode(tester, 'Вид', 'По одной, горизонтально');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

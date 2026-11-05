@@ -59,6 +59,27 @@ class MainActivity : FlutterActivity() {
                 } else result.notImplemented()
             }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/reading")
+            .setMethodCallHandler { call, result ->
+                val format = call.argument<String>("format")
+                if (format != "pdf" && format != "deck") {
+                    result.error("BAD_FORMAT", "Unknown reading format", null)
+                    return@setMethodCallHandler
+                }
+                val preferences = getSharedPreferences("reading_modes", Context.MODE_PRIVATE)
+                when (call.method) {
+                    "read" -> result.success(preferences.getString(format, null))
+                    "write" -> {
+                        val mode = call.argument<String>("mode")
+                        if (mode == "horizontal" || mode == "vertical" || mode == "continuous") {
+                            preferences.edit().putString(format, mode).apply()
+                            result.success(null)
+                        } else result.error("BAD_MODE", "Unknown reading mode", null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/grid_clipboard")
             .setMethodCallHandler { call, result ->
                 try {

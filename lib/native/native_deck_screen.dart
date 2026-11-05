@@ -4,9 +4,11 @@ import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
+import '../ui/page_reading.dart';
 import 'document_backend.dart';
 import 'document_history.dart';
 import '../ui/editor_file_title.dart';
@@ -71,12 +73,16 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   }
 
   final toolPanel = GlobalKey<EditorToolPanelState>();
+  final stripViewport = GlobalKey<ContinuousPagesState>();
+  final slideTransform = TransformationController();
+  final reading = ReadingModePreference('deck');
   bool toolsExpanded = false;
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.deck);
   final history = DocumentHistory();
   Uint8List? data;
   List<Map<String, dynamic>> slides = [];
+  List<Size> slideSizes = [];
   String filename = 'Новая презентация.pptx';
   int index = 0;
   double pageW = 960, pageH = 540;
@@ -127,6 +133,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       slides = next;
       pageW = (report['width'] as num?)?.toDouble() ?? 960;
       pageH = (report['height'] as num?)?.toDouble() ?? 540;
+      if (!pageW.isFinite || pageW <= 0) pageW = 960;
+      if (!pageH.isFinite || pageH <= 0) pageH = 540;
+      slideSizes = List.filled(next.length, Size(pageW, pageH));
       index = selected.clamp(0, next.length - 1);
       modified = changed;
       if (name != null) {
@@ -135,6 +144,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
         textEdit = null;
       }
     });
+    slideTransform.value = Matrix4.identity();
   }
 
   Future<bool> discard() async {
@@ -293,6 +303,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     widget.draft?.removeListener(draftStatusChanged);
     if (widget.draft != null) unawaited(widget.draft!.close());
     deckText.dispose();
+    slideTransform.dispose();
+    reading.dispose();
     if (widget.backend == null) unawaited(closeDocumentBackend(engine));
     super.dispose();
   }
@@ -306,6 +318,14 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     'slide': index,
     'shape': shape['id'],
   }, initial: shape['text']?.toString() ?? '');
+
+  void selectSlide(int slide) {
+    if (busy || slide == index || slide < 0 || slide >= slides.length) return;
+    slideTransform.value = Matrix4.identity();
+    setState(() => index = slide);
+    queueDraft();
+  }
+
   Future<void> removeSlide() => action(() async {
     await applyPendingText();
     if (!mounted) return;
@@ -407,7 +427,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     }
     setState(() => textEdit = null);
   });
-  Widget slideCanvas({int? slideIndex}) {
+  Widget slideCanvas({int? slideIndex, bool allowEdit = false}) {
     final slideNumber = slideIndex ?? index;
     final current = slides[slideNumber];
     final raw = current['shapes'];
@@ -433,7 +453,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                     size.maxWidth,
                     size.maxHeight,
                     slide: slideNumber,
-                    interactive: slideIndex == null,
+                    interactive: slideIndex == null || allowEdit,
                   ),
             ],
           ),
@@ -511,7 +531,12 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       width: w,
       height: h,
       child: GestureDetector(
-        onTap: interactive && editable ? () => changeText(shape) : null,
+        onTap: interactive && editable
+            ? () {
+                selectSlide(slide);
+                changeText(shape);
+              }
+            : null,
         child: Container(
           clipBehavior: Clip.hardEdge,
           padding: EdgeInsets.all(text.isEmpty ? 0 : 4),
@@ -579,6 +604,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   @override
   void initState() {
     super.initState();
+    reading.addListener(() => setState(() {}));
+    unawaited(reading.load());
     restoringDraft = widget.launch?.recovery != null;
     widget.draft?.addListener(draftStatusChanged);
     deckText.addListener(() {
@@ -656,6 +683,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     sections: officeSections(
       'deck',
       leading: {
+        'Вид': [readingModeTool(reading)],
         'Главная': [
           EditorTool(
             'Текст',
@@ -724,6 +752,22 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       },
       exclude: {'Текст'},
       overrides: {
+        'Масштаб': EditorTool(
+          'Масштаб',
+          Icons.zoom_in,
+          children: [
+            EditorTool(
+              reading.value == ReadingMode.continuous
+                  ? 'По ширине страницы'
+                  : 'Весь слайд',
+              Icons.fit_screen,
+              onPressed: () {
+                stripViewport.currentState?.fitWidth();
+                slideTransform.value = Matrix4.identity();
+              },
+            ),
+          ],
+        ),
         'Порядок слайдов': EditorTool(
           'Порядок слайдов',
           Icons.reorder,
@@ -843,23 +887,17 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                 )
               : Column(
                   children: [
-                    Expanded(
-                      child: Center(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(12),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.black12),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black26, blurRadius: 8),
-                              ],
-                            ),
-                            child: InteractiveViewer(
-                              minScale: .6,
-                              maxScale: 4,
-                              child: slideCanvas(),
-                            ),
-                          ),
+                    Expanded(child: readingCanvas()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: UiText(
+                          'Слайд ${index + 1} из ${slides.length}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
                     ),
@@ -873,9 +911,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                           itemBuilder: (c, i) {
                             final selected = i == index;
                             return GestureDetector(
-                              onTap: busy
-                                  ? null
-                                  : () => setState(() => index = i),
+                              onTap: busy ? null : () => selectSlide(i),
                               child: Container(
                                 width: 138,
                                 margin: const EdgeInsets.all(5),
@@ -919,6 +955,73 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                 ),
         ),
       ),
+    );
+  }
+
+  Widget readingCanvas() {
+    if (reading.value == ReadingMode.continuous) {
+      return ContinuousPages(
+        key: stripViewport,
+        sizes: slideSizes,
+        page: index,
+        enabled: !busy,
+        onPageChanged: selectSlide,
+        pageBuilder: (_, slide) => RepaintBoundary(
+          child: slideCanvas(slideIndex: slide, allowEdit: true),
+        ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (_, box) {
+        final viewport = box.biggest;
+        final width = math.max(
+          1.0,
+          math.min(viewport.width - 24, (viewport.height - 24) * pageW / pageH),
+        );
+        final height = width * pageH / pageW;
+        final frame = Rect.fromCenter(
+          center: viewport.center(Offset.zero),
+          width: width,
+          height: height,
+        );
+        return IgnorePointer(
+          ignoring: busy,
+          child: PageTurnGesture(
+            key: ValueKey(index),
+            axis: reading.value.swipeAxis,
+            canTurn: (delta) => canTurnAtEdge(
+              slideTransform,
+              frame,
+              viewport,
+              reading.value.swipeAxis,
+              delta,
+            ),
+            onTurn: (delta) => selectSlide(index + delta),
+            child: InteractiveViewer(
+              key: const Key('deck-viewport'),
+              transformationController: slideTransform,
+              alignment: Alignment.topLeft,
+              minScale: 1,
+              maxScale: 4,
+              child: Center(
+                child: SizedBox(
+                  width: width,
+                  height: height,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.black12),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black26, blurRadius: 8),
+                      ],
+                    ),
+                    child: slideCanvas(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

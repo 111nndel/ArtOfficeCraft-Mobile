@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
+import 'page_reading.dart';
 
 /// The viewport fills the available canvas. The page starts fitted to width,
 /// even when it is taller than the screen, and remains pannable at every scale.
@@ -13,9 +14,13 @@ class PdfViewport extends StatefulWidget {
     required this.image,
     required this.pageWidth,
     required this.pageHeight,
+    this.turnAxis,
+    this.onTurn,
   });
   final Future<Uint8List>? image;
   final double pageWidth, pageHeight;
+  final Axis? turnAxis;
+  final ValueChanged<int>? onTurn;
   @override
   State<PdfViewport> createState() => PdfViewportState();
 }
@@ -37,6 +42,14 @@ class PdfViewportState extends State<PdfViewport> {
 
   void fitWidth() => _fit(_widthScale);
   void fitPage() => _fit(_pageScale);
+
+  bool _atEdge(int delta) => canTurnAtEdge(
+    transform,
+    Rect.fromLTWH(0, 0, widget.pageWidth, widget.pageHeight),
+    _size,
+    widget.turnAxis,
+    delta,
+  );
   @override
   void didUpdateWidget(covariant PdfViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -65,53 +78,68 @@ class PdfViewportState extends State<PdfViewport> {
           if (mounted) fitWidth();
         });
       }
-      return GestureDetector(
-        onDoubleTap: fitWidth,
-        child: ColoredBox(
-          color: const Color(0xffdce1e8),
-          child: InteractiveViewer(
-            key: const Key('pdf-viewport'),
-            transformationController: transform,
-            constrained: false,
-            alignment: Alignment.topLeft,
-            boundaryMargin: const EdgeInsets.all(16),
-            minScale: math.max(.01, math.min(_pageScale, _widthScale * .5)),
-            maxScale: math.max(.02, _widthScale * 5),
-            child: SizedBox(
-              key: const Key('pdf-page-canvas'),
-              width: widget.pageWidth,
-              height: widget.pageHeight,
-              child: ColoredBox(
-                color: Colors.white,
-                child: FutureBuilder<Uint8List>(
-                  future: widget.image,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: UiText(
-                            'Android не смог показать страницу. PDF может быть зашифрован или поврежден.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      );
-                    }
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    return Image.memory(
-                      snapshot.data!,
-                      fit: BoxFit.fill,
-                      gaplessPlayback: false,
-                    );
-                  },
-                ),
+      return PageTurnGesture(
+        key: ObjectKey(widget.image),
+        axis: widget.turnAxis,
+        canTurn: _atEdge,
+        onTurn: (delta) => widget.onTurn?.call(delta),
+        child: GestureDetector(
+          onDoubleTap: fitWidth,
+          child: ColoredBox(
+            color: const Color(0xffdce1e8),
+            child: InteractiveViewer(
+              key: const Key('pdf-viewport'),
+              transformationController: transform,
+              constrained: false,
+              alignment: Alignment.topLeft,
+              boundaryMargin: const EdgeInsets.all(16),
+              minScale: math.max(.01, math.min(_pageScale, _widthScale * .5)),
+              maxScale: math.max(.02, _widthScale * 5),
+              child: SizedBox(
+                key: const Key('pdf-page-canvas'),
+                width: widget.pageWidth,
+                height: widget.pageHeight,
+                child: PdfPageImage(image: widget.image),
               ),
             ),
           ),
         ),
       );
     },
+  );
+}
+
+class PdfPageImage extends StatelessWidget {
+  const PdfPageImage({super.key, required this.image, this.fit = BoxFit.fill});
+
+  final Future<Uint8List>? image;
+  final BoxFit fit;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: Colors.white,
+    child: FutureBuilder<Uint8List>(
+      future: image,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: UiText(
+                'Android не смог показать страницу. PDF может быть зашифрован или поврежден.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return Image.memory(snapshot.data!, fit: fit, gaplessPlayback: false);
+      },
+    ),
   );
 }

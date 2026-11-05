@@ -2,6 +2,7 @@ import '../workspace/document_picker.dart';
 import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../ui/pdf_viewport.dart';
+import '../ui/page_reading.dart';
 import '../workspace/draft_store.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
@@ -67,28 +68,51 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   final toolPanel = GlobalKey<EditorToolPanelState>();
   bool toolsExpanded = false, showThumbnails = false;
   final pdfViewport = GlobalKey<PdfViewportState>();
+  final stripViewport = GlobalKey<ContinuousPagesState>();
+  final reading = ReadingModePreference('pdf');
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf);
   final history = DocumentHistory();
   final targetPage = TextEditingController();
   Uint8List? contents;
   List<Map<String, dynamic>> pages = [];
+  List<Size> pageSizes = [];
   String filename = 'Новый документ.pdf';
   int selected = 0;
   bool busy = false, changed = false;
   late final PdfPageRenderer _pageRenderer =
       widget.renderer ?? PdfPageRenderer();
-  Future<Uint8List>? _pageImage;
   int? _session;
   final Map<int, Future<Uint8List>> _thumbnailImages = {};
+  final Map<int, Future<Uint8List>> _pageImages = {};
 
   void selectPage(int page) {
-    if (busy || contents == null || page < 0 || page >= pages.length) return;
-    setState(() {
-      selected = page;
-      _pageImage = _pageRenderer.render(_session!, page);
-    });
+    if (busy ||
+        contents == null ||
+        page == selected ||
+        page < 0 ||
+        page >= pages.length) {
+      return;
+    }
+    setState(() => selected = page);
     queueDraft();
+  }
+
+  Future<Uint8List> raster(int page) {
+    final future =
+        _pageImages.remove(page) ?? _pageRenderer.render(_session!, page);
+    _pageImages[page] = future;
+    if (_pageImages.length > 6) _pageImages.remove(_pageImages.keys.first);
+    return future;
+  }
+
+  Size pageSize(Map<String, dynamic> page) {
+    final width = (page['width'] as num?)?.toDouble() ?? 595;
+    final height = (page['height'] as num?)?.toDouble() ?? 842;
+    if (!width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
+      return const Size(595, 842);
+    }
+    return Size(width, height);
   }
 
   void tip(String msg) {
@@ -136,10 +160,11 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       _session = newSession;
       contents = data;
       pages = raw.map((x) => Map<String, dynamic>.from(x as Map)).toList();
+      pageSizes = pages.map(pageSize).toList(growable: false);
       selected = page.clamp(0, pages.length - 1);
       changed = edited;
       _thumbnailImages.clear();
-      _pageImage = _pageRenderer.render(newSession, selected);
+      _pageImages.clear();
       if (name != null) {
         history.clear();
         filename = name;
@@ -155,6 +180,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     widget.draft?.removeListener(draftStatusChanged);
     if (widget.draft != null) unawaited(widget.draft!.close());
     targetPage.dispose();
+    reading.dispose();
     final previous = _session;
     if (previous != null) {
       unawaited(_pageRenderer.close(previous).catchError((Object _) {}));
@@ -377,6 +403,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   @override
   void initState() {
     super.initState();
+    reading.addListener(() => setState(() {}));
+    unawaited(reading.load());
     restoringDraft = widget.launch?.recovery != null;
     widget.draft?.addListener(draftStatusChanged);
     final request = widget.launch;
@@ -406,7 +434,6 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     }
     changed = state['changed'] == true;
     selected = page;
-    _pageImage = _pageRenderer.render(_session!, page);
     restoringDraft = false;
     setState(() {});
     queueDraft();
@@ -458,6 +485,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         ],
       },
       overrides: {
+        'Режим чтения': readingModeTool(reading),
         'Порядок страниц': EditorTool(
           'Порядок страниц',
           Icons.reorder,
@@ -510,13 +538,17 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
             EditorTool(
               'По ширине страницы',
               Icons.width_normal,
-              onPressed: () => pdfViewport.currentState?.fitWidth(),
+              onPressed: () {
+                stripViewport.currentState?.fitWidth();
+                pdfViewport.currentState?.fitWidth();
+              },
             ),
-            EditorTool(
-              'Вся страница',
-              Icons.fit_screen,
-              onPressed: () => pdfViewport.currentState?.fitPage(),
-            ),
+            if (reading.value != ReadingMode.continuous)
+              EditorTool(
+                'Вся страница',
+                Icons.fit_screen,
+                onPressed: () => pdfViewport.currentState?.fitPage(),
+              ),
           ],
         ),
         'Повернуть': EditorTool(
@@ -620,16 +652,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                 )
               : Column(
                   children: [
-                    Expanded(
-                      child: PdfViewport(
-                        key: pdfViewport,
-                        image: _pageImage,
-                        // Rust already returns displayed dimensions after rotation.
-                        pageWidth: (pages[selected]['width'] as num).toDouble(),
-                        pageHeight: (pages[selected]['height'] as num)
-                            .toDouble(),
-                      ),
-                    ),
+                    Expanded(child: pageCanvas()),
                     if (showThumbnails && !toolsExpanded)
                       SizedBox(
                         height: 136,
@@ -667,4 +690,49 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       ),
     );
   }
+
+  Widget pageCanvas() {
+    if (reading.value == ReadingMode.continuous) {
+      return ContinuousPages(
+        key: stripViewport,
+        sizes: pageSizes,
+        page: selected,
+        enabled: !busy,
+        onPageChanged: selectPage,
+        pageBuilder: (_, page) => _PdfStripPage(
+          key: ValueKey((_session, page)),
+          render: () => raster(page),
+        ),
+      );
+    }
+    return IgnorePointer(
+      ignoring: busy,
+      child: PdfViewport(
+        key: pdfViewport,
+        image: raster(selected),
+        pageWidth: pageSizes[selected].width,
+        pageHeight: pageSizes[selected].height,
+        turnAxis: reading.value.swipeAxis,
+        onTurn: (delta) => selectPage(selected + delta),
+      ),
+    );
+  }
+}
+
+class _PdfStripPage extends StatefulWidget {
+  const _PdfStripPage({super.key, required this.render});
+
+  final Future<Uint8List> Function() render;
+
+  @override
+  State<_PdfStripPage> createState() => _PdfStripPageState();
+}
+
+class _PdfStripPageState extends State<_PdfStripPage> {
+  late final image = widget.render();
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: PdfPageImage(image: image, fit: BoxFit.contain),
+  );
 }
