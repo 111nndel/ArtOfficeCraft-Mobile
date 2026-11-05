@@ -13,6 +13,7 @@ import 'package:artofficecraft_mobile/workspace/draft_store.dart';
 import 'package:artofficecraft_mobile/workspace/editor_kind.dart';
 import 'package:artofficecraft_mobile/main.dart' show ArtOfficeCraftApp;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
@@ -329,13 +330,27 @@ void main() {
 
       final info = await readNativeBuildInfo();
       expect(info!['abi'], 1);
-      expect(info['coreVersion'], '0.25.0');
-      expect((info['engines'] as Map).keys.toSet(), {
-        'wordcraft',
-        'gridcraft',
-        'deckcraft',
-        'pdfcraft',
-      });
+      final notices = jsonDecode(
+        await rootBundle.loadString('assets/legal/rust-licenses.json'),
+      ) as List;
+      final versions = {
+        for (final notice in notices)
+          notice['name'] as String: notice['version'] as String,
+      };
+      expect(versions['artoffice_core'], isNotNull);
+      expect(info['coreVersion'], versions['artoffice_core']);
+      const crates = {
+        'wordcraft': 'wordcraft-docx',
+        'gridcraft': 'gridcraft-xlsx',
+        'deckcraft': 'deckcraft-pptx',
+        'pdfcraft': 'pdfcraft-cos',
+      };
+      final engines = info['engines'] as Map;
+      expect(engines.keys.toSet(), crates.keys.toSet());
+      for (final entry in crates.entries) {
+        expect(versions[entry.value], isNotNull);
+        expect(engines[entry.key]['tag'], 'v${versions[entry.value]}');
+      }
 
       // Exercise actual Android filesystem persistence, then parse fresh bytes.
       // Android's interactive SAF picker is a separate manual check.
