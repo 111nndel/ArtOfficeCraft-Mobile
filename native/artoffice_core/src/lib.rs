@@ -8,6 +8,7 @@ use serde_json::json;
 mod word_edit;
 mod grid;
 mod grid_clipboard;
+mod grid_filter;
 mod grid_sort;
 mod grid_structure;
 mod deck;

@@ -286,6 +286,36 @@ const english = <String, String>{
   "Движок формул": "Formula engine",
   "Данные": "Data",
   "Фильтр": "Filter",
+  "Фильтр недоступен": "Filter unavailable",
+  "Фильтр применён": "Filter applied",
+  "Автофильтр снят": "AutoFilter removed",
+  "Снять автофильтр": "Remove AutoFilter",
+  "Применить фильтр": "Apply filter",
+  "Столбец фильтра": "Filter column",
+  "Выбрать все значения": "Select all values",
+  "(Пустые ячейки)": "(Blank cells)",
+  "(Скрыто числовым форматом)": "(Hidden by number format)",
+  "Первая строка остаётся заголовком.": "The first row stays as a header.",
+  "Подтвердить ввод": "Commit input",
+  "Выберите видимый столбец для фильтра": "Select a visible filter column",
+  "Выделите строку заголовка и строки данных. Удерживайте ячейку и потяните за маркер.": "Select the header and data rows. Touch and hold a cell, then drag a handle.",
+  "Выделите заголовок и до 4096 строк данных и 128 столбцов":
+      "Select a header and up to 4,096 data rows and 128 columns",
+  "Строка заголовка должна быть видимой": "The header row must be visible",
+  "Этот тип автофильтра пока нельзя изменить":
+      "This AutoFilter type cannot be edited yet",
+  "Выберите диапазон без объединённых ячеек и таблиц Excel":
+      "Select a range without merged cells or Excel tables",
+  "В диапазоне есть строки, скрытые вручную или группировкой":
+      "The range includes manually hidden or grouped rows",
+  "В столбце слишком много разных значений для фильтра":
+      "This column has too many distinct filter values",
+  "В этом фильтре одинаково выглядящие ячейки имеют разные условия":
+      "This filter uses different criteria for identical displayed values",
+  "Из-за числового формата часть значений нельзя отфильтровать отдельно":
+      "Number formatting prevents some values from being filtered separately",
+  "Не удалось применить или прочитать фильтр":
+      "Could not apply or read the filter",
   "Сортировать": "Sort",
   "Сортировать диапазон": "Sort range",
   "Диапазон отсортирован": "Range sorted",

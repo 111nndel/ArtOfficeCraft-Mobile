@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.27.0.**
+**Current preview — alpha 0.28.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -13,8 +13,8 @@ full available canvas, with optional thumbnails and fit controls. PDF and PPTX
 offer horizontal or vertical single-page swipes and a continuous vertical strip. Large editor
 tool targets and the approved nested slab navigation remain unchanged. Light/dark
 appearance is saved locally and restored before the first Flutter frame.
-Excel sorts selected rows by a chosen column with an optional header.
-See the [0.27.0 release notes and limits](docs/release-0.27.0-alpha.1.md).
+Excel sorts selected rows and filters them by values or blank cells.
+See the [0.28.0 release notes and limits](docs/release-0.28.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
+import 'package:artofficecraft_mobile/native/grid_layout.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
 import 'package:artofficecraft_mobile/native/native_word_screen.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
@@ -182,6 +183,96 @@ void main() {
             address,
           ))['selection']
           as Map<String, dynamic>;
+
+  testWidgets(
+    'Filter a worksheet by value and blanks, undo, export and remove after reopening',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      var original = await backend.create();
+      for (final entry in {
+        'A1': 'Drink',
+        'B1': 'Stock',
+        'A2': 'Tea',
+        'B2': '15',
+        'A3': 'Coffee',
+        'B3': '25',
+        'B4': '5',
+        'A5': 'Tea',
+        'B5': '12',
+      }.entries) {
+        original = await backend.edit(original, {
+          'sheet': 0,
+          'address': entry.key,
+          'value': entry.value,
+        });
+      }
+      Future<void> open(Uint8List bytes) => present(
+        tester,
+        NativeGridScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: bytes, name: 'Stock.xlsx'),
+        ),
+      );
+      Future<Map<String, dynamic>> inspect(Uint8List bytes) =>
+          backend.inspectGrid(bytes, const GridWindow(0, 0, 0), 'A1');
+      Finder choice(String? value) =>
+          find.byKey(ValueKey(('filter-value', value)));
+
+      await open(original);
+      await selectRange(tester, 'A1:B5', 'Drink');
+      await tool(tester, 'Данные', 'Фильтр');
+      await until(
+        tester,
+        () => choice('Tea').evaluate().isNotEmpty,
+        'filter values loaded',
+      );
+      await press(tester, 'Выбрать все значения');
+      await press(tester, 'Tea');
+      await press(tester, '(Пустые ячейки)');
+      await tester.ensureVisible(find.text('Применить фильтр'));
+      await tester.pumpAndSettle();
+      await capture(tester, 'grid-filter-028');
+      await press(tester, 'Применить фильтр');
+      await until(tester, () => panel(tester).undo != null, 'filter applied');
+      final filtered = await save(tester, 'Сохранить копию');
+      final view = await inspect(filtered);
+      expect(view['filterRange'], 'A1:B5');
+      final rows = GridLayout.fromJson(view['layout'] as Map).rows;
+      expect(rows.extent(0), greaterThan(0));
+      expect(rows.extent(2), 0);
+      expect(rows.extent(3), greaterThan(0));
+      expect((await inspectCell(backend, filtered, 'A3'))['input'], 'Coffee');
+
+      await history(tester, true);
+      await selectVisibleCell(tester, 'A3', 'Coffee');
+      await history(tester, false);
+      await until(
+        tester,
+        () => find.byKey(const ValueKey('grid-cell-A3')).evaluate().isEmpty,
+        'filtered row hidden again',
+      );
+
+      await open(filtered);
+      await tool(tester, 'Данные', 'Фильтр');
+      await until(
+        tester,
+        () => choice('Coffee').evaluate().isNotEmpty,
+        'saved filter values loaded',
+      );
+      expect(tester.widget<CheckboxListTile>(choice('Coffee')).value, false);
+      expect(tester.widget<CheckboxListTile>(choice(null)).value, true);
+      await press(tester, 'Снять автофильтр');
+      await until(tester, () => panel(tester).undo != null, 'filter removed');
+      final cleared = await save(tester, 'Сохранить копию');
+      final clearedView = await inspect(cleared);
+      expect(clearedView['filterRange'], isNull);
+      expect(
+        GridLayout.fromJson(clearedView['layout'] as Map).rows.extent(2),
+        greaterThan(0),
+      );
+    },
+  );
 
   testWidgets(
     'Sort selected rows by a chosen column and preserve the header, formulas and undo',

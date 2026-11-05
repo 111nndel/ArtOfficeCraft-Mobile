@@ -230,6 +230,9 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         if action == "sort_range" {
             return super::grid_sort::edit(wb, idx, address, &req);
         }
+        if action == "filter_range" {
+            return super::grid_filter::edit(wb, idx, &req);
+        }
         if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet"|"format_range"|"clear_range"|"paste_text") {return Err("Unknown cell action".into())}
         if matches!(action,"autosum"|"recalculate"|"add_sheet") && req.get("value").is_some() {
             return Err("Calculation actions do not accept a cell value".into())
@@ -305,6 +308,12 @@ fn axis_runs(lines:&std::collections::BTreeMap<u32,gridcraft_model::features::Li
 pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u8,req_len:usize)->AcResult {
     protect(|| {
         let req:Json=serde_json::from_str(input(request,req_len)?).map_err(|e|e.to_string())?;
+        if let Some(filter) = req.get("filterValues") {
+            let bytes = decode(data,n,MAX_INPUT_BYTES)?;
+            let wb = workbook(bytes)?;
+            let idx = filter["sheet"].as_u64().and_then(|i| usize::try_from(i).ok()).ok_or("Invalid sheet index")?;
+            return serde_json::to_vec(&super::grid_filter::options(&wb, idx, filter)?).map_err(|e|e.to_string());
+        }
         let field=|name:&str| req.get(name).and_then(Json::as_u64).ok_or_else(||format!("Missing integer {name}"));
         let idx=field("sheet")?;
         let row=field("row")?; let col=field("column")?;
@@ -381,6 +390,7 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
             "showGridlines":sh.show_gridlines,"usedRange":used});
         serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
             "selection":selection,"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":report.warnings,
+            "filterRange":sh.autofilter.as_ref().map(|f|f.range.a1()),
             "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
     })
 }

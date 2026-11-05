@@ -15,6 +15,7 @@ import 'document_backend.dart';
 import 'grid_window.dart';
 import 'grid_selection.dart';
 import 'grid_clipboard.dart';
+import 'grid_filter_panel.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
 
@@ -87,6 +88,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   final addressInput = TextEditingController();
   Map<String, dynamic> selectedCell = {};
   GridLayout layout = GridLayout.fromJson(null);
+  GridSelection? installedFilter;
   GridWindow loadedWindow = const GridWindow(0, 0, 0);
   GridWindow? wantedWindow;
   Timer? viewTimer;
@@ -293,6 +295,10 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     refreshCells();
     selectedCell = Map<String, dynamic>.from(parsed['selection'] as Map? ?? {});
     layout = GridLayout.fromJson(parsed['layout'] as Map?);
+    installedFilter = switch (parsed['filterRange']) {
+      final String range => GridSelection.parse(range),
+      _ => null,
+    };
     selected = selectedCell['address'] as String? ?? selected;
     loadedWindow = window;
     viewFailed = false;
@@ -657,7 +663,10 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return null;
   }
 
-  Future<bool> applyUndoableEdit(Map<String, dynamic> request) async {
+  Future<bool> applyUndoableEdit(
+    Map<String, dynamic> request, {
+    String? focus,
+  }) async {
     await flushInput();
     if (!mounted) return false;
     final previous = book!, window = loadedWindow;
@@ -669,7 +678,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       previous,
       {'sheet': sheetIndex, 'address': selected, ...request},
       window,
-      selected,
+      focus ?? selected,
     );
     if (updated.bytes.length > history.byteBudget) {
       tip('Результат превышает 24 МиБ и не помещается в историю отмены');
@@ -846,6 +855,96 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             : (column, order, header) {
                 sortRange(range, column, order, header);
               },
+      );
+    },
+  );
+
+  Future<void> changeFilter(
+    GridSelection range,
+    int column,
+    Set<String?>? values,
+  ) => run(() async {
+    final blocked = undoableEditBlocked;
+    if (book == null || inputDirty) return;
+    if (blocked != null) {
+      tip(blocked);
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    try {
+      final updated = await applyUndoableEdit({
+        'action': 'filter_range',
+        'range': range.address,
+        'column': gridColumnName(column),
+        if (values == null) 'remove': true else 'values': values.toList(),
+      }, focus: '${gridColumnName(column)}${range.row + 1}');
+      if (!updated) return;
+      gridViewport.currentState?.goToCell(range.row, column);
+      tip(values == null ? 'Автофильтр снят' : 'Фильтр применён');
+    } on FormatException catch (error) {
+      tip(gridFilterError(error));
+    }
+  });
+
+  EditorTool filterTool() => EditorTool(
+    'Фильтр',
+    Icons.filter_alt_outlined,
+    builder: (_) {
+      final range = installedFilter ?? rangeSelection;
+      final bytes = book;
+      final backend = bridge;
+      final reason = undoableEditBlocked;
+      if (reason != null) return UiText(reason);
+      if (bytes == null || backend is! GridFilterDocuments) {
+        return const UiText('Фильтр недоступен');
+      }
+      if (range == null || range.endRow == range.row) {
+        return const UiText(
+          'Выделите строку заголовка и строки данных. Удерживайте ячейку и потяните за маркер.',
+        );
+      }
+      if (range.endRow - range.row > 4096 ||
+          range.endColumn - range.column >= 128) {
+        return const UiText(
+          'Выделите заголовок и до 4096 строк данных и 128 столбцов',
+        );
+      }
+      if (inputDirty) {
+        return FilledButton(
+          onPressed: busy ? null : commit,
+          child: const UiText('Подтвердить ввод'),
+        );
+      }
+      final columns = [
+        for (var col = range.column; col <= range.endColumn; col++)
+          if (layout.columns.extent(col) > 0) col,
+      ];
+      if (columns.isEmpty) {
+        return const UiText('Выберите видимый столбец для фильтра');
+      }
+      final currentColumn = gridAddress(selected)?.column;
+      final initial = columns.contains(currentColumn)
+          ? currentColumn!
+          : columns.first;
+      final sheet = sheetIndex;
+      return GridFilterPanel(
+        key: ValueKey((sheet, range.address)),
+        source: bytes,
+        range: range.address,
+        columns: columns,
+        initialColumn: initial,
+        load: (column) => (backend as GridFilterDocuments).gridFilterValues(
+          bytes,
+          sheet,
+          range.address,
+          gridColumnName(column),
+        ),
+        onApply: busy
+            ? null
+            : (column, values) => changeFilter(range, column, values),
+        onRemove: busy || installedFilter == null
+            ? null
+            : () => changeFilter(range, initial, null),
       );
     },
   );
@@ -1434,6 +1533,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         overrides: {
           'Строки и столбцы': lineTool(),
           'Сортировать': sortTool(),
+          'Фильтр': filterTool(),
           'Копировать': EditorTool(
             'Копировать',
             Icons.copy,

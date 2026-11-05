@@ -86,6 +86,17 @@ abstract interface class GridDocuments {
   );
 }
 
+typedef GridFilterChoice = ({String? value, bool checked});
+
+abstract interface class GridFilterDocuments {
+  Future<List<GridFilterChoice>> gridFilterValues(
+    Uint8List bytes,
+    int sheet,
+    String range,
+    String column,
+  );
+}
+
 abstract interface class GridClipboardDocuments {
   Future<Map<String, dynamic>> copyGridRange(
     Uint8List bytes,
@@ -201,6 +212,7 @@ final class NativeDocumentBackend
         DocumentBackendLifetime,
         DocumentImages,
         GridDocuments,
+        GridFilterDocuments,
         GridClipboardDocuments {
   NativeDocumentBackend(this.kind, {this.libraryPath});
   final NativeDocumentKind kind;
@@ -294,6 +306,22 @@ final class NativeDocumentBackend
   ) async =>
       _freeze(await _call('gridInspect', bytes, window.request(selected)))
           as Map<String, dynamic>;
+  @override
+  Future<List<GridFilterChoice>> gridFilterValues(
+    Uint8List bytes,
+    int sheet,
+    String range,
+    String column,
+  ) async {
+    final result = await _call('gridInspect', bytes, {
+      'filterValues': {'sheet': sheet, 'range': range, 'column': column},
+    }) as Map;
+    return [
+      for (final item in result['items'] as List)
+        (value: item['value'] as String?, checked: item['checked'] as bool),
+    ];
+  }
+
   @override
   Future<DocumentSnapshot> editGridView(
     Uint8List bytes,
