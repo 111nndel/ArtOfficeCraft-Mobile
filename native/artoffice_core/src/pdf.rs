@@ -1,9 +1,10 @@
 //! Pinned PDFCraft page structure, annotations and text edits.
 //! Navigation reads the upstream outline without executing bookmark actions.
-use std::sync::Arc;
+use std::{fmt::Write as _, sync::Arc};
 use pdfcraft_annot::{Meta, NewAnnotation, NoteIcon, Shape, Style, add_annotation};
 use pdfcraft_cos::{Document,Dict,Object,SaveOptions,write_full};
-use pdfcraft_edit::{BlockStyle, TextBlock, TextSession, text_blocks};
+use pdfcraft_edit::{BlockStyle, TextBlock, TextSession, stamp, text::register_text_font, text_blocks};
+use pdfcraft_fonts::{document_latin_fonts, embedding::covers, pdf::Metrics, wrap_with};
 use pdfcraft_model::{pages,Page};
 use serde_json::{json,Value as J};
 use super::{AcResult,decode,protect,MAX_INPUT_BYTES,MAX_TEXT_BYTES};
@@ -92,6 +93,72 @@ fn editable_block(block: &TextBlock) -> bool {
         && !block.editor_text.contains('\u{fffd}')
 }
 
+fn insert_text(doc: &mut Document, page: &Page, index: usize, request: &J) -> Result<(), String> {
+    if doc.permissions().is_some_and(|permission| !permission.modify()) {
+        return Err("This PDF restricts content editing".into());
+    }
+    let text = request["text"].as_str().map(str::trim)
+        .filter(|text| !text.is_empty() && text.len() <= 4000 && text.chars().count() <= 1000
+            && !text.chars().any(|c| c.is_control() && !matches!(c, '\n' | '\r')))
+        .ok_or("Expected text up to 1000 characters")?;
+    let coordinate = |key| request[key].as_f64().filter(|n| (0.0..=1.0).contains(n))
+        .ok_or("Choose a position inside the PDF page");
+    let size = request["size"].as_f64().filter(|n| (8.0..=72.0).contains(n))
+        .ok_or("Invalid PDF text size")?;
+    let (width, height) = page.display_size(doc);
+    if ![width, height].iter().all(|n| n.is_finite() && *n > 0.0 && *n <= 10_000_000.0) {
+        return Err("Invalid PDF page dimensions".into());
+    }
+    let left = coordinate("x")? * width;
+    let top = (1.0 - coordinate("y")?) * height;
+    let available = width - left - 2.0;
+    let no_room = "The text does not fit here. Choose another position or a smaller size.";
+    if available < size || top < size {
+        return Err(no_room.into());
+    }
+    let face = document_latin_fonts(false).into_iter().find(|face| covers(face.bytes, text))
+        .ok_or("The PDF insertion font does not support all characters in this text")?;
+    let name = register_text_font(doc, index, face.bytes).map_err(|err| err.to_string())?;
+    let installed = doc.get(page.obj);
+    let resources = installed.as_dict().and_then(|d| d.get(b"Resources"))
+        .and_then(|o| doc.dict(o)).ok_or("Missing PDF page resources")?;
+    let fonts = resources.get(b"Font").and_then(|o| doc.dict(o))
+        .ok_or("Missing PDF page fonts")?;
+    let font = fonts.get(name.as_bytes()).and_then(|o| doc.dict(o))
+        .ok_or("Missing embedded PDF text font")?;
+    let metrics = Metrics::from_dict(doc, &font);
+    let advance = |bytes: &[u8]| metrics.codes(bytes).into_iter()
+        .map(|(code, _)| metrics.width(code) * size).sum::<f64>();
+    let lines = wrap_with(text, size, available, |s, _| {
+        metrics.encode(s).map_or(f64::INFINITY, |bytes| advance(&bytes))
+    });
+    let leading = size * 1.25;
+    let first_baseline = top - metrics.ascent * size;
+    if first_baseline - leading * lines.len().saturating_sub(1) as f64 + metrics.descent * size < 1.0 {
+        return Err(no_room.into());
+    }
+    let matrix = page.view_matrix(doc).map(|n| format!("{n:.9}")).join(" ");
+    let mut content = format!("q\n{matrix} cm\n0 g\nBT /{name} {size:.4} Tf\n");
+    for (i, line) in lines.iter().enumerate() {
+        let bytes = metrics.encode(line).ok_or("Could not encode the inserted PDF text")?;
+        if advance(&bytes) > available + 0.001 {
+            return Err(no_room.into());
+        }
+        let baseline = first_baseline - leading * i as f64;
+        write!(content, "1 0 0 1 {left:.6} {baseline:.6} Tm\n<").map_err(|e| e.to_string())?;
+        for byte in bytes {
+            write!(content, "{byte:02X}").map_err(|e| e.to_string())?;
+        }
+        content.push_str("> Tj\n");
+    }
+    content.push_str("ET\nQ\n");
+    stamp(doc, index, "AOCText", content.into_bytes()).map_err(|err| err.to_string())?;
+    // stamp adds a standard Helvetica resource for marks. This stream only uses
+    // Inter, so restore the pre-stamp dictionary, including any existing PCHelv.
+    doc.update_dict(page.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(resources)))
+        .map_err(|err| err.to_string())
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_pdf_text_blocks(data: *const u8, len: usize, page: usize) -> AcResult {
     protect(|| {
@@ -164,6 +231,7 @@ pub extern "C" fn ac_pdf_edit(data:*const u8,n:usize,req:*const u8,req_len:usize
         if all.len()>10000{return Err("PDF too many pages".into());}
         if index>=all.len(){return Err("PDF page out of range".into());}
         match action {
+            "insert_text" => insert_text(&mut doc, &all[index], index, &j)?,
             "replace_text_block" => {
                 if doc.permissions().is_some_and(|permission| !permission.modify()) {
                     return Err("This PDF restricts content editing".into());

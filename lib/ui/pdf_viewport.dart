@@ -16,11 +16,15 @@ class PdfViewport extends StatefulWidget {
     required this.pageHeight,
     this.turnAxis,
     this.onTurn,
+    this.onPageTap,
+    this.pageIdentity,
   });
   final Future<Uint8List>? image;
   final double pageWidth, pageHeight;
   final Axis? turnAxis;
   final ValueChanged<int>? onTurn;
+  final ValueChanged<Offset>? onPageTap;
+  final Object? pageIdentity;
   @override
   State<PdfViewport> createState() => PdfViewportState();
 }
@@ -53,7 +57,8 @@ class PdfViewportState extends State<PdfViewport> {
   @override
   void didUpdateWidget(covariant PdfViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.image != oldWidget.image ||
+    if ((widget.pageIdentity ?? widget.image) !=
+            (oldWidget.pageIdentity ?? oldWidget.image) ||
         widget.pageWidth != oldWidget.pageWidth ||
         widget.pageHeight != oldWidget.pageHeight) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,7 +104,10 @@ class PdfViewportState extends State<PdfViewport> {
                 key: const Key('pdf-page-canvas'),
                 width: widget.pageWidth,
                 height: widget.pageHeight,
-                child: PdfPageImage(image: widget.image),
+                child: PdfPageImage(
+                  image: widget.image,
+                  onPageTap: widget.onPageTap,
+                ),
               ),
             ),
           ),
@@ -110,10 +118,18 @@ class PdfViewportState extends State<PdfViewport> {
 }
 
 class PdfPageImage extends StatelessWidget {
-  const PdfPageImage({super.key, required this.image, this.fit = BoxFit.fill});
+  const PdfPageImage({
+    super.key,
+    required this.image,
+    this.fit = BoxFit.fill,
+    this.onPageTap,
+  });
 
   final Future<Uint8List>? image;
   final BoxFit fit;
+
+  /// A touch point as fractions of the visible page from its top left.
+  final ValueChanged<Offset>? onPageTap;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -138,7 +154,27 @@ class PdfPageImage extends StatelessWidget {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        return Image.memory(snapshot.data!, fit: fit, gaplessPlayback: false);
+        final page = Image.memory(
+          snapshot.data!,
+          fit: fit,
+          gaplessPlayback: false,
+        );
+        final onTap = onPageTap;
+        if (onTap == null) return page;
+        return LayoutBuilder(
+          builder: (_, box) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (event) {
+              final point = event.localPosition;
+              if (box.biggest.contains(point)) {
+                onTap(
+                  Offset(point.dx / box.maxWidth, point.dy / box.maxHeight),
+                );
+              }
+            },
+            child: page,
+          ),
+        );
       },
     ),
   );

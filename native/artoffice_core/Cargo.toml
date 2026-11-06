@@ -1,6 +1,6 @@
 [package]
 name = "artoffice_core"
-version = "0.31.0"
+version = "0.32.0"
 edition = "2024"
 publish = false
 license = "MIT OR Apache-2.0"
@@ -16,6 +16,7 @@ pdfcraft-cos = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/cra
 pdfcraft-model = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/crates/model" }
 pdfcraft-annot = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/crates/annot" }
 pdfcraft-edit = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/crates/edit" }
+pdfcraft-fonts = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/crates/fonts" }
 pdfcraft-organize = { path = "../../upstream/staged/pdfcraft/v0.18.2-7faa4f35cefb/crates/organize" }
 deckcraft-model = { path = "../../upstream/staged/deckcraft/v0.15.1-9bac60ff5302/crates/model" }
 deckcraft-pptx = { path = "../../upstream/staged/deckcraft/v0.15.1-9bac60ff5302/crates/pptx" }

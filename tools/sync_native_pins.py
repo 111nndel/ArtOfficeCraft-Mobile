@@ -99,7 +99,7 @@ def main():
             raise RuntimeError('DeckCraft Cargo dependency missing: '+crate)
     pdf=pins['pdfcraft']
     pdfbase='../../upstream/staged/pdfcraft/'+pdf['tag']+'-'+pdf['commit'][:12]+'/crates/'
-    for name in ('cos','model','annot','edit','organize'):
+    for name in ('cos','model','annot','edit','fonts','organize'):
         crate='pdfcraft-'+name
         cargo,count=re.subn(
             r'('+re.escape(crate)+r'\s*=\s*\{\s*path\s*=\s*")[^"]+',

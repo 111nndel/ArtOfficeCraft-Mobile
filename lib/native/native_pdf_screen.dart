@@ -17,6 +17,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
@@ -77,6 +78,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   final history = DocumentHistory();
   final targetPage = TextEditingController();
   final noteText = TextEditingController();
+  final insertionText = TextEditingController();
+  int insertionSize = 16;
+  ({Uint8List document, String text, int size})? placement;
+  Object _viewDocument = Object();
   Uint8List? contents;
   List<Map<String, dynamic>> pages = [];
   List<PdfBookmark> bookmarks = [];
@@ -141,7 +146,17 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     try {
       await task();
     } catch (e) {
-      tip('PDFCraft: $e');
+      tip(switch (e) {
+        FormatException(
+          message: 'The text does not fit here. Choose another position or a smaller size.',
+        ) =>
+          'Текст здесь не помещается. Выберите другое место или меньший размер.',
+        FormatException(
+          message: 'The PDF insertion font does not support all characters in this text',
+        ) =>
+          'Некоторые символы недоступны в шрифте для вставки PDF.',
+        _ => 'PDFCraft: $e',
+      });
     } finally {
       if (mounted) setState(() => busy = false);
       queueDraft();
@@ -154,6 +169,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     bool edited = false,
     int page = 0,
     Map<String, dynamic>? preview,
+    bool retainViewport = false,
   }) async {
     data = immutableDocumentBytes(data);
     final summary = preview ?? await engine!.inspect(data);
@@ -190,15 +206,21 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       bookmarks = outline;
       notes = comments;
       outlineLimited = summary['outlineLimited'] == true;
-      pageSizes = pages.map(pageSize).toList(growable: false);
+      final sizes = pages.map(pageSize).toList(growable: false);
+      if (!retainViewport || !listEquals(pageSizes, sizes)) {
+        pageSizes = sizes;
+        _viewDocument = Object();
+      }
       selected = page.clamp(0, pages.length - 1);
       changed = edited;
+      placement = null;
       _thumbnailImages.clear();
       _pageImages.clear();
       if (name != null) {
         history.clear();
         filename = name;
         noteText.clear();
+        insertionText.clear();
       }
     });
     if (previousSession != null) {
@@ -212,6 +234,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     if (widget.draft != null) unawaited(widget.draft!.close());
     targetPage.dispose();
     noteText.dispose();
+    insertionText.dispose();
     reading.dispose();
     final previous = _session;
     if (previous != null) {
@@ -294,6 +317,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     int? to,
     String? text,
     PdfTextBlock? block,
+    ({int page, Offset at, int size})? insertion,
   }) => execute(() async {
     if (contents == null) return;
     if (action == 'delete') {
@@ -324,14 +348,20 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     }
     {
       final previous = contents!, previousPage = selected;
+      final operationPage = insertion?.page ?? selected;
       final updated = await engine!.editAndInspect(previous, {
         'action': action,
-        'page': selected,
+        'page': operationPage,
         'to': ?to,
         'text': ?text,
         if (block != null) ...{'block': block.id, 'original': block.text},
+        if (insertion != null) ...{
+          'x': insertion.at.dx,
+          'y': insertion.at.dy,
+          'size': insertion.size,
+        },
       });
-      var next = action == 'move_to' ? to! : selected;
+      var next = action == 'move_to' ? to! : operationPage;
       if (action == 'move_up') next--;
       if (action == 'move_down' ||
           action == 'duplicate' ||
@@ -343,6 +373,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         preview: updated.preview,
         page: next,
         edited: true,
+        retainViewport: insertion != null,
       );
       if (!mounted) return;
       history.push(previous, position: previousPage);
@@ -351,11 +382,82 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         tip('Заметка добавлена');
       } else if (action == 'replace_text_block') {
         tip('Текст страницы изменён');
+      } else if (insertion != null) {
+        insertionText.clear();
+        tip('Текст добавлен на страницу');
       } else {
         tip('Структура PDF изменена');
       }
     }
   });
+
+  void startPlacement() {
+    final document = contents;
+    final text = insertionText.text.trim();
+    if (busy || document == null || text.isEmpty) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    toolPanel.currentState?.setExpanded(false);
+    setState(() {
+      placement = (document: document, text: text, size: insertionSize);
+    });
+  }
+
+  Future<void> placeText(int page, Offset point) async {
+    final draft = placement;
+    if (busy || draft == null || !identical(draft.document, contents)) return;
+    setState(() => placement = null);
+    await edit(
+      'insert_text',
+      text: draft.text,
+      insertion: (page: page, at: point, size: draft.size),
+    );
+    if (mounted && identical(draft.document, contents)) {
+      toolPanel.currentState?.setExpanded(true);
+    }
+  }
+
+  Widget insertTextPanel() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextField(
+        key: const Key('pdf-insert-text-input'),
+        controller: insertionText,
+        readOnly: busy,
+        minLines: 2,
+        maxLines: 4,
+        maxLength: 1000,
+        decoration: InputDecoration(labelText: tr(context, 'Новый текст PDF')),
+      ),
+      Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const UiText('Размер шрифта, pt'),
+          DropdownButton<int>(
+            value: insertionSize,
+            items: [
+              for (final size in [12, 16, 20, 24, 32])
+                DropdownMenuItem(value: size, child: Text('$size')),
+            ],
+            onChanged: busy
+                ? null
+                : (size) => setState(() => insertionSize = size!),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: insertionText,
+            builder: (_, value, _) => FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: busy || value.text.trim().isEmpty
+                  ? null
+                  : startPlacement,
+              child: const UiText('Выбрать место'),
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
 
   Future<void> restoreHistory(bool undo) => execute(() async {
     final target = undo ? history.undoTarget : history.redoTarget;
@@ -571,7 +673,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   Widget editorPanel() => EditorToolPanel(
     key: toolPanel,
     color: const Color(0xffc94e59),
-    onExpandedChanged: (value) => setState(() => toolsExpanded = value),
+    onExpandedChanged: (value) => setState(() {
+      toolsExpanded = value;
+      if (value) placement = null;
+    }),
     undo: !busy && history.canUndo ? () => restoreHistory(true) : null,
     redo: !busy && history.canRedo ? () => restoreHistory(false) : null,
     sections: officeSections(
@@ -598,6 +703,13 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
             onPressed: selected + 1 < pages.length && !busy
                 ? () => selectPage(selected + 1)
                 : null,
+          ),
+        ],
+        'Изменить': [
+          EditorTool(
+            'Вставить текст',
+            Icons.add_box_outlined,
+            builder: (_) => insertTextPanel(),
           ),
         ],
         'Страницы': [
@@ -802,7 +914,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
               : Column(
                   children: [
                     Expanded(child: pageCanvas()),
-                    if (showThumbnails && !toolsExpanded)
+                    if (showThumbnails && !toolsExpanded && placement == null)
                       SizedBox(
                         height: 136,
                         child: ListView.builder(
@@ -817,18 +929,28 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                         children: [
                           Expanded(
                             child: UiText(
-                              'Страница ${selected + 1} из ${pages.length}',
+                              placement != null
+                                  ? 'Коснитесь страницы, чтобы вставить текст'
+                                  : 'Страница ${selected + 1} из ${pages.length}',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ),
-                          IconButton(
-                            tooltip: tr(context, 'Миниатюры страниц'),
-                            isSelected: showThumbnails,
-                            onPressed: () => setState(
-                              () => showThumbnails = !showThumbnails,
+                          if (placement != null)
+                            IconButton(
+                              tooltip: tr(context, 'Отмена'),
+                              onPressed: () =>
+                                  toolPanel.currentState?.setExpanded(true),
+                              icon: const Icon(Icons.close),
+                            )
+                          else
+                            IconButton(
+                              tooltip: tr(context, 'Миниатюры страниц'),
+                              isSelected: showThumbnails,
+                              onPressed: () => setState(
+                                () => showThumbnails = !showThumbnails,
+                              ),
+                              icon: const Icon(Icons.view_carousel_outlined),
                             ),
-                            icon: const Icon(Icons.view_carousel_outlined),
-                          ),
                         ],
                       ),
                     ),
@@ -851,27 +973,34 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         pageBuilder: (_, page) => _PdfStripPage(
           key: ValueKey((_session, page)),
           render: () => raster(page),
+          onPageTap: placement == null
+              ? null
+              : (point) => placeText(page, point),
         ),
       );
     }
+    final page = selected;
     return IgnorePointer(
       ignoring: busy,
       child: PdfViewport(
         key: pdfViewport,
-        image: raster(selected),
-        pageWidth: pageSizes[selected].width,
-        pageHeight: pageSizes[selected].height,
+        image: raster(page),
+        pageWidth: pageSizes[page].width,
+        pageHeight: pageSizes[page].height,
+        pageIdentity: (_viewDocument, page),
         turnAxis: reading.value.swipeAxis,
         onTurn: (delta) => selectPage(selected + delta),
+        onPageTap: placement == null ? null : (point) => placeText(page, point),
       ),
     );
   }
 }
 
 class _PdfStripPage extends StatefulWidget {
-  const _PdfStripPage({super.key, required this.render});
+  const _PdfStripPage({super.key, required this.render, this.onPageTap});
 
   final Future<Uint8List> Function() render;
+  final ValueChanged<Offset>? onPageTap;
 
   @override
   State<_PdfStripPage> createState() => _PdfStripPageState();
@@ -882,6 +1011,10 @@ class _PdfStripPageState extends State<_PdfStripPage> {
 
   @override
   Widget build(BuildContext context) => RepaintBoundary(
-    child: PdfPageImage(image: image, fit: BoxFit.contain),
+    child: PdfPageImage(
+      image: image,
+      fit: BoxFit.contain,
+      onPageTap: widget.onPageTap,
+    ),
   );
 }

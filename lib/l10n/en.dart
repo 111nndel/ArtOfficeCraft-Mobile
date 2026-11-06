@@ -443,6 +443,15 @@ const english = <String, String>{
   "Выберите текст на текущей странице": "Choose text on this page",
   "Показаны первые 256 текстовых блоков": "Showing the first 256 text blocks",
   "Текст страницы изменён": "Page text updated",
+  "Вставить текст": "Insert text",
+  "Новый текст PDF": "New PDF text",
+  "Выбрать место": "Choose position",
+  "Коснитесь страницы, чтобы вставить текст": "Tap the page to insert text",
+  "Текст добавлен на страницу": "Text added to the page",
+  "Текст здесь не помещается. Выберите другое место или меньший размер.":
+      "The text does not fit here. Choose another position or a smaller size.",
+  "Некоторые символы недоступны в шрифте для вставки PDF.":
+      "The PDF insertion font cannot draw some of these characters.",
   "Изображения PDF": "PDF images",
   "Скан и OCR": "Scan and OCR",
   "Конвертация": "Convert",

@@ -30,6 +30,11 @@ def collect(metadata):
         root=Path(pkg['manifest_path']).parent
         candidates=[]
         if pkg.get('license_file'): candidates.append(Path(pkg['license_file']))
+        if pkg['name']=='pdfcraft-fonts' and pkg.get('source') is None:
+            inter_notice=root.parents[1]/'assets'/'fonts'/'OFL-Inter.txt'
+            if not inter_notice.is_file():
+                raise RuntimeError('Missing bundled PDFCraft Inter font license')
+            candidates.append(inter_notice)
         for folder in [root,*list(root.parents)[:3]]:
             if not folder.is_dir():continue
             for file in folder.iterdir():

@@ -494,6 +494,96 @@ void main() {
     await capture(tester, 'pdf-page-text-031');
   });
 
+  testWidgets('PDF touch inserts searchable text on a zoomed rotated page', (
+    tester,
+  ) async {
+    final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+    addTearDown(backend.close);
+    final original = await backend.edit(pdfTextFixture(), {
+      'action': 'rotate_cw',
+      'page': 0,
+    });
+    await present(
+      tester,
+      NativePdfScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: original, name: 'Insert text.pdf'),
+      ),
+    );
+    await readingMode(tester, 'Чтение', 'По одной, горизонтально');
+    await tool(tester, 'Изменить', 'Вставить текст');
+    const text = 'Текст в выбранном месте';
+    final input = find.byKey(const Key('pdf-insert-text-input'));
+    final canvas = find.byKey(const Key('pdf-page-canvas'));
+    await tester.enterText(input, text);
+    await tester.pumpAndSettle();
+    await press(tester, 'Выбрать место');
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Коснитесь страницы, чтобы вставить текст'),
+      findsOneWidget,
+    );
+    final initial = tester.getRect(canvas);
+    await tester.tapAt(Offset(initial.right - .5, initial.center.dy));
+    await until(
+      tester,
+      () => input.evaluate().isNotEmpty,
+      'placement rejected',
+    );
+    expect(tester.widget<TextField>(input).controller!.text, text);
+    expect(panel(tester).undo, isNull);
+
+    await press(tester, 'Выбрать место');
+    await tester.pumpAndSettle();
+    final center = tester.getCenter(canvas);
+    final viewport = tester.state<PdfViewportState>(find.byType(PdfViewport));
+    final initialScale = viewport.transform.value.getMaxScaleOnAxis();
+    final a = await tester.createGesture(pointer: 1);
+    final b = await tester.createGesture(pointer: 2);
+    await a.down(center - const Offset(24, 0));
+    await b.down(center + const Offset(24, 0));
+    await tester.pump();
+    for (var step = 1; step <= 4; step++) {
+      final distance = 24.0 + step * 8;
+      await a.moveTo(center - Offset(distance, 0));
+      await b.moveTo(center + Offset(distance, 0));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await a.up();
+    await b.up();
+    await tester.pumpAndSettle();
+    final zoom = viewport.transform.value.getMaxScaleOnAxis();
+    expect(zoom, greaterThan(initialScale));
+    expect(panel(tester).undo, isNull);
+
+    final page = tester.getRect(canvas);
+    await tester.tapAt(
+      page.topLeft + Offset(page.width * .4, page.height * .55),
+    );
+    await until(tester, () => panel(tester).undo != null, 'text inserted');
+    final saved = await save(tester, 'Сохранить PDF');
+    final blocks = (await backend.pdfTextBlocks(saved, 0)).blocks;
+    expect(
+      blocks.map((block) => block.text),
+      containsAll([text, 'Original title for this page', 'Keep this line']),
+    );
+    expect((await backend.inspect(saved))['pages'][0]['rotation'], 90);
+    expect(viewport.transform.value.getMaxScaleOnAxis(), closeTo(zoom, .001));
+    await capture(tester, 'pdf-insert-text-032');
+    await history(tester, true);
+    final undo = await save(tester, 'Сохранить PDF');
+    expect(
+      (await backend.pdfTextBlocks(undo, 0)).blocks.map((block) => block.text),
+      isNot(contains(text)),
+    );
+    await history(tester, false);
+    final redo = await save(tester, 'Сохранить PDF');
+    expect(
+      (await backend.pdfTextBlocks(redo, 0)).blocks.map((block) => block.text),
+      contains(text),
+    );
+  });
+
   testWidgets(
     'PDF native rotation fits landscape, arbitrary reorder and undo survive export',
     (tester) async {
