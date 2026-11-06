@@ -67,6 +67,21 @@ final class PdfPageRenderer {
     return data;
   }
 
+  Future<String> recognize(int session, int page) async {
+    _platformCheck();
+    if (session <= 0 || page < 0) {
+      throw RangeError('Invalid PDF OCR session/page');
+    }
+    final text = await _channel.invokeMethod<String>(
+      'recognizePage',
+      <String, Object>{'session': session, 'page': page},
+    );
+    if (text == null || text.length > 64 * 1024) {
+      throw const FormatException('Invalid Android PDF OCR response');
+    }
+    return text.trim();
+  }
+
   Future<void> close(int session) async {
     _platformCheck();
     if (session <= 0) return;

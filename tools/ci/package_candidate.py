@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from verify_android_apk import verify
+from stage_pdf_ocr import verify_apk as verify_pdf_ocr
 
 
 def release_tag(ref, version):
@@ -27,6 +28,8 @@ def release_tag(ref, version):
 def main():
     apk = Path('build/app/outputs/flutter-apk/app-arm64-v8a-profile.apk')
     report = verify(apk)
+    verify_pdf_ocr(apk)
+    report['pdfOcrAssetsVerified'] = True
     sdk = Path(os.environ['ANDROID_HOME']) / 'build-tools' / '36.0.0'
     permissions = subprocess.check_output([str(sdk / 'aapt'), 'dump', 'permissions', str(apk)], text=True)
     if re.search(r'android\.permission\.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)', permissions):

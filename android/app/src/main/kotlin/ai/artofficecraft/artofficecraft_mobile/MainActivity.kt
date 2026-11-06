@@ -41,6 +41,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private val worker = Executors.newSingleThreadExecutor()
+    private val pdfOcr by lazy { PdfOcr(applicationContext) }
     private var active: PdfSession? = null
     private var nextId = 0
 
@@ -142,10 +143,11 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
-                "renderPage" -> {
+                "renderPage", "recognizePage" -> {
+                    val recognize = call.method == "recognizePage"
                     val id = call.argument<Int>("session")
                     val pageIndex = call.argument<Int>("page")
-                    val width = call.argument<Int>("width")
+                    val width = if (recognize) 1440 else call.argument<Int>("width")
                     if (id == null || id <= 0 ||
                         pageIndex == null || pageIndex < 0 ||
                         width == null || width !in 96..1600
@@ -159,13 +161,21 @@ class MainActivity : FlutterActivity() {
                             require(session != null && session.id == id) {
                                 "PDF document session is no longer active"
                             }
-                            val png = renderPage(session, pageIndex, width)
-                            runOnUiThread { result.success(png) }
-                        } catch (_: Exception) {
+                            val bitmap = renderPage(session, pageIndex, width)
+                            val output = try {
+                                if (recognize) pdfOcr.recognize(bitmap)
+                                else encodePng(bitmap)
+                            } finally {
+                                bitmap.recycle()
+                            }
+                            runOnUiThread { result.success(output) }
+                        } catch (error: Throwable) {
+                            if (error !is Exception && error !is LinkageError) throw error
                             runOnUiThread {
                                 result.error(
-                                    "PDF_RENDER",
-                                    "Cannot render this page or the PDF session is closed",
+                                    if (recognize) "PDF_OCR" else "PDF_RENDER",
+                                    if (recognize) "Cannot recognize this page"
+                                    else "Cannot render this page or the PDF session is closed",
                                     null,
                                 )
                             }
@@ -228,7 +238,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun renderPage(session: PdfSession, index: Int, widthRequest: Int): ByteArray {
+    private fun renderPage(session: PdfSession, index: Int, widthRequest: Int): Bitmap {
         require(index < session.renderer.pageCount) { "Invalid page" }
         session.renderer.openPage(index).use { page ->
             require(page.width > 0 && page.height > 0) { "Invalid page dimensions" }
@@ -243,17 +253,19 @@ class MainActivity : FlutterActivity() {
             try {
                 bitmap.eraseColor(Color.WHITE)
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                return ByteArrayOutputStream().use { output ->
-                    require(bitmap.compress(Bitmap.CompressFormat.PNG, 90, output)) {
-                        "Cannot encode PNG"
-                    }
-                    output.toByteArray()
-                }
-            } finally {
+                return bitmap
+            } catch (error: Throwable) {
                 bitmap.recycle()
+                throw error
             }
         }
     }
+
+    private fun encodePng(bitmap: Bitmap): ByteArray =
+        ByteArrayOutputStream().use { output ->
+            require(bitmap.compress(Bitmap.CompressFormat.PNG, 90, output)) { "Cannot encode PNG" }
+            output.toByteArray()
+        }
 
     override fun onDestroy() {
         worker.execute { closeActive() }

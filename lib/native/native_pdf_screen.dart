@@ -3,6 +3,7 @@ import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
 import '../ui/pdf_viewport.dart';
 import '../ui/page_reading.dart';
+import 'pdf_ocr_panel.dart';
 import 'pdf_outline_panel.dart';
 import 'pdf_text_panel.dart';
 import '../workspace/draft_store.dart';
@@ -395,6 +396,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     final document = contents;
     final text = insertionText.text.trim();
     if (busy || document == null || text.isEmpty) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
     FocusManager.instance.primaryFocus?.unfocus();
     toolPanel.currentState?.setExpanded(false);
     setState(() {
@@ -550,6 +552,17 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         if (!identical(contents, document) || selected != page) return;
         await edit('replace_text_block', block: block, text: text);
       },
+    );
+  }
+
+  Widget ocrPanel() {
+    final session = _session;
+    final page = selected;
+    return PdfOcrPanel(
+      key: ValueKey((session, page)),
+      recognize: busy || session == null
+          ? null
+          : () => _pageRenderer.recognize(session, page),
     );
   }
 
@@ -722,6 +735,11 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       },
       overrides: {
         'Режим чтения': readingModeTool(reading),
+        'Скан и OCR': EditorTool(
+          'Скан и OCR',
+          Icons.document_scanner_outlined,
+          builder: (_) => ocrPanel(),
+        ),
         'Текст PDF': EditorTool(
           'Текст PDF',
           Icons.text_fields,

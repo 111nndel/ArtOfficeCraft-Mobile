@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
+import 'dart:ui' as ui;
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
@@ -31,22 +33,82 @@ Uint8List pdfTextFixture() {
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
     '<< /Length ${stream.length} >>\nstream\n${stream}endstream',
   ];
-  final pdf = StringBuffer('%PDF-1.4\n');
+  return pdfObjects(objects.map(ascii.encode).toList());
+}
+
+Uint8List pdfObjects(List<List<int>> objects) {
+  final pdf = BytesBuilder();
+  void append(String text) => pdf.add(ascii.encode(text));
+  append('%PDF-1.4\n');
   final offsets = <int>[];
   for (final (index, object) in objects.indexed) {
     offsets.add(pdf.length);
-    pdf.write('${index + 1} 0 obj\n$object\nendobj\n');
+    append('${index + 1} 0 obj\n');
+    pdf.add(object);
+    append('\nendobj\n');
   }
   final xref = pdf.length;
-  pdf.write('xref\n0 ${objects.length + 1}\n0000000000 65535 f \n');
+  append('xref\n0 ${objects.length + 1}\n0000000000 65535 f \n');
   for (final offset in offsets) {
-    pdf.writeln('${offset.toString().padLeft(10, '0')} 00000 n ');
+    append('${offset.toString().padLeft(10, '0')} 00000 n \n');
   }
-  pdf.write(
+  append(
     'trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n'
     'startxref\n$xref\n%%EOF\n',
   );
-  return Uint8List.fromList(ascii.encode(pdf.toString()));
+  return pdf.takeBytes();
+}
+
+Future<Uint8List> scanFixture() async {
+  const width = 1000, height = 440;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder)..drawColor(Colors.white, BlendMode.src);
+  final painter = TextPainter(
+    text: const TextSpan(
+      text: 'ПРОВЕРКА ТЕКСТА\nOFFLINE TEST',
+      style: TextStyle(fontFamily: 'Roboto', fontSize: 64, color: Colors.black),
+    ),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  painter.paint(canvas, const Offset(60, 100));
+  painter.dispose();
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width, height);
+  picture.dispose();
+  final data = (await image.toByteData())!;
+  final pixels = data.buffer.asUint8List(
+    data.offsetInBytes,
+    data.lengthInBytes,
+  );
+  image.dispose();
+  final rgb = Uint8List(width * height * 3);
+  for (var i = 0, j = 0; i < pixels.length; i += 4, j += 3) {
+    rgb[j] = pixels[i];
+    rgb[j + 1] = pixels[i + 1];
+    rgb[j + 2] = pixels[i + 2];
+  }
+  final compressed = zlib.encode(rgb);
+  const commands = 'q 600 0 0 264 0 0 cm /Scan Do Q\n';
+  return pdfObjects([
+    ascii.encode('<< /Type /Catalog /Pages 2 0 R >>'),
+    ascii.encode('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    ascii.encode(
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 264] '
+      '/Resources << /XObject << /Scan 4 0 R >> >> /Contents 5 0 R >>',
+    ),
+    [
+      ...ascii.encode(
+        '<< /Type /XObject /Subtype /Image /Width $width /Height $height '
+        '/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode '
+        '/Length ${compressed.length} >>\nstream\n',
+      ),
+      ...compressed,
+      ...ascii.encode('\nendstream'),
+    ],
+    ascii.encode(
+      '<< /Length ${commands.length} >>\nstream\n${commands}endstream',
+    ),
+  ]);
 }
 
 void main() {
@@ -582,6 +644,33 @@ void main() {
       (await backend.pdfTextBlocks(redo, 0)).blocks.map((block) => block.text),
       contains(text),
     );
+  });
+
+  testWidgets('Offline OCR reads Russian and English from an image-only PDF', (
+    tester,
+  ) async {
+    final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+    addTearDown(backend.close);
+    final bytes = await scanFixture();
+    expect((await backend.pdfTextBlocks(bytes, 0)).blocks, isEmpty);
+    await present(
+      tester,
+      NativePdfScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: bytes, name: 'Scan.pdf'),
+      ),
+    );
+    await tool(tester, 'Изменить', 'Скан и OCR');
+    await press(tester, 'Распознать страницу');
+    final output = find.byKey(const Key('pdf-ocr-result'));
+    await until(tester, () => output.evaluate().isNotEmpty, 'OCR text');
+    final text = tester.widget<SelectableText>(output).data!;
+    expect(text, contains('ПРОВЕРКА ТЕКСТА'));
+    expect(text, contains('OFFLINE TEST'));
+    expect(panel(tester).undo, isNull);
+    await capture(tester, 'pdf-ocr-033');
+    await press(tester, 'Скопировать распознанный текст');
+    expect((await Clipboard.getData(Clipboard.kTextPlain))?.text, text);
   });
 
   testWidgets(
