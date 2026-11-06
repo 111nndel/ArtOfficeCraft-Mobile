@@ -29,11 +29,12 @@ can copy app-private screenshot files.
 
 Only the test debug manifest temporarily receives INTERNET for the Flutter VM
 service. It is restored byte-for-byte on normal completion or a Python exception,
-including command timeouts. The job then explicitly rebuilds `lib/main.dart` as an
-ordinary profile application. Its network permissions, bundled notices, native
-16-KiB alignment, ZIP alignment and signature must pass. The two existing ADB
-scripts then exercise real DocumentsUI filters/imports, held-finger resizing,
-undo and two sequential recent imports followed by force-stop/reopen.
+including command timeouts. The job then builds `lib/main.dart` as an ordinary
+release APK and checks the manifest, bundled notices and native 16-KiB
+alignment. A disposable QA certificate signs this APK and a profile build
+recreated with version 0.33.0 for x86_64. The ADB checks import two files in the
+profile build, install the release APK over it and reopen both recent copies.
+They also check DocumentsUI filters, touch resizing and undo on the release APK.
 
 The `android-16-qa` artifact retains logs, logcat, screenshots, permission/package
 reports and `summary.json` for seven days, including partial evidence on failure.

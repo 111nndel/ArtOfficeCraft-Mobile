@@ -14,10 +14,9 @@ is present on the repository's default branch; branch pushes work beforehand.
    `upstream/engines.lock.json`, Rust 1.99.1 tests and an ARM64 release core built
    with Android NDK 28.2.13676358. Cargo uses `--locked`; engine pins are never
    automatically advanced. Licence texts are regenerated from resolved sources.
-3. An ordinary offline ARM64 profile APK, with application identity, signature,
-   permissions, ZIP integrity, native 16-KiB alignment and licence checks.
-   Candidate artifacts expire after seven days. They use an ephemeral runner
-   debug certificate and are for inspection, not updates to existing installs.
+3. An unsigned offline ARM64 release APK, with checks for application identity,
+   disabled Android debugging, permissions, ZIP integrity, native 16-KiB alignment
+   and licence texts. Candidate artifacts expire after seven days.
 4. For version tags in the original repository only, a separate job downloads
    that run's candidate and signs it with the established preview key. It does
    not check out or run project source. Only this job receives a writable token
@@ -38,9 +37,9 @@ Actions are pinned to full upstream commit SHAs. The signing environment
 deployment is allowed. Test/build jobs receive no signing key. No
 `pull_request_target`, self-hosted runner or automatic merge is used.
 
-The workflow does **not** currently run Android emulator tests, visual checks,
-ordinary-app force-stop/SAF scenarios or physical Vivo tests. Those remain separate
-QA requirements. A successful cloud build is not evidence of full editor fidelity.
+The Android 16 job covers editor scenarios, screenshots and an in-place upgrade
+of the ordinary app. See [Android CI coverage](android-ci.md). Physical-device
+checks and visual inspection of representative documents are separate QA work.
 Hosted runner images, Java security patches and downloaded engine artifacts can
 change, so this is a version-pinned pipeline, not a claim of bit-for-bit rebuilds.
 

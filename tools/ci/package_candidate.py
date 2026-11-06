@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from verify_android_apk import verify
+from verify_android_apk import verify, verify_release_manifest
 from stage_pdf_ocr import verify_apk as verify_pdf_ocr
 
 
@@ -26,7 +26,7 @@ def release_tag(ref, version):
 
 
 def main():
-    apk = Path('build/app/outputs/flutter-apk/app-arm64-v8a-profile.apk')
+    apk = Path('build/app/outputs/flutter-apk/app-arm64-v8a-release.apk')
     report = verify(apk)
     verify_pdf_ocr(apk)
     report['pdfOcrAssetsVerified'] = True
@@ -35,8 +35,9 @@ def main():
     if re.search(r'android\.permission\.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)', permissions):
         raise ValueError('Offline permission policy failed')
     subprocess.run([str(sdk / 'zipalign'), '-c', '-P', '16', '4', str(apk)], check=True)
-    subprocess.run([str(sdk / 'apksigner'), 'verify', str(apk)], check=True)
     identity = subprocess.check_output([str(sdk / 'aapt'), 'dump', 'badging', str(apk)], text=True)
+    verify_release_manifest(identity)
+    report['nonDebuggable'] = True
     version = re.search(r'^version: ([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)$', Path('pubspec.yaml').read_text(), re.M)
     if version is None:
         raise ValueError('Unsupported pubspec version')
@@ -71,6 +72,7 @@ def main():
     notes = notes.replace('## Known Limitations', download + '## Known Limitations', 1)
     notes += ('\n\n## Build & Verification\n\n'
               '- Flutter unit/widget tests, Rust tests and APK package checks passed.\n'
+              '- The published APK uses Flutter release mode with Android debugging disabled.\n'
               '- Publication requires Android 16 emulator and ordinary-app checks in the same run; '
               'this build alone does not prove complete editor fidelity.\n'
               '- The existing development preview signing certificate is used.\n'

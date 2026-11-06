@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.33.0.**
+**Current preview — alpha 0.34.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -19,7 +19,7 @@ PowerPoint can move and resize supported objects. PDF can save notes, edit
 supported paragraphs, insert text at a touched location and recognize
 Russian and English on a scanned page for copying.
 Word builds only the paragraphs near the viewport.
-See the [0.33.0 release notes and limits](docs/release-0.33.0-alpha.1.md).
+See the [0.34.0 release notes and limits](docs/release-0.34.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

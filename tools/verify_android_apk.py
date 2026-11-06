@@ -9,6 +9,11 @@ import zipfile
 from pathlib import Path
 
 
+def verify_release_manifest(badging):
+    if any(line.strip() == 'application-debuggable' for line in badging.splitlines()):
+        raise ValueError('The public APK allows Android debugging')
+
+
 def verify(path):
     libraries = []
     with zipfile.ZipFile(path) as apk, open(path, 'rb') as raw:

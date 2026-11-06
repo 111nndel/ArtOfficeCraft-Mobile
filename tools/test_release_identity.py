@@ -17,5 +17,11 @@ class ReleaseIdentityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 candidate.release_tag('refs/heads/codex/release-' + suffix, '0.24.0')
 
+    def test_manifest_verification_rejects_the_android_debuggable_marker(self):
+        badging = "application: label='ArtOfficeCraft Mobile'\n"
+        candidate.verify_release_manifest(badging)
+        with self.assertRaisesRegex(ValueError, 'allows Android debugging'):
+            candidate.verify_release_manifest(badging + 'application-debuggable\n')
+
 if __name__ == '__main__':
     unittest.main()

@@ -27,6 +27,10 @@ try {
     if (($permissions -join "`n") -match 'android.permission.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)') {
         throw 'Offline policy violated: network permission in final APK'
     }
+    $badging = & (Join-Path $buildTools 'aapt.exe') dump badging $apk
+    if ($LASTEXITCODE -ne 0 -or $badging -contains 'application-debuggable') {
+        throw 'Public APK must have Android debugging disabled'
+    }
     # Java warnings are stderr diagnostics, not signature failure. Windows
     # PowerShell can turn redirected native stderr into a terminating error.
     $previousErrorAction = $ErrorActionPreference

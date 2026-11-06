@@ -81,8 +81,8 @@ jobs:
           cp build/native-candidate/libartoffice_core.so android/app/src/main/jniLibs/arm64-v8a/
           cp build/native-candidate/rust-licenses.json assets/legal/rust-licenses.json
           cmp build/native-candidate/engines.lock.json upstream/engines.lock.json
-      - name: Build ordinary application
-        run: flutter build apk --profile --split-per-abi --target-platform android-arm64
+      - name: Build ordinary release application
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64
       - name: Verify and package candidate
         env:
           RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
@@ -215,16 +215,20 @@ jobs:
               raise ValueError('Tag does not match app version')
           if j['sourceCommit'] != os.environ['SOURCE_COMMIT']:
               raise ValueError('Source commit mismatch')
-          if j['sha256BeforeSigning'] != hashlib.sha256(Path('candidate/app-arm64-v8a-profile.apk').read_bytes()).hexdigest():
+          if j['sha256BeforeSigning'] != hashlib.sha256(Path('candidate/app-arm64-v8a-release.apk').read_bytes()).hexdigest():
               raise ValueError('Candidate hash mismatch')
           PY
           mkdir -p deliver
           apk="deliver/ArtOfficeCraft-Mobile-$version-arm64-preview.apk"
           bt="$ANDROID_HOME/build-tools/36.0.0"
-          "$bt/apksigner" sign --ks "$key" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out "$apk" candidate/app-arm64-v8a-profile.apk
+          "$bt/apksigner" sign --ks "$key" --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android --out "$apk" candidate/app-arm64-v8a-release.apk
           "$bt/apksigner" verify --verbose --print-certs "$apk" > deliver/signature.txt
           grep -F 'Signer #1 certificate SHA-256 digest: 4e16cc21d19cdcde840361cd34fbdcfbf901b48c6f8ff66ef473e7ddf4a05005' deliver/signature.txt
           "$bt/zipalign" -c -P 16 4 "$apk"
+          "$bt/aapt" dump badging "$apk" > deliver/badging.txt
+          if grep -Fxq 'application-debuggable' deliver/badging.txt; then
+            echo 'Public APK allows Android debugging'; exit 1
+          fi
           "$bt/aapt" dump permissions "$apk" > deliver/permissions.txt
           if grep -Eq 'android.permission.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)' deliver/permissions.txt; then exit 1; fi
           python - <<'PY'

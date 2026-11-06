@@ -14,7 +14,11 @@ import shutil
 import signal
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from verify_android_apk import verify_release_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 SUITES = ('native_editors', 'office_features', 'range_features', 'clipboard_features')
@@ -117,23 +121,52 @@ def checks(device, output):
             subprocess.run([*adb, 'uninstall', 'ai.artofficecraft.artofficecraft_mobile'],
                            stdout=stream, stderr=subprocess.STDOUT,
                            timeout=30, check=False)
-        run(['flutter', 'build', 'apk', '--profile', '--target=lib/main.dart',
+        run(['flutter', 'build', 'apk', '--release', '--target=lib/main.dart',
              '--target-platform=android-x64', '--split-per-abi', '--no-pub'],
             output / 'ordinary-build.log')
-        apk = ROOT / 'build/app/outputs/flutter-apk/app-x86_64-profile.apk'
+        apks = ROOT / 'build/app/outputs/flutter-apk'
+        apk = apks / 'app-x86_64-release.apk'
         run([sys.executable, 'tools/verify_android_apk.py', apk],
             output / 'package-verification.json')
         build_tools = sdk / 'build-tools/36.0.0'
         permissions = capture([build_tools / 'aapt', 'dump', 'permissions', apk])
         (output / 'permissions.txt').write_text(permissions + '\n')
         verify_offline(permissions)
-        run([build_tools / 'apksigner', 'verify', apk], output / 'signature.txt')
-        run([build_tools / 'zipalign', '-c', '-P', '16', '4', apk],
-            output / 'zipalign.txt')
-        for script in ('test_grid_touch_import', 'test_recent_imports'):
-            run(['node', f'tools/{script}.js', device, apk],
-                output / f'{script}.log', timeout=420)
+        badging = capture([build_tools / 'aapt', 'dump', 'badging', apk])
+        verify_release_manifest(badging)
+        (output / 'badging.txt').write_text(badging + '\n')
+        # Recreate the previous profile build identity with the same application
+        # code. The old public ARM64 APK cannot run on this x86_64 test target.
+        run(['flutter', 'build', 'apk', '--profile', '--target=lib/main.dart',
+             '--target-platform=android-x64', '--split-per-abi', '--no-pub',
+             '--build-name=0.33.0', '--build-number=39'],
+            output / 'upgrade-baseline-build.log')
+        baseline = apks / 'app-x86_64-profile.apk'
+        baseline_badging = capture([build_tools / 'aapt', 'dump', 'badging', baseline])
+        if "versionName='0.33.0'" not in baseline_badging or 'application-debuggable' not in baseline_badging.splitlines():
+            raise RuntimeError('Expected the 0.33.0 debuggable profile baseline')
+        with TemporaryDirectory(prefix='aoc-android-qa-') as directory:
+            private = Path(directory)
+            key = private / 'qa.p12'
+            run(['keytool', '-genkeypair', '-storetype', 'PKCS12', '-keystore', key,
+                 '-storepass', 'android', '-alias', 'qa', '-keyalg', 'RSA',
+                 '-keysize', '2048', '-validity', '2', '-dname', 'CN=Android QA'],
+                output / 'qa-key.log')
+            signed = private / 'release.apk'
+            signed_baseline = private / 'profile.apk'
+            for source, target in ((baseline, signed_baseline), (apk, signed)):
+                run([build_tools / 'apksigner', 'sign', '--ks', key, '--ks-key-alias', 'qa',
+                     '--ks-pass', 'pass:android', '--out', target, source],
+                    output / f'qa-sign-{target.stem}.log')
+            run([build_tools / 'apksigner', 'verify', signed], output / 'signature.txt')
+            run([build_tools / 'zipalign', '-c', '-P', '16', '4', signed],
+                output / 'zipalign.txt')
+            run(['node', 'tools/test_recent_imports.js', device, signed_baseline, signed],
+                output / 'test_recent_imports.log', timeout=420)
+            run(['node', 'tools/test_grid_touch_import.js', device, signed],
+                output / 'test_grid_touch_import.log', timeout=420)
         report['ordinaryApp'] = {'offline': True, 'native16KiBAligned': True,
+                                 'nonDebuggable': True, 'profileToReleaseUpgrade': True,
                                  'systemPickerAndTouchResize': True,
                                  'recentCopiesAfterForceStop': True}
         report['passed'] = True

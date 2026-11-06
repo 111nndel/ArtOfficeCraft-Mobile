@@ -1,9 +1,9 @@
-// Ordinary Android 16 app: real SAF filter/import and touch-only size changes.
+// Ordinary Android 16 app: recent copies survive restart and an optional APK update.
 // Uses only a dedicated emulator and generated QA files under Download/AOC-QA-018.
-// Run: node tools/test_grid_touch_import.js emulator-5582 path/to/x86_64.apk
+// Run: node tools/test_recent_imports.js emulator-5582 baseline.apk [update.apk]
 const fs=require('fs'), path=require('path'), cp=require('child_process');
-const device=process.argv[2], apk=process.argv[3];
-if(!/^emulator-\d+$/.test(device||'') || !apk || !fs.existsSync(apk))throw Error('Pass a QA emulator and APK');
+const device=process.argv[2], apk=process.argv[3], update=process.argv[4];
+if(!/^emulator-\d+$/.test(device||'') || !apk || !fs.existsSync(apk) || (update && !fs.existsSync(update)))throw Error('Pass a QA emulator and APK');
 const adb=path.join(process.env.ANDROID_HOME||process.env.ANDROID_SDK_ROOT,'platform-tools',process.platform==='win32'?'adb.exe':'adb');
 const proof=path.resolve('build/recents-021'),pkg='ai.artofficecraft.artofficecraft_mobile';
 fs.mkdirSync(proof,{recursive:true});
@@ -91,6 +91,7 @@ async function selectFixture(name) {
   command(['shell','input','keyevent','4']);
   await pause(600);
   command(['shell','am','force-stop',pkg]);
+  if(update)command(['install','-r',path.resolve(update)]);
   command(['shell','am','start','-n',pkg+'/.MainActivity','-f','0x10008000']);
   tap(await waitFor(n=>n.class==='android.widget.EditText','Find a file'));
   command(['shell','input','text',runKey]);
@@ -104,6 +105,6 @@ async function selectFixture(name) {
   tap(await waitFor(n=>n.label.startsWith(second),'Second recent'));
   await waitFor(n=>n.label.startsWith(second),'Reopened second');
   await waitFor(/Imported merged title/);
-  const result={passed:true,device,api:36,files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened']};
+  const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened']};
   fs.writeFileSync(path.join(proof,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});
