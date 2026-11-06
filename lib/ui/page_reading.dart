@@ -278,6 +278,7 @@ class ContinuousPages extends StatefulWidget {
     required this.onPageChanged,
     required this.pageBuilder,
     this.enabled = true,
+    this.reveal,
   });
 
   final List<Size> sizes;
@@ -285,6 +286,7 @@ class ContinuousPages extends StatefulWidget {
   final ValueChanged<int> onPageChanged;
   final IndexedWidgetBuilder pageBuilder;
   final bool enabled;
+  final ({int page, double fraction})? reveal;
 
   @override
   State<ContinuousPages> createState() => ContinuousPagesState();
@@ -301,6 +303,10 @@ class ContinuousPagesState extends State<ContinuousPages> {
   int? _reportedPage;
   static const _margin = 8.0;
   static const _gap = 12.0;
+  double get _documentHeight => math.max(
+    _tops.last + _heights.last + _margin,
+    _tops.last - _margin + _viewport.height,
+  );
 
   @override
   void initState() {
@@ -311,7 +317,8 @@ class ContinuousPagesState extends State<ContinuousPages> {
   @override
   void didUpdateWidget(covariant ContinuousPages oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.page != oldWidget.page && widget.page != _reportedPage) {
+    if ((widget.page != oldWidget.page && widget.page != _reportedPage) ||
+        (widget.reveal != null && widget.reveal != oldWidget.reveal)) {
       _queueJump();
     }
     if (widget.enabled && !oldWidget.enabled) _positionChanged();
@@ -322,16 +329,23 @@ class ContinuousPagesState extends State<ContinuousPages> {
     _jumpQueued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _jumpQueued = false;
-      if (mounted) fitWidth();
+      if (!mounted) return;
+      final reveal = widget.reveal;
+      fitWidth(fraction: reveal?.page == widget.page ? reveal!.fraction : 0);
     });
   }
 
-  void fitWidth() {
+  void fitWidth({double fraction = 0}) {
     if (_tops.isEmpty) return;
     final page = widget.page.clamp(0, _tops.length - 1);
     _reportedPage = page;
+    final top = _tops[page] - _margin;
+    final offset = (fraction * _heights[page] - _viewport.height / 4).clamp(
+      0.0,
+      math.max(0.0, _documentHeight - _viewport.height - top),
+    );
     transform.value = Matrix4.identity()
-      ..setTranslationRaw(0, _margin - _tops[page], 0);
+      ..setTranslationRaw(0, -top - offset, 0);
   }
 
   int _pageAt(double y) {
@@ -396,10 +410,7 @@ class ContinuousPagesState extends State<ContinuousPages> {
     builder: (_, box) {
       _measure(box.biggest);
       if (_tops.isEmpty) return const SizedBox.shrink();
-      final height = math.max(
-        _tops.last + _heights.last + _margin,
-        _tops.last - _margin + _viewport.height,
-      );
+      final height = _documentHeight;
       return ColoredBox(
         color: const Color(0xffdce1e8),
         child: IgnorePointer(

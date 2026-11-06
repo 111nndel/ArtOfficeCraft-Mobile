@@ -62,6 +62,9 @@ class EditorToolPanelState extends State<EditorToolPanel> {
   List<int> _path = [];
   bool expanded = false;
   String get _id => '$_section${_path.map((i) => '/$i').join()}';
+  bool isShowing(String label) =>
+      expanded && _tool(_section, _path)?.label == label;
+
   void setExpanded(bool value) {
     if (_overlay.isShowing) _overlay.hide();
     setState(() => expanded = value);

@@ -80,6 +80,200 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   final targetPage = TextEditingController();
   final noteText = TextEditingController();
   final insertionText = TextEditingController();
+  final _findText = TextEditingController();
+  List<PdfFindHit> _findHits = [];
+  int _findIndex = -1, _findRun = 0, _searchedPages = 0;
+  bool _finding = false, _findIncomplete = false, _findCapped = false;
+  String? _findMessage;
+
+  PdfFindHit? get _findHit => _findIndex < 0 ? null : _findHits[_findIndex];
+
+  Rect? _highlightFor(int page) {
+    final hit = _findHit;
+    if (hit == null || hit.page != page) return null;
+    final [left, top, right, bottom] = hit.rect;
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
+
+  void _resetFind() {
+    _findRun++;
+    _finding = _findIncomplete = _findCapped = false;
+    _findHits = [];
+    _findIndex = -1;
+    _searchedPages = 0;
+    _findMessage = null;
+  }
+
+  Future<void> _find() async {
+    final backend = engine;
+    final document = contents;
+    final query = _findText.text.trim();
+    if (backend is! PdfSearchDocuments ||
+        document == null ||
+        busy ||
+        _finding ||
+        query.isEmpty) {
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    final count = pages.length;
+    const limit = 512;
+    setState(() {
+      _resetFind();
+      _finding = true;
+    });
+    final run = _findRun;
+    final hits = <PdfFindHit>[];
+    var incomplete = false, capped = false;
+    try {
+      var start = 0;
+      while (start < count && hits.length < limit && !capped) {
+        final result = await (backend as PdfSearchDocuments).pdfFind(
+          document,
+          query,
+          start,
+          limit - hits.length,
+        );
+        if (!mounted || run != _findRun) return;
+        if (toolPanel.currentState?.isShowing('Поиск') != true) {
+          setState(_resetFind);
+          return;
+        }
+        if (result.next <= start || result.next > count) {
+          throw const FormatException('Invalid PDF search progress');
+        }
+        hits.addAll(result.hits);
+        incomplete |= result.incomplete;
+        capped = result.capped;
+        start = result.next;
+        setState(() => _searchedPages = start);
+      }
+      setState(() {
+        _finding = false;
+        _findHits = hits;
+        _findCapped = capped || start < count;
+        _findIncomplete = incomplete;
+        if (hits.isEmpty) {
+          _findMessage = incomplete
+              ? 'В проверенном тексте совпадений нет'
+              : 'Совпадений не найдено';
+        }
+      });
+      if (hits.isNotEmpty && !busy) {
+        final index = hits.indexWhere((hit) => hit.page >= selected);
+        _showFindHit(index < 0 ? 0 : index);
+        toolPanel.currentState?.setExpanded(false);
+      } else if (hits.isNotEmpty) {
+        setState(() => _findIndex = 0);
+      }
+    } catch (_) {
+      if (!mounted || run != _findRun) return;
+      setState(() {
+        _finding = false;
+        _findMessage = 'Не удалось выполнить поиск PDF';
+      });
+    }
+  }
+
+  void _showFindHit(int index) {
+    if (busy || _findHits.isEmpty) return;
+    setState(() {
+      _findIndex = index % _findHits.length;
+      selected = _findHits[_findIndex].page;
+    });
+    queueDraft();
+  }
+
+  Widget _findPanel() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: const Key('pdf-find-input'),
+          controller: _findText,
+          textInputAction: TextInputAction.search,
+          maxLength: 256,
+          decoration: InputDecoration(
+            labelText: tr(context, 'Текст для поиска'),
+          ),
+          onChanged: (_) => setState(_resetFind),
+          onSubmitted: (_) => _find(),
+        ),
+        const SizedBox(height: 8),
+        if (_finding) ...[
+          const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+          UiText('Проверено страниц: $_searchedPages из ${pages.length}'),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: () => setState(_resetFind),
+            child: const UiText('Отменить поиск'),
+          ),
+        ] else ...[
+          FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+            onPressed: busy || _findText.text.trim().isEmpty ? null : _find,
+            icon: const Icon(Icons.search),
+            label: const UiText('Найти в PDF'),
+          ),
+          if (_findMessage != null) UiText(_findMessage!),
+          if (_findCapped)
+            const UiText('Показаны первые 512 результатов')
+          else if (_findIncomplete)
+            const UiText('Текст некоторых страниц прочитан не полностью'),
+        ],
+      ],
+    );
+  }
+
+  Widget _findBar() => Padding(
+    padding: const EdgeInsetsDirectional.only(start: 16, end: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(
+                'Результат ${_findIndex + 1} из ${_findHits.length}',
+                key: const Key('pdf-find-count'),
+              ),
+              if (_findCapped || _findIncomplete)
+                UiText(
+                  'Частичные результаты',
+                  style: Theme.of(context).textTheme.bodySmall,
+                )
+              else
+                UiText(
+                  'Страница ${_findHit!.page + 1} из ${pages.length}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: tr(context, 'Предыдущее совпадение'),
+          onPressed: busy || _findHits.length <= 1
+              ? null
+              : () => _showFindHit(_findIndex - 1),
+          icon: const Icon(Icons.keyboard_arrow_up),
+        ),
+        IconButton(
+          tooltip: tr(context, 'Следующее совпадение'),
+          onPressed: busy || _findHits.length <= 1
+              ? null
+              : () => _showFindHit(_findIndex + 1),
+          icon: const Icon(Icons.keyboard_arrow_down),
+        ),
+        IconButton(
+          tooltip: tr(context, 'Закрыть поиск'),
+          onPressed: () => setState(_resetFind),
+          icon: const Icon(Icons.close),
+        ),
+      ],
+    ),
+  );
+
   int insertionSize = 16;
   ({Uint8List document, String text, int size})? placement;
   Object _viewDocument = Object();
@@ -207,6 +401,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     setState(() {
       _session = newSession;
       contents = data;
+      _resetFind();
       pages = raw.map((x) => Map<String, dynamic>.from(x as Map)).toList();
       bookmarks = outline;
       notes = comments;
@@ -224,6 +419,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       if (name != null) {
         history.clear();
         filename = name;
+        _findText.clear();
         noteText.clear();
         insertionText.clear();
       }
@@ -240,6 +436,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     targetPage.dispose();
     noteText.dispose();
     insertionText.dispose();
+    _findText.dispose();
     reading.dispose();
     final previous = _session;
     if (previous != null) {
@@ -751,6 +948,13 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         ],
       },
       overrides: {
+        'Поиск': EditorTool(
+          'Поиск',
+          Icons.search,
+          builder: (_) => engine is PdfSearchDocuments
+              ? _findPanel()
+              : const UiText('Поиск по PDF недоступен'),
+        ),
         'Режим чтения': readingModeTool(reading),
         'Скан и OCR': EditorTool(
           'Скан и OCR',
@@ -958,37 +1162,40 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
                           itemBuilder: (c, i) => pageThumb(i),
                         ),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: UiText(
-                              placement != null
-                                  ? 'Коснитесь страницы, чтобы вставить текст'
-                                  : 'Страница ${selected + 1} из ${pages.length}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
-                          if (placement != null)
-                            IconButton(
-                              tooltip: tr(context, 'Отмена'),
-                              onPressed: () =>
-                                  toolPanel.currentState?.setExpanded(true),
-                              icon: const Icon(Icons.close),
-                            )
-                          else
-                            IconButton(
-                              tooltip: tr(context, 'Миниатюры страниц'),
-                              isSelected: showThumbnails,
-                              onPressed: () => setState(
-                                () => showThumbnails = !showThumbnails,
+                    if (_findHit != null && !toolsExpanded && placement == null)
+                      _findBar()
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: UiText(
+                                placement != null
+                                    ? 'Коснитесь страницы, чтобы вставить текст'
+                                    : 'Страница ${selected + 1} из ${pages.length}',
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
-                              icon: const Icon(Icons.view_carousel_outlined),
                             ),
-                        ],
+                            if (placement != null)
+                              IconButton(
+                                tooltip: tr(context, 'Отмена'),
+                                onPressed: () =>
+                                    toolPanel.currentState?.setExpanded(true),
+                                icon: const Icon(Icons.close),
+                              )
+                            else
+                              IconButton(
+                                tooltip: tr(context, 'Миниатюры страниц'),
+                                isSelected: showThumbnails,
+                                onPressed: () => setState(
+                                  () => showThumbnails = !showThumbnails,
+                                ),
+                                icon: const Icon(Icons.view_carousel_outlined),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
                     if (busy) const LinearProgressIndicator(),
                   ],
                 ),
@@ -1005,9 +1212,14 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         page: selected,
         enabled: !busy,
         onPageChanged: selectPage,
+        reveal: switch (_highlightFor(selected)) {
+          final Rect rect => (page: selected, fraction: rect.top),
+          null => null,
+        },
         pageBuilder: (_, page) => _PdfStripPage(
           key: ValueKey((_session, page)),
           render: () => raster(page),
+          highlight: _highlightFor(page),
           onPageTap: placement == null
               ? null
               : (point) => placeText(page, point),
@@ -1023,6 +1235,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         pageWidth: pageSizes[page].width,
         pageHeight: pageSizes[page].height,
         pageIdentity: (_viewDocument, page),
+        highlight: _highlightFor(page),
         turnAxis: reading.value.swipeAxis,
         onTurn: (delta) => selectPage(selected + delta),
         onPageTap: placement == null ? null : (point) => placeText(page, point),
@@ -1032,9 +1245,15 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
 }
 
 class _PdfStripPage extends StatefulWidget {
-  const _PdfStripPage({super.key, required this.render, this.onPageTap});
+  const _PdfStripPage({
+    super.key,
+    required this.render,
+    this.onPageTap,
+    this.highlight,
+  });
 
   final Future<Uint8List> Function() render;
+  final Rect? highlight;
   final ValueChanged<Offset>? onPageTap;
 
   @override
@@ -1050,6 +1269,7 @@ class _PdfStripPageState extends State<_PdfStripPage> {
       image: image,
       fit: BoxFit.contain,
       onPageTap: widget.onPageTap,
+      highlight: widget.highlight,
     ),
   );
 }

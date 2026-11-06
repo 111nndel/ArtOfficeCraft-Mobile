@@ -72,6 +72,10 @@ final class PdfCraftBridge {
   late final _DartTextBlocks _textBlocks = _library
       .lookupFunction<_NativeTextBlocks, _DartTextBlocks>('ac_pdf_text_blocks');
 
+  late final _DartEdit _find = _library.lookupFunction<_NativeEdit, _DartEdit>(
+    'ac_pdf_find',
+  );
+
   static PdfCraftBridge? tryOpen() {
     if (!Platform.isAndroid) return null;
     try {
@@ -139,12 +143,23 @@ final class PdfCraftBridge {
     return _inspectWith(bytes, (input, len) => _textBlocks(input, len, page));
   }
 
-  Uint8List edit(Uint8List bytes, Map<String, dynamic> request) {
+  Map<String, dynamic> find(Uint8List bytes, Map<String, dynamic> request) =>
+      jsonDecode(utf8.decode(_request(bytes, request, _find)))
+          as Map<String, dynamic>;
+
+  Uint8List edit(Uint8List bytes, Map<String, dynamic> request) =>
+      _request(bytes, request, _edit);
+
+  Uint8List _request(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+    _DartEdit call,
+  ) {
     final p = _allocate(bytes);
     final payload = Uint8List.fromList(utf8.encode(jsonEncode(request)));
     final q = _allocate(payload);
     try {
-      return _collect(_edit(p, bytes.length, q, payload.length));
+      return _collect(call(p, bytes.length, q, payload.length));
     } finally {
       calloc.free(q);
       calloc.free(p);

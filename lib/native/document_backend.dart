@@ -79,6 +79,23 @@ abstract interface class PdfTextDocuments {
   Future<PdfTextPage> pdfTextBlocks(Uint8List bytes, int page);
 }
 
+typedef PdfFindHit = ({int page, List<double> rect});
+typedef PdfFindBatch = ({
+  List<PdfFindHit> hits,
+  int next,
+  bool incomplete,
+  bool capped,
+});
+
+abstract interface class PdfSearchDocuments {
+  Future<PdfFindBatch> pdfFind(
+    Uint8List bytes,
+    String query,
+    int start,
+    int limit,
+  );
+}
+
 abstract interface class GridDocuments {
   Future<Map<String, dynamic>> gridView(
     Uint8List bytes,
@@ -219,6 +236,7 @@ final class NativeDocumentBackend
         DocumentBackendLifetime,
         DocumentImages,
         PdfTextDocuments,
+        PdfSearchDocuments,
         GridDocuments,
         GridFilterDocuments,
         GridClipboardDocuments {
@@ -315,6 +333,32 @@ final class NativeDocumentBackend
           (id: item['id'] as int, text: item['text'] as String),
       ],
       limited: result['limited'] == true,
+    );
+  }
+
+  @override
+  Future<PdfFindBatch> pdfFind(
+    Uint8List bytes,
+    String query,
+    int start,
+    int limit,
+  ) async {
+    final result = await _call('pdfFind', bytes, {
+      'query': query,
+      'start': start,
+      'limit': limit,
+    }) as Map;
+    return (
+      hits: [
+        for (final item in result['hits'] as List)
+          (
+            page: item['page'] as int,
+            rect: [for (final n in item['rect'] as List) (n as num).toDouble()],
+          ),
+      ],
+      next: result['next'] as int,
+      incomplete: result['incomplete'] == true,
+      capped: result['capped'] == true,
     );
   }
 
@@ -532,6 +576,7 @@ class _NativeEngine {
         final engine = bridge as PdfCraftBridge;
         if (operation == 'create') return engine.create();
         if (operation == 'inspect') return engine.inspect(bytes!);
+        if (operation == 'pdfFind') return engine.find(bytes!, request);
         if (operation == 'pdfTextBlocks') {
           return engine.textBlocks(bytes!, request['page'] as int);
         }

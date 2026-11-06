@@ -18,6 +18,7 @@ class PdfViewport extends StatefulWidget {
     this.onTurn,
     this.onPageTap,
     this.pageIdentity,
+    this.highlight,
   });
   final Future<Uint8List>? image;
   final double pageWidth, pageHeight;
@@ -25,6 +26,7 @@ class PdfViewport extends StatefulWidget {
   final ValueChanged<int>? onTurn;
   final ValueChanged<Offset>? onPageTap;
   final Object? pageIdentity;
+  final Rect? highlight;
   @override
   State<PdfViewport> createState() => PdfViewportState();
 }
@@ -35,17 +37,28 @@ class PdfViewportState extends State<PdfViewport> {
   double get _widthScale => (_size.width - 16) / widget.pageWidth;
   double get _pageScale =>
       math.min(_widthScale, (_size.height - 16) / widget.pageHeight);
-  void _fit(double scale) {
+  void _fit(double scale, {double fraction = 0}) {
     if (!scale.isFinite || scale <= 0) return;
+    final height = widget.pageHeight * scale;
+    final scroll = (fraction * height - _size.height / 4).clamp(
+      0.0,
+      math.max(0.0, height - _size.height + 16),
+    );
     transform.value = Matrix4.identity()
       ..setEntry(0, 0, scale)
       ..setEntry(1, 1, scale)
       ..setEntry(2, 2, scale)
-      ..setTranslationRaw((_size.width - widget.pageWidth * scale) / 2, 8, 0);
+      ..setTranslationRaw(
+        (_size.width - widget.pageWidth * scale) / 2,
+        8 - scroll.toDouble(),
+        0,
+      );
   }
 
   void fitWidth() => _fit(_widthScale);
   void fitPage() => _fit(_pageScale);
+
+  void _reveal() => _fit(_widthScale, fraction: widget.highlight?.top ?? 0);
 
   bool _atEdge(int delta) => canTurnAtEdge(
     transform,
@@ -60,9 +73,10 @@ class PdfViewportState extends State<PdfViewport> {
     if ((widget.pageIdentity ?? widget.image) !=
             (oldWidget.pageIdentity ?? oldWidget.image) ||
         widget.pageWidth != oldWidget.pageWidth ||
-        widget.pageHeight != oldWidget.pageHeight) {
+        widget.pageHeight != oldWidget.pageHeight ||
+        (widget.highlight != null && widget.highlight != oldWidget.highlight)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) fitWidth();
+        if (mounted) _reveal();
       });
     }
   }
@@ -80,7 +94,7 @@ class PdfViewportState extends State<PdfViewport> {
       _size = box.biggest;
       if (resized) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) fitWidth();
+          if (mounted) _reveal();
         });
       }
       return PageTurnGesture(
@@ -107,6 +121,7 @@ class PdfViewportState extends State<PdfViewport> {
                 child: PdfPageImage(
                   image: widget.image,
                   onPageTap: widget.onPageTap,
+                  highlight: widget.highlight,
                 ),
               ),
             ),
@@ -123,10 +138,12 @@ class PdfPageImage extends StatelessWidget {
     required this.image,
     this.fit = BoxFit.fill,
     this.onPageTap,
+    this.highlight,
   });
 
   final Future<Uint8List>? image;
   final BoxFit fit;
+  final Rect? highlight;
 
   /// A touch point as fractions of the visible page from its top left.
   final ValueChanged<Offset>? onPageTap;
@@ -154,11 +171,20 @@ class PdfPageImage extends StatelessWidget {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        final page = Image.memory(
-          snapshot.data!,
-          fit: fit,
-          gaplessPlayback: false,
-        );
+        final png = snapshot.data!;
+        Widget page = Image.memory(png, fit: fit, gaplessPlayback: false);
+        if (highlight case final Rect bounds when png.length >= 24) {
+          final header = ByteData.sublistView(png, 16, 24);
+          final imageSize = Size(
+            header.getUint32(0).toDouble(),
+            header.getUint32(4).toDouble(),
+          );
+          page = CustomPaint(
+            key: const Key('pdf-search-highlight'),
+            foregroundPainter: _PdfMatchHighlight(bounds, imageSize, fit),
+            child: page,
+          );
+        }
         final onTap = onPageTap;
         if (onTap == null) return page;
         return LayoutBuilder(
@@ -178,4 +204,36 @@ class PdfPageImage extends StatelessWidget {
       },
     ),
   );
+}
+
+class _PdfMatchHighlight extends CustomPainter {
+  const _PdfMatchHighlight(this.bounds, this.imageSize, this.fit);
+
+  final Rect bounds;
+  final Size imageSize;
+  final BoxFit fit;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fitted = applyBoxFit(fit, imageSize, size);
+    final area = Alignment.center.inscribe(
+      fitted.destination,
+      Offset.zero & size,
+    );
+    canvas.drawRect(
+      Rect.fromLTRB(
+        area.left + bounds.left * area.width,
+        area.top + bounds.top * area.height,
+        area.left + bounds.right * area.width,
+        area.top + bounds.bottom * area.height,
+      ),
+      Paint()..color = const Color(0x66ffc107),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PdfMatchHighlight oldDelegate) =>
+      bounds != oldDelegate.bounds ||
+      imageSize != oldDelegate.imageSize ||
+      fit != oldDelegate.fit;
 }

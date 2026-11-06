@@ -11,6 +11,7 @@ import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
 import 'package:artofficecraft_mobile/ui/editor_tools.dart';
 import 'package:artofficecraft_mobile/ui/office_theme.dart';
+import 'package:artofficecraft_mobile/ui/page_reading.dart';
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +22,7 @@ import 'package:integration_test/integration_test.dart';
 import 'grid_layout_fixture.dart';
 import 'worker_media_fixture.dart';
 
-Uint8List pdfTextFixture() {
+Uint8List pdfTextFixture({int secondPageHeight = 842}) {
   const stream =
       'BT /F1 18 Tf 40 760 Td (Original title for this page) Tj ET\n'
       'BT /F1 12 Tf 40 650 Td (Keep this line) Tj ET\n';
@@ -29,7 +30,7 @@ Uint8List pdfTextFixture() {
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 595 842] >>',
     '<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>',
-    '<< /Type /Page /Parent 2 0 R >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 $secondPageHeight] >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
     '<< /Length ${stream.length} >>\nstream\n${stream}endstream',
   ];
@@ -646,6 +647,75 @@ void main() {
     );
   });
 
+  testWidgets('PDF search highlights matches and follows both reading modes', (
+    tester,
+  ) async {
+    final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+    addTearDown(backend.close);
+    final rotated = await backend.edit(pdfTextFixture(secondPageHeight: 1800), {
+      'action': 'rotate_cw',
+      'page': 0,
+    });
+    final original = await backend.edit(rotated, {
+      'action': 'insert_text',
+      'page': 1,
+      'text': 'This is on page two',
+      'x': .15,
+      'y': .82,
+      'size': 18,
+    });
+    await present(
+      tester,
+      NativePdfScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: original, name: 'Search.pdf'),
+      ),
+    );
+    await readingMode(tester, 'Чтение', 'По одной, горизонтально');
+    await tool(tester, 'Чтение', 'Поиск');
+    await tester.enterText(find.byKey(const Key('pdf-find-input')), 'THIS');
+    await tester.pumpAndSettle();
+    await press(tester, 'Найти в PDF');
+    final highlight = find.byKey(const Key('pdf-search-highlight'));
+    await until(
+      tester,
+      () => highlight.evaluate().isNotEmpty,
+      'first PDF match',
+    );
+    expect(find.text('Результат 1 из 3'), findsOneWidget);
+    expect(
+      tester.widget<PdfViewport>(find.byType(PdfViewport)).highlight,
+      isNotNull,
+    );
+
+    await tester.tap(find.byTooltip('Предыдущее совпадение'));
+    await until(tester, () => highlight.evaluate().isNotEmpty, 'wrapped match');
+    expect(find.text('Результат 3 из 3'), findsOneWidget);
+    expect(find.text('Страница 2 из 2'), findsOneWidget);
+    final view = tester.state<PdfViewportState>(find.byType(PdfViewport));
+    expect(view.transform.value.getTranslation().y, lessThan(0));
+
+    await readingMode(tester, 'Чтение', 'Непрерывно вниз');
+    await collapse(tester);
+    await until(tester, () => highlight.evaluate().isNotEmpty, 'strip match');
+    expect(
+      tester.widget<ContinuousPages>(find.byType(ContinuousPages)).page,
+      1,
+    );
+    await tester.tap(find.byTooltip('Следующее совпадение'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<ContinuousPages>(find.byType(ContinuousPages)).page,
+      0,
+    );
+    expect(find.text('Результат 1 из 3'), findsOneWidget);
+    await capture(tester, 'pdf-find-036');
+    await tester.tap(find.byTooltip('Закрыть поиск'));
+    await tester.pumpAndSettle();
+    expect(highlight, findsNothing);
+    expect(panel(tester).undo, isNull);
+  });
+
   testWidgets(
     'Offline OCR copies and saves searchable text over the same image',
     (tester) async {
@@ -699,6 +769,12 @@ void main() {
       final saved = await save(tester, 'Сохранить PDF');
       expect(saved, isNot(equals(bytes)));
       expect((await backend.pdfTextBlocks(saved, 0)).blocks, isEmpty);
+      for (final query in ['проверка текста', 'offline test']) {
+        final found = await backend.pdfFind(saved, query, 0, 512);
+        expect(found.hits.single.page, 0);
+        expect(found.incomplete, isFalse);
+      }
+
       await expectLater(
         backend.edit(saved, {
           'action': 'add_ocr_layer',

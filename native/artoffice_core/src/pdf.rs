@@ -230,6 +230,75 @@ fn insert_text(doc: &mut Document, page: &Page, index: usize, request: &J) -> Re
     stamp_text(doc, page, index, "AOCText", content, resources)
 }
 
+// PDFCraft reading blocks include forms and OCR text. Return a paragraph
+// rectangle rather than estimating individual character positions.
+fn search_rect(doc: &Document, page: &Page, [x0, y0, x1, y1]: [f64; 4]) -> Option<[f64; 4]> {
+    let [a, b, c, d, e, f] = page.view_matrix(doc);
+    let (width, height) = page.display_size(doc);
+    let det = a * d - b * c;
+    let point = |x: f64, y: f64| [
+        ((d * (x - e) - c * (y - f)) / det / width).clamp(0.0, 1.0),
+        (1.0 - (a * (y - f) - b * (x - e)) / det / height).clamp(0.0, 1.0),
+    ];
+    let [ax, ay] = point(x0, y0);
+    let [bx, by] = point(x1, y1);
+    let rect = [ax.min(bx), ay.min(by), ax.max(bx), ay.max(by)];
+    (rect.iter().all(|n| n.is_finite()) && rect[0] < rect[2] && rect[1] < rect[3])
+        .then_some(rect)
+}
+
+fn search_pages(doc: &Document, request: &J) -> Result<Vec<u8>, String> {
+    let needle = request["query"].as_str().filter(|text| text.len() <= 1024)
+        .ok_or("Invalid PDF search query")?;
+    let needle = needle.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    if needle.is_empty() { return Err("Empty PDF search query".into()); }
+    let all = pages(doc);
+    if !(1..=10000).contains(&all.len()) { return Err("PDF page count out of bounds".into()); }
+    let start = request["start"].as_u64().filter(|n| *n < all.len() as u64)
+        .ok_or("Invalid PDF search start page")? as usize;
+    let limit = request["limit"].as_u64().filter(|n| (1..=512).contains(n))
+        .ok_or("Invalid PDF search result limit")? as usize;
+    let mut hits = Vec::new();
+    let mut incomplete = false;
+    let mut next = start;
+    let timer = std::time::Instant::now();
+    for (index, page) in all.iter().enumerate().skip(start).take(24) {
+        next = index + 1;
+        match reading_blocks_checked(doc, index) {
+            Ok(result) => {
+                incomplete |= result.truncated;
+                for block in result.blocks {
+                    if !block.text.split_whitespace().collect::<Vec<_>>().join(" ")
+                        .to_lowercase().contains(&needle) { continue; }
+                    let Some(rect) = search_rect(doc, page, block.rect) else { continue; };
+                    if hits.len() == limit {
+                        return serde_json::to_vec(&json!({
+                            "hits":hits, "next":next, "incomplete":true, "capped":true
+                        })).map_err(|err| err.to_string());
+                    }
+                    hits.push(json!({"page":index,"rect":rect}));
+                }
+            }
+            Err(_) => incomplete = true,
+        }
+        // Yield between batches so navigation and edits can use the same worker.
+        if timer.elapsed().as_millis() >= 150 { break; }
+    }
+    serde_json::to_vec(&json!({
+        "hits":hits,"next":next,"incomplete":incomplete,"capped":false
+    })).map_err(|err| err.to_string())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ac_pdf_find(data: *const u8, len: usize, query: *const u8, query_len: usize) -> AcResult {
+    protect(|| {
+        let doc = parse(decode(data, len, MAX_INPUT_BYTES)?)?;
+        let request = serde_json::from_slice(decode(query, query_len, 4096)?)
+            .map_err(|err| err.to_string())?;
+        search_pages(&doc, &request)
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_pdf_text_blocks(data: *const u8, len: usize, page: usize) -> AcResult {
     protect(|| {
@@ -432,6 +501,15 @@ mod tests{
         let text = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join(" ");
         assert!(text.contains("Кириллица") && text.contains("English"));
         assert!(blocks.iter().all(|block| block.invisible));
+        let found: J = serde_json::from_slice(&search_pages(&pdf, &json!({
+            "query":"КИРИЛЛИЦА English", "start":0, "limit":10
+        })).unwrap()).unwrap();
+        assert_eq!(found["hits"].as_array().unwrap().len(), 1, "{text}");
+        assert_eq!(found["hits"][0]["page"], 0);
+        let bounds = found["hits"][0]["rect"].as_array().unwrap();
+        assert!((bounds[0].as_f64().unwrap() - 0.15).abs() < 0.02);
+        assert!((bounds[2].as_f64().unwrap() - 0.4).abs() < 0.02);
+
         assert_eq!(mutate(&saved, &request).unwrap_err(), "This PDF page already contains searchable text");
         let visible = mutate(&source, &json!({
             "action":"insert_text", "page":0, "text":"Existing PDF text", "x":0.1, "y":0.1, "size":16
