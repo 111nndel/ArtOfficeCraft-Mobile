@@ -121,8 +121,10 @@ def checks(device, output):
             subprocess.run([*adb, 'uninstall', 'ai.artofficecraft.artofficecraft_mobile'],
                            stdout=stream, stderr=subprocess.STDOUT,
                            timeout=30, check=False)
+        # Let Flutter regenerate the plugin registrant for each build mode.
+        # --no-pub would reuse the integration-test registrant in release mode.
         run(['flutter', 'build', 'apk', '--release', '--target=lib/main.dart',
-             '--target-platform=android-x64', '--split-per-abi', '--no-pub'],
+             '--target-platform=android-x64', '--split-per-abi'],
             output / 'ordinary-build.log')
         apks = ROOT / 'build/app/outputs/flutter-apk'
         apk = apks / 'app-x86_64-release.apk'
@@ -138,7 +140,7 @@ def checks(device, output):
         # Recreate the previous profile build identity with the same application
         # code. The old public ARM64 APK cannot run on this x86_64 test target.
         run(['flutter', 'build', 'apk', '--profile', '--target=lib/main.dart',
-             '--target-platform=android-x64', '--split-per-abi', '--no-pub',
+             '--target-platform=android-x64', '--split-per-abi',
              '--build-name=0.33.0', '--build-number=39'],
             output / 'upgrade-baseline-build.log')
         baseline = apks / 'app-x86_64-profile.apk'
