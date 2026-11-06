@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.34.0.**
+**Current preview — alpha 0.35.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -17,9 +17,10 @@ Excel sorts selected rows and filters them by values or blank cells.
 PDF bookmarks are searchable. PDF and PowerPoint can jump by page or slide number.
 PowerPoint can move and resize supported objects. PDF can save notes, edit
 supported paragraphs, insert text at a touched location and recognize
-Russian and English on a scanned page for copying.
+Russian and English on a scanned page. The recognized words can be copied or
+added as invisible, searchable text in the exported PDF copy.
 Word builds only the paragraphs near the viewport.
-See the [0.34.0 release notes and limits](docs/release-0.34.0-alpha.1.md).
+See the [0.35.0 release notes and limits](docs/release-0.35.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
@@ -29,7 +30,7 @@ future tagged publication requires that job to pass. See
 | DOCX / WordCraft | Create/read DOCX, edit plain paragraphs directly on the page with cursor/selection, selected bold/italic/underline/font size/color and paragraph alignment/spacing/left indent; undo/redo; exact case-sensitive find/replace in text paragraphs, with run preservation; save a new copy. Tables are excluded from search. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
 | XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; edge headings with optional pinning and Go to cell inside View. Imported dimensions/hidden rows and columns/merged regions; finger-driven row/column resizing with undo/redo and saved XLSX sizes. Compact edge headings, imported shrink-to-fit and AutoSum/recalculate commands. Continuous 10–500% zoom, surrounding empty cells, exact visible-cell queries and touch inertia; no thumbnail/overview mode. Touch range handles with edge scrolling, range style/clear operations (4096 cells), named new sheets, positional undo/redo and reopening the saved active sheet are connected. Copy/paste ranges across files/sheets with rebased formulas and styles; values/formulas/formats-only modes and external TSV. Insert/delete whole rows and columns from the selected range, with adjusted references across sheets and undo/redo. Charts and complex styles remain incomplete. |
 | PPTX / DeckCraft | Create/import PPTX, add/delete/reorder slides, add/edit text, undo/redo and Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
-| PDF / PDFCraft + Android | Android page rendering, thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page. Searchable OCR export, forms and digital signing remain in progress. |
+| PDF / PDFCraft + Android | Android page rendering, thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page or adding a searchable text layer to the saved PDF. Forms and digital signing remain in progress. |
 
 ### Architecture and current limits
 

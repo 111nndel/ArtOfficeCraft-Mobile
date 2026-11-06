@@ -646,32 +646,84 @@ void main() {
     );
   });
 
-  testWidgets('Offline OCR reads Russian and English from an image-only PDF', (
-    tester,
-  ) async {
-    final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
-    addTearDown(backend.close);
-    final bytes = await scanFixture();
-    expect((await backend.pdfTextBlocks(bytes, 0)).blocks, isEmpty);
-    await present(
-      tester,
-      NativePdfScreen(
-        backend: backend,
-        launch: EditorLaunch(bytes: bytes, name: 'Scan.pdf'),
-      ),
-    );
-    await tool(tester, 'Изменить', 'Скан и OCR');
-    await press(tester, 'Распознать страницу');
-    final output = find.byKey(const Key('pdf-ocr-result'));
-    await until(tester, () => output.evaluate().isNotEmpty, 'OCR text');
-    final text = tester.widget<SelectableText>(output).data!;
-    expect(text, contains('ПРОВЕРКА ТЕКСТА'));
-    expect(text, contains('OFFLINE TEST'));
-    expect(panel(tester).undo, isNull);
-    await capture(tester, 'pdf-ocr-033');
-    await press(tester, 'Скопировать распознанный текст');
-    expect((await Clipboard.getData(Clipboard.kTextPlain))?.text, text);
-  });
+  testWidgets(
+    'Offline OCR copies and saves searchable text over the same image',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+      addTearDown(backend.close);
+      final bytes = await scanFixture();
+      expect((await backend.pdfTextBlocks(bytes, 0)).blocks, isEmpty);
+      await present(
+        tester,
+        NativePdfScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: bytes, name: 'Scan.pdf'),
+        ),
+      );
+      await readingMode(tester, 'Чтение', 'По одной, горизонтально');
+      final raster = find.descendant(
+        of: find.byKey(const Key('pdf-page-canvas')),
+        matching: find.byType(Image),
+      );
+      await until(
+        tester,
+        () => raster.evaluate().isNotEmpty,
+        'original raster',
+      );
+      final originalImage =
+          (tester.widget<Image>(raster).image as MemoryImage).bytes;
+      await tool(tester, 'Изменить', 'Скан и OCR');
+      await press(tester, 'Распознать страницу');
+      final output = find.byKey(const Key('pdf-ocr-result'));
+      await until(tester, () => output.evaluate().isNotEmpty, 'OCR text');
+      final text = tester.widget<SelectableText>(output).data!;
+      expect(text, contains('ПРОВЕРКА ТЕКСТА'));
+      expect(text, contains('OFFLINE TEST'));
+      expect(panel(tester).undo, isNull);
+      await capture(tester, 'pdf-ocr-033');
+      await press(tester, 'Скопировать распознанный текст');
+      expect((await Clipboard.getData(Clipboard.kTextPlain))?.text, text);
+      await press(tester, 'Добавить текстовый слой');
+      await until(
+        tester,
+        () => panel(tester).undo != null,
+        'OCR layer applied',
+      );
+      await until(
+        tester,
+        () => raster.evaluate().isNotEmpty,
+        'raster with OCR',
+      );
+      final after = (tester.widget<Image>(raster).image as MemoryImage).bytes;
+      expect(after, originalImage);
+      final saved = await save(tester, 'Сохранить PDF');
+      expect(saved, isNot(equals(bytes)));
+      expect((await backend.pdfTextBlocks(saved, 0)).blocks, isEmpty);
+      await expectLater(
+        backend.edit(saved, {
+          'action': 'add_ocr_layer',
+          'page': 0,
+          'words': [
+            {
+              'text': 'Duplicate',
+              'rect': [.1, .1, .2, .2],
+            },
+          ],
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'This PDF page already contains searchable text',
+          ),
+        ),
+      );
+      await history(tester, true);
+      expect(await save(tester, 'Сохранить PDF'), bytes);
+      await history(tester, false);
+      expect(await save(tester, 'Сохранить PDF'), saved);
+    },
+  );
 
   testWidgets(
     'PDF native rotation fits landscape, arbitrary reorder and undo survive export',

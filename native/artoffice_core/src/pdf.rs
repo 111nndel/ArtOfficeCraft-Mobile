@@ -3,7 +3,7 @@
 use std::{fmt::Write as _, sync::Arc};
 use pdfcraft_annot::{Meta, NewAnnotation, NoteIcon, Shape, Style, add_annotation};
 use pdfcraft_cos::{Document,Dict,Object,SaveOptions,write_full};
-use pdfcraft_edit::{BlockStyle, TextBlock, TextSession, stamp, text::register_text_font, text_blocks};
+use pdfcraft_edit::{BlockStyle, TextBlock, TextSession, reading_blocks_checked, stamp, text::register_text_font, text_blocks};
 use pdfcraft_fonts::{document_latin_fonts, embedding::covers, pdf::Metrics, wrap_with};
 use pdfcraft_model::{pages,Page};
 use serde_json::{json,Value as J};
@@ -93,6 +93,92 @@ fn editable_block(block: &TextBlock) -> bool {
         && !block.editor_text.contains('\u{fffd}')
 }
 
+fn embedded_text_font(doc: &mut Document, page: &Page, index: usize, bytes: &[u8]) -> Result<(String, Dict, Metrics), String> {
+    let name = register_text_font(doc, index, bytes).map_err(|err| err.to_string())?;
+    let installed = doc.get(page.obj);
+    let resources = installed.as_dict().and_then(|d| d.get(b"Resources"))
+        .and_then(|o| doc.dict(o)).ok_or("Missing PDF page resources")?;
+    let fonts = resources.get(b"Font").and_then(|o| doc.dict(o))
+        .ok_or("Missing PDF page fonts")?;
+    let font = fonts.get(name.as_bytes()).and_then(|o| doc.dict(o))
+        .ok_or("Missing embedded PDF text font")?;
+    Ok((name, resources, Metrics::from_dict(doc, &font)))
+}
+
+fn stamp_text(doc: &mut Document, page: &Page, index: usize, tag: &str, content: String, resources: Dict) -> Result<(), String> {
+    stamp(doc, index, tag, content.into_bytes()).map_err(|err| err.to_string())?;
+    // stamp adds Helvetica for its own marks. Our text streams already have a
+    // font, so preserve their resource dictionary and any existing PCHelv.
+    doc.update_dict(page.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(resources)))
+        .map_err(|err| err.to_string())
+}
+
+fn write_text_hex(content: &mut String, bytes: &[u8]) -> std::fmt::Result {
+    content.push('<');
+    for byte in bytes {
+        write!(content, "{byte:02X}")?;
+    }
+    content.push_str("> Tj\n");
+    Ok(())
+}
+
+fn add_ocr_layer(doc: &mut Document, page: &Page, index: usize, request: &J) -> Result<(), String> {
+    if doc.permissions().is_some_and(|permission| !permission.modify()) {
+        return Err("This PDF restricts content editing".into());
+    }
+    let words = request["words"].as_array().filter(|words| (1..=4096).contains(&words.len()))
+        .ok_or("Expected recognized words with positions")?;
+    let source = reading_blocks_checked(doc, index).map_err(|err| err.to_string())?;
+    if source.truncated {
+        return Err("Could not check all existing text on this PDF page".into());
+    }
+    if source.blocks.iter().any(|block| !block.text.trim().is_empty()) {
+        return Err("This PDF page already contains searchable text".into());
+    }
+    let (width, height) = page.display_size(doc);
+    if ![width, height].iter().all(|n| n.is_finite() && *n > 0.0 && *n <= 10_000_000.0) {
+        return Err("Invalid PDF page dimensions".into());
+    }
+    let face = document_latin_fonts(false).into_iter().next().ok_or("PDF OCR font unavailable")?;
+    let (name, resources, metrics) = embedded_text_font(doc, page, index, face.bytes)?;
+    let matrix = page.view_matrix(doc).map(|n| format!("{n:.9}")).join(" ");
+    let mut content = format!("q\n{matrix} cm\n/OCR BMC\nBT\n3 Tr\n/{name} 1 Tf\n0 Tc 0 Tw 100 Tz 0 Ts\n");
+    let mut text_bytes = 0;
+    for word in words {
+        let text = word["text"].as_str()
+            .filter(|text| !text.trim().is_empty() && text.len() <= 1024 && !text.chars().any(char::is_control))
+            .ok_or("Invalid OCR word")?;
+        text_bytes += text.len();
+        if text_bytes > 256 * 1024 {
+            return Err("Too much OCR text on this PDF page".into());
+        }
+        let coords = word["rect"].as_array().filter(|rect| rect.len() == 4)
+            .ok_or("Missing OCR word bounds")?;
+        let mut rect = [0.0; 4];
+        for (index, value) in coords.iter().enumerate() {
+            rect[index] = value.as_f64().filter(|n| (0.0..=1.0).contains(n))
+                .ok_or("OCR bounds must be inside the PDF page")?;
+        }
+        let [left, top, right, bottom] = rect;
+        if left >= right || top >= bottom {
+            return Err("Empty OCR word bounds".into());
+        }
+        let encoded = metrics.encode(text).ok_or("The PDF OCR font does not support all recognized characters")?;
+        let advance = metrics.codes(&encoded).into_iter().map(|(code, _)| metrics.width(code)).sum::<f64>();
+        if advance <= 0.0 {
+            return Err("Invalid OCR word advance".into());
+        }
+        let x_scale = (right - left) * width / advance;
+        let y_scale = (bottom - top) * height / (metrics.ascent - metrics.descent);
+        let x = left * width;
+        let y = (1.0 - bottom) * height - metrics.descent * y_scale;
+        writeln!(content, "{x_scale:.8} 0 0 {y_scale:.8} {x:.6} {y:.6} Tm").map_err(|e| e.to_string())?;
+        write_text_hex(&mut content, &encoded).map_err(|e| e.to_string())?;
+    }
+    content.push_str("ET\nEMC\nQ\n");
+    stamp_text(doc, page, index, "AOCOcr", content, resources)
+}
+
 fn insert_text(doc: &mut Document, page: &Page, index: usize, request: &J) -> Result<(), String> {
     if doc.permissions().is_some_and(|permission| !permission.modify()) {
         return Err("This PDF restricts content editing".into());
@@ -118,15 +204,7 @@ fn insert_text(doc: &mut Document, page: &Page, index: usize, request: &J) -> Re
     }
     let face = document_latin_fonts(false).into_iter().find(|face| covers(face.bytes, text))
         .ok_or("The PDF insertion font does not support all characters in this text")?;
-    let name = register_text_font(doc, index, face.bytes).map_err(|err| err.to_string())?;
-    let installed = doc.get(page.obj);
-    let resources = installed.as_dict().and_then(|d| d.get(b"Resources"))
-        .and_then(|o| doc.dict(o)).ok_or("Missing PDF page resources")?;
-    let fonts = resources.get(b"Font").and_then(|o| doc.dict(o))
-        .ok_or("Missing PDF page fonts")?;
-    let font = fonts.get(name.as_bytes()).and_then(|o| doc.dict(o))
-        .ok_or("Missing embedded PDF text font")?;
-    let metrics = Metrics::from_dict(doc, &font);
+    let (name, resources, metrics) = embedded_text_font(doc, page, index, face.bytes)?;
     let advance = |bytes: &[u8]| metrics.codes(bytes).into_iter()
         .map(|(code, _)| metrics.width(code) * size).sum::<f64>();
     let lines = wrap_with(text, size, available, |s, _| {
@@ -145,18 +223,11 @@ fn insert_text(doc: &mut Document, page: &Page, index: usize, request: &J) -> Re
             return Err(no_room.into());
         }
         let baseline = first_baseline - leading * i as f64;
-        write!(content, "1 0 0 1 {left:.6} {baseline:.6} Tm\n<").map_err(|e| e.to_string())?;
-        for byte in bytes {
-            write!(content, "{byte:02X}").map_err(|e| e.to_string())?;
-        }
-        content.push_str("> Tj\n");
+        writeln!(content, "1 0 0 1 {left:.6} {baseline:.6} Tm").map_err(|e| e.to_string())?;
+        write_text_hex(&mut content, &bytes).map_err(|e| e.to_string())?;
     }
     content.push_str("ET\nQ\n");
-    stamp(doc, index, "AOCText", content.into_bytes()).map_err(|err| err.to_string())?;
-    // stamp adds a standard Helvetica resource for marks. This stream only uses
-    // Inter, so restore the pre-stamp dictionary, including any existing PCHelv.
-    doc.update_dict(page.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(resources)))
-        .map_err(|err| err.to_string())
+    stamp_text(doc, page, index, "AOCText", content, resources)
 }
 
 #[unsafe(no_mangle)]
@@ -231,6 +302,7 @@ pub extern "C" fn ac_pdf_edit(data:*const u8,n:usize,req:*const u8,req_len:usize
         if all.len()>10000{return Err("PDF too many pages".into());}
         if index>=all.len(){return Err("PDF page out of range".into());}
         match action {
+            "add_ocr_layer" => add_ocr_layer(&mut doc, &all[index], index, &j)?,
             "insert_text" => insert_text(&mut doc, &all[index], index, &j)?,
             "replace_text_block" => {
                 if doc.permissions().is_some_and(|permission| !permission.modify()) {
@@ -337,6 +409,34 @@ mod tests{
     fn edit(input:&[u8],action:&str,page:usize)->Vec<u8>{
         let s=json!({"action":action,"page":page}).to_string();
         result(ac_pdf_edit(input.as_ptr(),input.len(),s.as_ptr(),s.len())).unwrap()
+    }
+    #[test]
+    fn ocr_layer_reopens_as_invisible_unicode_and_refuses_duplicate_text() {
+        let source = result(ac_pdf_create(std::ptr::null(), 0)).unwrap();
+        let mutate = |bytes: &[u8], request: &J| {
+            let s = request.to_string();
+            result(ac_pdf_edit(bytes.as_ptr(), bytes.len(), s.as_ptr(), s.len()))
+        };
+        let request = json!({
+            "action":"add_ocr_layer", "page":0, "words":[
+                {"text":"Кириллица","rect":[0.15,0.1,0.28,0.14]},
+                {"text":"English","rect":[0.31,0.1,0.4,0.14]},
+            ]
+        });
+        let mut invalid = request.clone();
+        invalid["words"][1]["rect"][2] = json!(0.29);
+        assert!(mutate(&source, &invalid).is_err());
+        let saved = mutate(&source, &request).unwrap();
+        let pdf = parse(&saved).unwrap();
+        let blocks = reading_blocks_checked(&pdf, 0).unwrap().blocks;
+        let text = blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>().join(" ");
+        assert!(text.contains("Кириллица") && text.contains("English"));
+        assert!(blocks.iter().all(|block| block.invisible));
+        assert_eq!(mutate(&saved, &request).unwrap_err(), "This PDF page already contains searchable text");
+        let visible = mutate(&source, &json!({
+            "action":"insert_text", "page":0, "text":"Existing PDF text", "x":0.1, "y":0.1, "size":16
+        })).unwrap();
+        assert_eq!(mutate(&visible, &request).unwrap_err(), "This PDF page already contains searchable text");
     }
     #[test]
     fn pdf_create_duplicate_rotate_move_insert_delete(){

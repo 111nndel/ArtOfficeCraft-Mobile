@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/app_strings.dart';
+import 'pdf_page_renderer.dart';
 
 class PdfOcrPanel extends StatefulWidget {
-  const PdfOcrPanel({super.key, required this.recognize});
+  const PdfOcrPanel({
+    super.key,
+    required this.recognize,
+    required this.addLayer,
+  });
 
-  final Future<String> Function()? recognize;
+  final Future<PdfOcrResult> Function()? recognize;
+  final ValueChanged<List<PdfOcrWord>>? addLayer;
 
   @override
   State<PdfOcrPanel> createState() => _PdfOcrPanelState();
@@ -14,17 +20,17 @@ class PdfOcrPanel extends StatefulWidget {
 
 class _PdfOcrPanelState extends State<PdfOcrPanel> {
   bool _running = false, _failed = false;
-  String? _text;
+  PdfOcrResult? _result;
 
-  Future<void> _run(Future<String> Function() recognize) async {
+  Future<void> _run(Future<PdfOcrResult> Function() recognize) async {
     setState(() {
       _running = true;
       _failed = false;
-      _text = null;
+      _result = null;
     });
     try {
-      final text = await recognize();
-      if (mounted) setState(() => _text = text);
+      final result = await recognize();
+      if (mounted) setState(() => _result = result);
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     } finally {
@@ -35,7 +41,8 @@ class _PdfOcrPanelState extends State<PdfOcrPanel> {
   @override
   Widget build(BuildContext context) {
     final recognize = widget.recognize;
-    final text = _text;
+    final result = _result;
+    final text = result?.text;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -56,6 +63,16 @@ class _PdfOcrPanelState extends State<PdfOcrPanel> {
         if (text != null && text.isEmpty)
           const UiText('На странице не распознан текст'),
         if (text != null && text.isNotEmpty) ...[
+          if (result!.words.isNotEmpty)
+            FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: widget.addLayer == null
+                  ? null
+                  : () => widget.addLayer!(result.words),
+              child: const UiText('Добавить текстовый слой'),
+            )
+          else
+            const UiText('Координаты текста недоступны для сохранения'),
           OutlinedButton(
             style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
             onPressed: () async {

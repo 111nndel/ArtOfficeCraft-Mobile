@@ -156,6 +156,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
           message: 'The PDF insertion font does not support all characters in this text',
         ) =>
           'Некоторые символы недоступны в шрифте для вставки PDF.',
+        FormatException(
+          message: 'This PDF page already contains searchable text',
+        ) =>
+          'На этой странице уже есть текстовый слой.',
         _ => 'PDFCraft: $e',
       });
     } finally {
@@ -319,6 +323,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     String? text,
     PdfTextBlock? block,
     ({int page, Offset at, int size})? insertion,
+    List<PdfOcrWord>? ocrWords,
   }) => execute(() async {
     if (contents == null) return;
     if (action == 'delete') {
@@ -361,6 +366,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
           'y': insertion.at.dy,
           'size': insertion.size,
         },
+        if (ocrWords != null)
+          'words': [
+            for (final word in ocrWords) {'text': word.text, 'rect': word.rect},
+          ],
       });
       var next = action == 'move_to' ? to! : operationPage;
       if (action == 'move_up') next--;
@@ -374,7 +383,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
         preview: updated.preview,
         page: next,
         edited: true,
-        retainViewport: insertion != null,
+        retainViewport: insertion != null || ocrWords != null,
       );
       if (!mounted) return;
       history.push(previous, position: previousPage);
@@ -386,6 +395,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       } else if (insertion != null) {
         insertionText.clear();
         tip('Текст добавлен на страницу');
+      } else if (ocrWords != null) {
+        tip('Текстовый слой добавлен. Сохраните копию PDF.');
       } else {
         tip('Структура PDF изменена');
       }
@@ -563,6 +574,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       recognize: busy || session == null
           ? null
           : () => _pageRenderer.recognize(session, page),
+      addLayer: busy || session == null
+          ? null
+          : (words) {
+              if (session != _session || page != selected) return;
+              edit('add_ocr_layer', ocrWords: words);
+            },
     );
   }
 

@@ -461,6 +461,13 @@ const english = <String, String>{
   "На странице не распознан текст": "No text was recognized on this page",
   "Распознанный текст скопирован": "Recognized text copied",
   "Скопировать распознанный текст": "Copy recognized text",
+  "Добавить текстовый слой": "Add text layer",
+  "Координаты текста недоступны для сохранения":
+      "Text positions are unavailable for saving",
+  "На этой странице уже есть текстовый слой.":
+      "This page already has a text layer.",
+  "Текстовый слой добавлен. Сохраните копию PDF.":
+      "Text layer added. Save a PDF copy.",
   "Конвертация": "Convert",
   "Защита": "Protect",
   "Пароль и шифрование": "Password and encryption",

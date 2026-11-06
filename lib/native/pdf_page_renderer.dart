@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+typedef PdfOcrWord = ({String text, List<double> rect});
+typedef PdfOcrResult = ({String text, List<PdfOcrWord> words});
+
 /// Android first-party PdfRenderer with one open, app-private document session.
 /// PDFCraft Rust continues to own document editing and Save As.
 final class PdfPageRenderer {
@@ -67,19 +70,34 @@ final class PdfPageRenderer {
     return data;
   }
 
-  Future<String> recognize(int session, int page) async {
+  Future<PdfOcrResult> recognize(int session, int page) async {
     _platformCheck();
     if (session <= 0 || page < 0) {
       throw RangeError('Invalid PDF OCR session/page');
     }
-    final text = await _channel.invokeMethod<String>(
+    final result = await _channel.invokeMapMethod<String, Object?>(
       'recognizePage',
       <String, Object>{'session': session, 'page': page},
     );
-    if (text == null || text.length > 64 * 1024) {
+    if (result case {'text': String text, 'words': List rawWords}
+        when text.length <= 64 * 1024 && rawWords.length <= 4096) {
+      final words = <PdfOcrWord>[];
+      for (final entry in rawWords) {
+        if (entry case {'text': String word, 'rect': List rect}
+            when rect.length == 4 &&
+                rect.every((n) => n is num && n >= 0 && n <= 1)) {
+          words.add((
+            text: word,
+            rect: rect.cast<num>().map((n) => n.toDouble()).toList(),
+          ));
+        } else {
+          throw const FormatException('Invalid Android PDF OCR bounds');
+        }
+      }
+      return (text: text.trim(), words: words);
+    } else {
       throw const FormatException('Invalid Android PDF OCR response');
     }
-    return text.trim();
   }
 
   Future<void> close(int session) async {
