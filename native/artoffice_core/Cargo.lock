@@ -54,7 +54,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "artoffice_core"
-version = "0.30.0"
+version = "0.31.0"
 dependencies = [
  "deckcraft-model",
  "deckcraft-pptx",
@@ -66,6 +66,7 @@ dependencies = [
  "gridcraft-xlsx",
  "pdfcraft-annot",
  "pdfcraft-cos",
+ "pdfcraft-edit",
  "pdfcraft-model",
  "pdfcraft-organize",
  "serde_json",
@@ -825,6 +826,21 @@ dependencies = [
  "sha2",
  "stringprep",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "pdfcraft-edit"
+version = "0.18.2"
+dependencies = [
+ "kurbo",
+ "pdfcraft-annot",
+ "pdfcraft-content",
+ "pdfcraft-cos",
+ "pdfcraft-fonts",
+ "pdfcraft-model",
+ "sha2",
+ "thiserror 2.0.21",
+ "unicode-bidi",
 ]
 
 [[package]]

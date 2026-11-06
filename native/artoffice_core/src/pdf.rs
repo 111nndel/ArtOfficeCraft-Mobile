@@ -1,8 +1,9 @@
-//! Pinned PDFCraft COS + model integration. Limited page-structure edits.
+//! Pinned PDFCraft page structure, annotations and text edits.
 //! Navigation reads the upstream outline without executing bookmark actions.
 use std::sync::Arc;
 use pdfcraft_annot::{Meta, NewAnnotation, NoteIcon, Shape, Style, add_annotation};
 use pdfcraft_cos::{Document,Dict,Object,SaveOptions,write_full};
+use pdfcraft_edit::{BlockStyle, TextBlock, TextSession, text_blocks};
 use pdfcraft_model::{pages,Page};
 use serde_json::{json,Value as J};
 use super::{AcResult,decode,protect,MAX_INPUT_BYTES,MAX_TEXT_BYTES};
@@ -80,6 +81,34 @@ fn text_notes(doc: &Document, all: &[Page]) -> Vec<J> {
     notes
 }
 
+const MAX_TEXT_BLOCKS: usize = 256;
+const MAX_BLOCK_BYTES: usize = 16 * 1024;
+
+fn editable_block(block: &TextBlock) -> bool {
+    !block.invisible
+        && !block.editor_text.trim().is_empty()
+        && block.editor_text.len() <= MAX_BLOCK_BYTES
+        && block.editor_text.chars().count() <= 4096
+        && !block.editor_text.contains('\u{fffd}')
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ac_pdf_text_blocks(data: *const u8, len: usize, page: usize) -> AcResult {
+    protect(|| {
+        let doc = parse(decode(data, len, MAX_INPUT_BYTES)?)?;
+        if doc.permissions().is_some_and(|permission| !permission.modify()) {
+            return Err("This PDF restricts content editing".into());
+        }
+        let blocks = text_blocks(&doc, page).map_err(|err| err.to_string())?;
+        let mut visible = blocks.iter().enumerate().filter(|(_, block)| editable_block(block));
+        let items: Vec<J> = visible.by_ref().take(MAX_TEXT_BLOCKS)
+            .map(|(id, block)| json!({"id":id,"text":block.editor_text}))
+            .collect();
+        serde_json::to_vec(&json!({"blocks":items,"limited":visible.next().is_some()}))
+            .map_err(|err| err.to_string())
+    })
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_pdf_create(_: *const u8,_:usize)->AcResult{
     protect(||{
@@ -135,6 +164,28 @@ pub extern "C" fn ac_pdf_edit(data:*const u8,n:usize,req:*const u8,req_len:usize
         if all.len()>10000{return Err("PDF too many pages".into());}
         if index>=all.len(){return Err("PDF page out of range".into());}
         match action {
+            "replace_text_block" => {
+                if doc.permissions().is_some_and(|permission| !permission.modify()) {
+                    return Err("This PDF restricts content editing".into());
+                }
+                let id = j["block"].as_u64().and_then(|n| usize::try_from(n).ok())
+                    .ok_or("Missing PDF text block")?;
+                let text = j["text"].as_str().filter(|text| {
+                    !text.trim().is_empty() && text.len() <= MAX_BLOCK_BYTES
+                        && text.chars().count() <= 4096
+                        && !text.chars().any(|c| c.is_control() && !matches!(c, '\n' | '\r' | '\t'))
+                }).ok_or("Expected PDF text up to 4096 characters")?;
+                let session = TextSession::open(&doc, index, id).map_err(|err| err.to_string())?;
+                let source = session.source();
+                if !editable_block(source) || j["original"].as_str() != Some(&source.editor_text) {
+                    return Err("The selected PDF text is unavailable or has changed".into());
+                }
+                if source.editor_text == text {
+                    return Ok(input.to_vec());
+                }
+                session.commit(&mut doc, Some(text), &BlockStyle::default())
+                    .map_err(|err| err.to_string())?;
+            },
             "add_note" => {
                 let text = j["text"].as_str().map(str::trim)
                     .filter(|text| !text.is_empty() && text.len() <= 4096 && !text.contains('\0'))

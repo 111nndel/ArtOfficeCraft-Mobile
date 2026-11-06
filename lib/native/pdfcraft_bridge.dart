@@ -20,6 +20,16 @@ typedef _NativeSingle = _NativeResult Function(
   ffi.IntPtr,
 );
 typedef _DartSingle = _NativeResult Function(ffi.Pointer<ffi.Uint8>, int);
+typedef _NativeTextBlocks = _NativeResult Function(
+  ffi.Pointer<ffi.Uint8>,
+  ffi.IntPtr,
+  ffi.IntPtr,
+);
+typedef _DartTextBlocks = _NativeResult Function(
+  ffi.Pointer<ffi.Uint8>,
+  int,
+  int,
+);
 typedef _NativeEdit = _NativeResult Function(
   ffi.Pointer<ffi.Uint8>,
   ffi.IntPtr,
@@ -37,18 +47,18 @@ typedef _DartFree = void Function(_NativeResult);
 typedef _NativeVersion = ffi.Uint32 Function();
 typedef _DartVersion = int Function();
 
-/// PDFCraft COS/model page operations. File bytes stay on Android.
+/// PDFCraft page operations. File bytes stay on Android.
 final class PdfCraftBridge {
-  PdfCraftBridge._(ffi.DynamicLibrary library)
-    : _create = library.lookupFunction<_NativeSingle, _DartSingle>(
+  PdfCraftBridge._(this._library)
+    : _create = _library.lookupFunction<_NativeSingle, _DartSingle>(
         'ac_pdf_create',
       ),
-      _inspect = library.lookupFunction<_NativeSingle, _DartSingle>(
+      _inspect = _library.lookupFunction<_NativeSingle, _DartSingle>(
         'ac_pdf_inspect',
       ),
-      _edit = library.lookupFunction<_NativeEdit, _DartEdit>('ac_pdf_edit'),
-      _free = library.lookupFunction<_NativeFree, _DartFree>('ac_result_free'),
-      _version = library.lookupFunction<_NativeVersion, _DartVersion>(
+      _edit = _library.lookupFunction<_NativeEdit, _DartEdit>('ac_pdf_edit'),
+      _free = _library.lookupFunction<_NativeFree, _DartFree>('ac_result_free'),
+      _version = _library.lookupFunction<_NativeVersion, _DartVersion>(
         'ac_engine_abi_version',
       ) {
     if (_version() != 1) throw StateError('Несовместимый ABI Rust');
@@ -58,6 +68,9 @@ final class PdfCraftBridge {
   final _DartEdit _edit;
   final _DartFree _free;
   final _DartVersion _version;
+  final ffi.DynamicLibrary _library;
+  late final _DartTextBlocks _textBlocks = _library
+      .lookupFunction<_NativeTextBlocks, _DartTextBlocks>('ac_pdf_text_blocks');
 
   static PdfCraftBridge? tryOpen() {
     if (!Platform.isAndroid) return null;
@@ -105,12 +118,10 @@ final class PdfCraftBridge {
     }
   }
 
-  Map<String, dynamic> inspect(Uint8List bytes) {
+  Map<String, dynamic> _inspectWith(Uint8List bytes, _DartSingle call) {
     final p = _allocate(bytes);
     try {
-      final value = jsonDecode(
-        utf8.decode(_collect(_inspect(p, bytes.length))),
-      );
+      final value = jsonDecode(utf8.decode(_collect(call(p, bytes.length))));
       if (value is! Map<String, dynamic>) {
         throw const FormatException('Некорректные данные PDFCraft');
       }
@@ -118,6 +129,14 @@ final class PdfCraftBridge {
     } finally {
       calloc.free(p);
     }
+  }
+
+  Map<String, dynamic> inspect(Uint8List bytes) =>
+      _inspectWith(bytes, _inspect);
+
+  Map<String, dynamic> textBlocks(Uint8List bytes, int page) {
+    if (page < 0) throw RangeError.value(page, 'page');
+    return _inspectWith(bytes, (input, len) => _textBlocks(input, len, page));
   }
 
   Uint8List edit(Uint8List bytes, Map<String, dynamic> request) {

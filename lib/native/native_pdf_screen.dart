@@ -4,6 +4,7 @@ import '../l10n/app_strings.dart';
 import '../ui/pdf_viewport.dart';
 import '../ui/page_reading.dart';
 import 'pdf_outline_panel.dart';
+import 'pdf_text_panel.dart';
 import '../workspace/draft_store.dart';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
@@ -288,66 +289,73 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     await rememberCurrent();
     tip('Копия PDF сохранена. Подписи могут стать недействительными.');
   });
-  Future<void> edit(String action, {int? to, String? text}) =>
-      execute(() async {
-        if (contents == null) return;
-        if (action == 'delete') {
-          if (pages.length <= 1) {
-            tip('Последнюю страницу удалить нельзя');
-            return;
-          }
-          final yes = await showDialog<bool>(
-            context: context,
-            builder: (c) => AlertDialog(
-              title: const UiText('Удалить страницу?'),
-              content: const UiText(
-                'Оригинал PDF не изменяется, сохранение только в новую копию.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(c, false),
-                  child: const UiText('Отмена'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(c, true),
-                  child: const UiText('Удалить'),
-                ),
-              ],
+  Future<void> edit(
+    String action, {
+    int? to,
+    String? text,
+    PdfTextBlock? block,
+  }) => execute(() async {
+    if (contents == null) return;
+    if (action == 'delete') {
+      if (pages.length <= 1) {
+        tip('Последнюю страницу удалить нельзя');
+        return;
+      }
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const UiText('Удалить страницу?'),
+          content: const UiText(
+            'Оригинал PDF не изменяется, сохранение только в новую копию.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const UiText('Отмена'),
             ),
-          );
-          if (yes != true) return;
-        }
-        {
-          final previous = contents!, previousPage = selected;
-          final updated = await engine!.editAndInspect(previous, {
-            'action': action,
-            'page': selected,
-            'to': ?to,
-            'text': ?text,
-          });
-          var next = action == 'move_to' ? to! : selected;
-          if (action == 'move_up') next--;
-          if (action == 'move_down' ||
-              action == 'duplicate' ||
-              action == 'insert_blank') {
-            next++;
-          }
-          await load(
-            updated.bytes,
-            preview: updated.preview,
-            page: next,
-            edited: true,
-          );
-          if (!mounted) return;
-          history.push(previous, position: previousPage);
-          if (action == 'add_note') {
-            noteText.clear();
-            tip('Заметка добавлена');
-          } else {
-            tip('Структура PDF изменена');
-          }
-        }
+            FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const UiText('Удалить'),
+            ),
+          ],
+        ),
+      );
+      if (yes != true) return;
+    }
+    {
+      final previous = contents!, previousPage = selected;
+      final updated = await engine!.editAndInspect(previous, {
+        'action': action,
+        'page': selected,
+        'to': ?to,
+        'text': ?text,
+        if (block != null) ...{'block': block.id, 'original': block.text},
       });
+      var next = action == 'move_to' ? to! : selected;
+      if (action == 'move_up') next--;
+      if (action == 'move_down' ||
+          action == 'duplicate' ||
+          action == 'insert_blank') {
+        next++;
+      }
+      await load(
+        updated.bytes,
+        preview: updated.preview,
+        page: next,
+        edited: true,
+      );
+      if (!mounted) return;
+      history.push(previous, position: previousPage);
+      if (action == 'add_note') {
+        noteText.clear();
+        tip('Заметка добавлена');
+      } else if (action == 'replace_text_block') {
+        tip('Текст страницы изменён');
+      } else {
+        tip('Структура PDF изменена');
+      }
+    }
+  });
 
   Future<void> restoreHistory(bool undo) => execute(() async {
     final target = undo ? history.undoTarget : history.redoTarget;
@@ -424,6 +432,24 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
             },
           ),
         );
+
+  Widget pageTextPanel() {
+    final backend = engine;
+    final document = contents;
+    final page = selected;
+    if (backend is! PdfTextDocuments || document == null) {
+      return const UiText('Правка текста PDF недоступна');
+    }
+    return PdfTextPanel(
+      key: ValueKey((document, page)),
+      busy: busy,
+      load: () => (backend as PdfTextDocuments).pdfTextBlocks(document, page),
+      onApply: (block, text) async {
+        if (!identical(contents, document) || selected != page) return;
+        await edit('replace_text_block', block: block, text: text);
+      },
+    );
+  }
 
   Future<Uint8List> thumbnailFor(int index) {
     final old = _thumbnailImages[index];
@@ -584,6 +610,11 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       },
       overrides: {
         'Режим чтения': readingModeTool(reading),
+        'Текст PDF': EditorTool(
+          'Текст PDF',
+          Icons.text_fields,
+          builder: (_) => pageTextPanel(),
+        ),
         'Комментарий': EditorTool(
           'Комментарий',
           Icons.add_comment_outlined,

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
@@ -17,6 +18,36 @@ import 'package:integration_test/integration_test.dart';
 
 import 'grid_layout_fixture.dart';
 import 'worker_media_fixture.dart';
+
+Uint8List pdfTextFixture() {
+  const stream =
+      'BT /F1 18 Tf 40 760 Td (Original title for this page) Tj ET\n'
+      'BT /F1 12 Tf 40 650 Td (Keep this line) Tj ET\n';
+  final objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 595 842] >>',
+    '<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>',
+    '<< /Type /Page /Parent 2 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+    '<< /Length ${stream.length} >>\nstream\n${stream}endstream',
+  ];
+  final pdf = StringBuffer('%PDF-1.4\n');
+  final offsets = <int>[];
+  for (final (index, object) in objects.indexed) {
+    offsets.add(pdf.length);
+    pdf.write('${index + 1} 0 obj\n$object\nendobj\n');
+  }
+  final xref = pdf.length;
+  pdf.write('xref\n0 ${objects.length + 1}\n0000000000 65535 f \n');
+  for (final offset in offsets) {
+    pdf.writeln('${offset.toString().padLeft(10, '0')} 00000 n ');
+  }
+  pdf.write(
+    'trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n'
+    'startxref\n$xref\n%%EOF\n',
+  );
+  return Uint8List.fromList(ascii.encode(pdf.toString()));
+}
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -406,6 +437,61 @@ void main() {
     await tool(tester, 'Комментарии', 'Все комментарии');
     expect(find.text(note), findsOneWidget);
     await capture(tester, 'pdf-note-030');
+  });
+
+  testWidgets('PDF page text is rewritten, preserved on export and undoable', (
+    tester,
+  ) async {
+    final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+    addTearDown(backend.close);
+    final original = pdfTextFixture();
+    const title = 'Original title for this page';
+    const keep = 'Keep this line';
+    const replacement = 'Новый заголовок';
+    final firstPage = await backend.pdfTextBlocks(original, 0);
+    expect(firstPage.blocks.map((block) => block.text), [title, keep]);
+    expect((await backend.pdfTextBlocks(original, 1)).blocks, isEmpty);
+    await expectLater(
+      backend.edit(original, {
+        'action': 'replace_text_block',
+        'page': 0,
+        'block': firstPage.blocks.first.id,
+        'original': 'Stale text',
+        'text': replacement,
+      }),
+      throwsA(anything),
+    );
+    await present(
+      tester,
+      NativePdfScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: original, name: 'Page text.pdf'),
+      ),
+    );
+    await tool(tester, 'Изменить', 'Текст PDF');
+    await until(tester, () => find.text(title).evaluate().isNotEmpty, 'blocks');
+    await press(tester, title);
+    final input = find.byKey(const Key('pdf-page-text-input'));
+    expect(tester.widget<TextField>(input).controller!.text, title);
+    await tester.enterText(input, replacement);
+    await tester.pumpAndSettle();
+    await press(tester, 'Применить правку текста');
+    await until(tester, () => panel(tester).undo != null, 'PDF text edited');
+    final saved = await save(tester, 'Сохранить PDF');
+    final editedBlocks = (await backend.pdfTextBlocks(saved, 0)).blocks;
+    expect(editedBlocks.map((block) => block.text), [replacement, keep]);
+    expect((await backend.inspect(saved))['pageCount'], 2);
+    await history(tester, true);
+    final undo = await save(tester, 'Сохранить PDF');
+    expect((await backend.pdfTextBlocks(undo, 0)).blocks, firstPage.blocks);
+    await history(tester, false);
+    await tool(tester, 'Изменить', 'Текст PDF');
+    await until(
+      tester,
+      () => find.text(replacement).evaluate().isNotEmpty,
+      'updated blocks',
+    );
+    await capture(tester, 'pdf-page-text-031');
   });
 
   testWidgets(

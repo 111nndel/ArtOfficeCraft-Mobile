@@ -72,6 +72,13 @@ abstract interface class DocumentImages {
   Future<Uint8List> image(Uint8List bytes, int slide, int media);
 }
 
+typedef PdfTextBlock = ({int id, String text});
+typedef PdfTextPage = ({List<PdfTextBlock> blocks, bool limited});
+
+abstract interface class PdfTextDocuments {
+  Future<PdfTextPage> pdfTextBlocks(Uint8List bytes, int page);
+}
+
 abstract interface class GridDocuments {
   Future<Map<String, dynamic>> gridView(
     Uint8List bytes,
@@ -211,6 +218,7 @@ final class NativeDocumentBackend
         InspectedDocumentBackend,
         DocumentBackendLifetime,
         DocumentImages,
+        PdfTextDocuments,
         GridDocuments,
         GridFilterDocuments,
         GridClipboardDocuments {
@@ -298,6 +306,18 @@ final class NativeDocumentBackend
   @override
   Future<Uint8List> image(Uint8List bytes, int slide, int media) async =>
       _bytes(await _call('image', bytes, {'slide': slide, 'media': media}));
+  @override
+  Future<PdfTextPage> pdfTextBlocks(Uint8List bytes, int page) async {
+    final result = await _call('pdfTextBlocks', bytes, {'page': page}) as Map;
+    return (
+      blocks: [
+        for (final item in result['blocks'] as List)
+          (id: item['id'] as int, text: item['text'] as String),
+      ],
+      limited: result['limited'] == true,
+    );
+  }
+
   @override
   Future<Map<String, dynamic>> gridView(
     Uint8List bytes,
@@ -512,6 +532,9 @@ class _NativeEngine {
         final engine = bridge as PdfCraftBridge;
         if (operation == 'create') return engine.create();
         if (operation == 'inspect') return engine.inspect(bytes!);
+        if (operation == 'pdfTextBlocks') {
+          return engine.textBlocks(bytes!, request['page'] as int);
+        }
         return engine.edit(bytes!, request);
     }
   }
