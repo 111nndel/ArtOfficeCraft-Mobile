@@ -85,6 +85,250 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   bool modified = false, busy = false;
   final input = TextEditingController();
   final history = DocumentHistory();
+  final _findText = TextEditingController();
+  List<GridFindHit> _findHits = [];
+  int _findIndex = -1, _findRun = 0, _findScanned = 0;
+  bool _finding = false, _findBook = false, _findFormulas = false;
+  bool _findLimited = false;
+  String? _findMessage;
+
+  void _clearFind() {
+    _findRun++;
+    _findHits = [];
+    _findIndex = -1;
+    _finding = false;
+    _findLimited = false;
+    _findScanned = 0;
+    _findMessage = null;
+  }
+
+  Future<void> _find({int direction = 1, bool advance = false}) =>
+      run(() async {
+    final backend = bridge;
+    if (book == null || backend is! GridSearchDocuments ||
+        _findText.text.trim().isEmpty) {
+      return;
+    }
+    await flushInput();
+    final document = book!;
+    final originSheet = sheetIndex;
+    final origin = gridAddress(selected)!;
+    final query = _findText.text;
+    final fromPanel = toolPanel.currentState?.isShowing('Найти') == true;
+    setState(() {
+      _clearFind();
+      _finding = true;
+    });
+    final generation = _findRun;
+    final hits = <GridFindHit>[];
+    GridFindCursor? cursor;
+    try {
+      do {
+        final batch = await (backend as GridSearchDocuments).findGridCells(
+          document,
+          {
+            'query': query,
+            'sheet': originSheet,
+            'lookIn': _findFormulas ? 'formulas' : 'values',
+            'workbook': _findBook,
+            'limit': 512 - hits.length,
+            if (cursor != null)
+              'cursor': {'sheet': cursor.sheet, 'after': cursor.after},
+          },
+        );
+        if (!mounted || generation != _findRun) return;
+        if (fromPanel && toolPanel.currentState?.isShowing('Найти') != true) {
+          setState(_clearFind);
+          return;
+        }
+        if (batch.next != null && batch.next == cursor) {
+          throw const FormatException('Invalid Excel search progress');
+        }
+        hits.addAll(batch.hits);
+        cursor = batch.next;
+        setState(() => _findScanned += batch.scanned);
+      } while (cursor != null && hits.length < 512);
+      setState(() {
+        _finding = false;
+        _findHits = hits;
+        _findLimited = cursor != null;
+        if (hits.isEmpty) _findMessage = 'Совпадений не найдено';
+      });
+      if (hits.isEmpty) return;
+      int compare(GridFindHit hit) {
+        if (hit.sheet != originSheet) return hit.sheet.compareTo(originSheet);
+        final at = gridAddress(hit.address)!;
+        final row = at.row.compareTo(origin.row);
+        return row == 0 ? at.column.compareTo(origin.column) : row;
+      }
+      var index = direction > 0
+          ? hits.indexWhere((hit) => advance ? compare(hit) > 0 : compare(hit) >= 0)
+          : hits.lastIndexWhere((hit) => compare(hit) < 0);
+      if (index < 0) index = direction > 0 ? 0 : hits.length - 1;
+      await _showFindHit(index);
+      if (mounted && generation == _findRun && fromPanel) {
+        toolPanel.currentState?.setExpanded(false);
+      }
+    } catch (_) {
+      if (!mounted || generation != _findRun) return;
+      setState(() {
+        _finding = false;
+        _findMessage = 'Не удалось выполнить поиск Excel';
+      });
+    }
+  });
+
+  Future<void> _showFindHit(int index) async {
+    final hit = _findHits[index];
+    final generation = _findRun;
+    final at = gridAddress(hit.address)!;
+    final window = GridWindow(
+      hit.sheet, at.row, at.column, rows: 1, columns: 1,
+    ).buffered;
+    final document = book!;
+    final parsed = await bridge!.inspectGrid(document, window, hit.address);
+    if (!mounted || generation != _findRun || !identical(document, book)) {
+      return;
+    }
+    setState(() {
+      _findIndex = index;
+      sheetIndex = hit.sheet;
+      selected = hit.address;
+      rangeSelection = null;
+      rangeInput.clear();
+      acceptView(parsed, window);
+      wantedWindow = window;
+      input.text = currentInput;
+    });
+    FocusManager.instance.primaryFocus?.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(document, book) &&
+          selected == hit.address && sheetIndex == hit.sheet) {
+        gridViewport.currentState?.goToCell(at.row, at.column);
+      }
+    });
+  }
+
+  Future<void> _stepFind(int delta) {
+    if (inputDirty) return _find(direction: delta, advance: true);
+    return run(() async {
+      if (_findHits.isEmpty) return;
+      await _showFindHit((_findIndex + delta) % _findHits.length);
+    });
+  }
+
+  Widget _findPanel() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextField(
+        key: const Key('grid-find-input'),
+        controller: _findText,
+        readOnly: busy,
+        maxLength: 256,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(labelText: tr(context, 'Текст для поиска')),
+        onChanged: (_) => setState(_clearFind),
+        onSubmitted: (_) => _find(),
+      ),
+      DropdownButtonFormField<bool>(
+        key: const Key('grid-find-look-in'),
+        initialValue: _findFormulas,
+        decoration: InputDecoration(labelText: tr(context, 'Искать в')),
+        items: const [
+          DropdownMenuItem(value: false, child: UiText('Значения ячеек')),
+          DropdownMenuItem(value: true, child: UiText('Формулы')),
+        ],
+        onChanged: busy ? null : (value) => setState(() {
+          _clearFind();
+          _findFormulas = value!;
+        }),
+      ),
+      const SizedBox(height: 8),
+      SwitchListTile(
+        key: const Key('grid-find-workbook'),
+        contentPadding: EdgeInsets.zero,
+        title: const UiText('Во всей книге'),
+        subtitle: const UiText('По умолчанию поиск на текущем листе'),
+        value: _findBook,
+        onChanged: busy ? null : (value) => setState(() {
+          _clearFind();
+          _findBook = value;
+        }),
+      ),
+      const SizedBox(height: 8),
+      if (_finding) _findProgress() else ...[
+        FilledButton.icon(
+          style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: busy || _findText.text.trim().isEmpty ? null : _find,
+          icon: const Icon(Icons.search),
+          label: const UiText('Найти в Excel'),
+        ),
+        if (_findMessage != null) UiText(_findMessage!),
+        if (_findLimited) const UiText('Показано до 512 найденных ячеек'),
+      ],
+    ],
+  );
+
+  Widget _findProgress() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    child: Row(
+      children: [
+        Expanded(child: UiText('Проверено ячеек: $_findScanned')),
+        IconButton(
+          tooltip: tr(context, 'Отменить поиск'),
+          onPressed: () => setState(_clearFind),
+          icon: const Icon(Icons.close),
+        ),
+      ],
+    ),
+  );
+
+  Widget _findBar() {
+    final hit = _findHits[_findIndex];
+    final name = sheets[hit.sheet]['name'] as String? ?? '';
+    final location = '$name · ${hit.address}';
+    final label = hit.hidden
+        ? '$location · ${tr(context, 'Ячейка скрыта')}'
+        : location;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: 12, end: 4),
+      child: Row(
+        children: [
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              UiText(
+                'Результат ${_findIndex + 1} из ${_findHits.length}${_findLimited ? '+' : ''}',
+                key: const Key('grid-find-count'),
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          )),
+          IconButton(
+            tooltip: tr(context, 'Предыдущее совпадение'),
+            onPressed: busy ? null : () => _stepFind(-1),
+            icon: const Icon(Icons.keyboard_arrow_up),
+          ),
+          IconButton(
+            tooltip: tr(context, 'Следующее совпадение'),
+            onPressed: busy ? null : () => _stepFind(1),
+            icon: const Icon(Icons.keyboard_arrow_down),
+          ),
+          IconButton(
+            tooltip: tr(context, 'Закрыть поиск'),
+            onPressed: () => setState(_clearFind),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+    );
+  }
+
   final addressInput = TextEditingController();
   Map<String, dynamic> selectedCell = {};
   GridLayout layout = GridLayout.fromJson(null);
@@ -107,6 +351,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     viewTimer?.cancel();
     addressInput.dispose();
     input.dispose();
+    _findText.dispose();
     if (widget.backend == null) unawaited(closeDocumentBackend(bridge));
     super.dispose();
   }
@@ -166,6 +411,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     setState(() {
       book = data;
+      _clearFind();
+      _findText.clear();
       rangeSelection = null;
       rangeInput.clear();
       sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
@@ -385,6 +632,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   ) {
     setState(() {
       book = bytes;
+      _clearFind();
       if (sheetIndex != window.sheet) {
         rangeSelection = null;
         rangeInput.clear();
@@ -1506,6 +1754,13 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           ],
           'Главная': [
             EditorTool(
+              'Найти',
+              Icons.search,
+              builder: (_) => bridge is GridSearchDocuments
+                  ? _findPanel()
+                  : const UiText('Поиск по Excel недоступен'),
+            ),
+            EditorTool(
               'Стиль',
               Icons.text_fields,
               inline: true,
@@ -1836,6 +2091,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
               : Column(
                   children: [
                     Expanded(child: grid()),
+                    if (_finding && !toolsExpanded) _findProgress(),
+                    if (_findIndex >= 0 && !toolsExpanded) _findBar(),
                     Material(
                       color: Theme.of(context).colorScheme.surface,
                       child: Padding(

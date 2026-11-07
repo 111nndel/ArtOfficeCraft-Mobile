@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.37.0.**
+**Current preview — alpha 0.38.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -14,6 +14,8 @@ offer horizontal or vertical single-page swipes and a continuous vertical strip.
 tool targets and the approved nested slab navigation remain unchanged. Light/dark
 appearance is saved locally and restored before the first Flutter frame.
 Excel sorts selected rows and filters them by values or blank cells.
+Find searches displayed values or formulas across the current sheet or the workbook,
+including populated cells beyond the viewport.
 PDF searches document text, including OCR layers, and highlights the matching text area.
 PDF bookmarks are also searchable. PDF and PowerPoint can jump by page or slide number.
 PowerPoint can move and resize supported objects. PDF can save notes, edit
@@ -21,7 +23,7 @@ supported paragraphs, insert text at a touched location and recognize
 Russian and English on a scanned page. The recognized words can be copied or
 added as invisible, searchable text in the exported PDF copy.
 Word builds only the paragraphs near the viewport.
-See the [0.37.0 release notes and limits](docs/release-0.37.0-alpha.1.md).
+See the [0.38.0 release notes and limits](docs/release-0.38.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

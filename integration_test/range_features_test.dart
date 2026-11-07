@@ -185,6 +185,105 @@ void main() {
           as Map<String, dynamic>;
 
   testWidgets(
+    'Excel finds distant cells and formulas across sheets without losing pending input',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      var original = await backend.create();
+      for (final entry in {
+        'A1': 'Чай',
+        'D4': 'Чай с молоком',
+        'AY6001': 'ЧАЙ',
+        'C6': '=SUM(B1:B2)',
+      }.entries) {
+        original = await backend.edit(original, {
+          'sheet': 0, 'address': entry.key, 'value': entry.value,
+        });
+      }
+      final firstName = ((await backend.inspect(original))['sheets'] as List)
+          .first['name'] as String;
+      original = await backend.edit(original, {
+        'action': 'add_sheet', 'sheet': 0, 'address': 'A1', 'name': 'Другой лист',
+      });
+      original = await backend.edit(original, {
+        'sheet': 1, 'address': 'B2', 'value': 'Чай',
+      });
+      await present(tester, NativeGridScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: original, name: 'Find.xlsx'),
+      ));
+      await tool(tester, 'Вид', 'Управление листами');
+      await press(tester, firstName);
+      await collapse(tester);
+      final input = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(input, 'Новый чай');
+      await tool(tester, 'Главная', 'Найти');
+      final query = find.byKey(const Key('grid-find-input'));
+      await tester.enterText(query, 'ЧаЙ');
+      await tester.pumpAndSettle();
+      await press(tester, 'Найти в Excel');
+      await until(tester, () => find.text('Результат 1 из 3').evaluate().isNotEmpty,
+          'first Excel match');
+      expect(cellInput(tester), 'Новый чай');
+
+      await tester.tap(find.byTooltip('Следующее совпадение'));
+      await until(tester, () => cellInput(tester) == 'Чай с молоком', 'second match');
+      await tester.tap(find.byTooltip('Следующее совпадение'));
+      await until(tester, () => cellInput(tester) == 'ЧАЙ', 'far match');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('grid-cell-AY6001')).hitTestable(),
+          findsOneWidget);
+      await capture(tester, 'grid-find-038');
+
+      await tester.enterText(input, 'Изменено');
+      await tester.tap(find.byTooltip('Следующее совпадение'));
+      await until(tester, () => cellInput(tester) == 'Новый чай',
+          'requery after pending input');
+      expect(find.text('Результат 1 из 2'), findsOneWidget);
+      final saved = await save(tester, 'Сохранить копию');
+      expect((await inspectCell(backend, saved, 'AY6001'))['input'], 'Изменено');
+      expect((await inspectCell(backend, saved, 'A1'))['input'], 'Новый чай');
+
+      await tool(tester, 'Главная', 'Найти');
+      await tester.ensureVisible(find.byKey(const Key('grid-find-workbook')));
+      await tester.tap(find.byKey(const Key('grid-find-workbook')));
+      await tester.pumpAndSettle();
+      await press(tester, 'Найти в Excel');
+      await until(tester, () => find.text('Результат 1 из 3').evaluate().isNotEmpty,
+          'whole workbook search');
+      await tester.tap(find.byTooltip('Предыдущее совпадение'));
+      await until(tester, () => cellInput(tester) == 'Чай', 'other sheet match');
+      expect(find.text('Другой лист · B2'), findsOneWidget);
+
+      await tool(tester, 'Главная', 'Найти');
+      await tester.enterText(query, 'SUM');
+      await tester.pumpAndSettle();
+      await press(tester, 'Найти в Excel');
+      await until(tester, () => find.text('Совпадений не найдено').evaluate().isNotEmpty,
+          'formulas excluded from value search');
+      await tester.ensureVisible(find.byKey(const Key('grid-find-look-in')));
+      await tester.tap(find.byKey(const Key('grid-find-look-in')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Формулы').last);
+      await tester.pumpAndSettle();
+      await press(tester, 'Найти в Excel');
+      await until(tester, () => cellInput(tester) == '=SUM(B1:B2)', 'formula match');
+      expect(find.text('Результат 1 из 1'), findsOneWidget);
+      await tester.tap(find.byTooltip('Закрыть поиск'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('grid-find-count')), findsNothing);
+
+      await history(tester, true);
+      final undo = await save(tester, 'Сохранить копию');
+      expect((await inspectCell(backend, undo, 'AY6001'))['input'], 'ЧАЙ');
+      expect((await inspectCell(backend, undo, 'A1'))['input'], 'Новый чай');
+    },
+  );
+
+  testWidgets(
     'Filter a worksheet by value and blanks, undo, export and remove after reopening',
     (tester) async {
       final backend = NativeDocumentBackend(NativeDocumentKind.grid);

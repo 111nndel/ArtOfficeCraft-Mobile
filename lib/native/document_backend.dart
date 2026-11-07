@@ -110,6 +110,21 @@ abstract interface class GridDocuments {
   );
 }
 
+typedef GridFindHit = ({int sheet, String address, bool hidden});
+typedef GridFindCursor = ({int sheet, String? after});
+typedef GridFindBatch = ({
+  List<GridFindHit> hits,
+  GridFindCursor? next,
+  int scanned,
+});
+
+abstract interface class GridSearchDocuments {
+  Future<GridFindBatch> findGridCells(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  );
+}
+
 typedef GridFilterChoice = ({String? value, bool checked});
 
 abstract interface class GridFilterDocuments {
@@ -239,6 +254,7 @@ final class NativeDocumentBackend
         PdfSearchDocuments,
         GridDocuments,
         GridFilterDocuments,
+        GridSearchDocuments,
         GridClipboardDocuments {
   NativeDocumentBackend(this.kind, {this.libraryPath});
   final NativeDocumentKind kind;
@@ -370,6 +386,28 @@ final class NativeDocumentBackend
   ) async =>
       _freeze(await _call('gridInspect', bytes, window.request(selected)))
           as Map<String, dynamic>;
+  @override
+  Future<GridFindBatch> findGridCells(
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  ) async {
+    final result = await _call('gridInspect', bytes, {'find': request}) as Map;
+    final next = result['next'] as Map?;
+    return (
+      hits: [
+        for (final item in result['hits'] as List)
+          (
+            sheet: item['sheet'] as int,
+            address: item['address'] as String,
+            hidden: item['hidden'] == true,
+          ),
+      ],
+      next: next == null
+          ? null : (sheet: next['sheet'] as int, after: next['after'] as String?),
+      scanned: result['scanned'] as int,
+    );
+  }
+
   @override
   Future<List<GridFilterChoice>> gridFilterValues(
     Uint8List bytes,

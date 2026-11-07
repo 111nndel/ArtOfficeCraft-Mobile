@@ -308,6 +308,10 @@ fn axis_runs(lines:&std::collections::BTreeMap<u32,gridcraft_model::features::Li
 pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u8,req_len:usize)->AcResult {
     protect(|| {
         let req:Json=serde_json::from_str(input(request,req_len)?).map_err(|e|e.to_string())?;
+        if let Some(query) = req.get("find") {
+            let wb = workbook(decode(data,n,MAX_INPUT_BYTES)?)?;
+            return serde_json::to_vec(&super::grid_find::find(&wb, query)?).map_err(|e|e.to_string());
+        }
         if let Some(filter) = req.get("filterValues") {
             let bytes = decode(data,n,MAX_INPUT_BYTES)?;
             let wb = workbook(bytes)?;
