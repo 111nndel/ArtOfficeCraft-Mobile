@@ -89,7 +89,7 @@
   },
   {
     "name": "artoffice_core",
-    "version": "0.36.0",
+    "version": "0.37.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -441,7 +441,7 @@
   },
   {
     "name": "deckcraft-color",
-    "version": "0.15.1",
+    "version": "0.16.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -461,7 +461,7 @@
   },
   {
     "name": "deckcraft-geom",
-    "version": "0.15.1",
+    "version": "0.16.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -481,7 +481,7 @@
   },
   {
     "name": "deckcraft-model",
-    "version": "0.15.1",
+    "version": "0.16.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -501,7 +501,7 @@
   },
   {
     "name": "deckcraft-pptx",
-    "version": "0.15.1",
+    "version": "0.16.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -693,7 +693,7 @@
   },
   {
     "name": "gridcraft-calc",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -713,7 +713,7 @@
   },
   {
     "name": "gridcraft-chart",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -733,7 +733,7 @@
   },
   {
     "name": "gridcraft-core",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -753,7 +753,7 @@
   },
   {
     "name": "gridcraft-engine",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -773,7 +773,7 @@
   },
   {
     "name": "gridcraft-formula",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -793,7 +793,7 @@
   },
   {
     "name": "gridcraft-functions",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -813,7 +813,7 @@
   },
   {
     "name": "gridcraft-math",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -833,7 +833,7 @@
   },
   {
     "name": "gridcraft-model",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -853,7 +853,7 @@
   },
   {
     "name": "gridcraft-numfmt",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -873,7 +873,7 @@
   },
   {
     "name": "gridcraft-pdf",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -893,7 +893,7 @@
   },
   {
     "name": "gridcraft-xlsx",
-    "version": "0.16.1",
+    "version": "0.17.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -1329,7 +1329,7 @@
   },
   {
     "name": "pdfcraft-annot",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -1353,7 +1353,7 @@
   },
   {
     "name": "pdfcraft-content",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -1377,7 +1377,7 @@
   },
   {
     "name": "pdfcraft-cos",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -1401,7 +1401,7 @@
   },
   {
     "name": "pdfcraft-crypt",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": "https://github.com/storytold/pdfcraft",
     "texts": [
@@ -1425,7 +1425,7 @@
   },
   {
     "name": "pdfcraft-edit",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -1449,7 +1449,7 @@
   },
   {
     "name": "pdfcraft-filters",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": "https://github.com/storytold/pdfcraft",
     "texts": [
@@ -1473,7 +1473,7 @@
   },
   {
     "name": "pdfcraft-fonts",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -1501,7 +1501,7 @@
   },
   {
     "name": "pdfcraft-model",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -1525,7 +1525,7 @@
   },
   {
     "name": "pdfcraft-organize",
-    "version": "0.18.2",
+    "version": "0.19.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -2397,7 +2397,7 @@
   },
   {
     "name": "wordcraft-doc",
-    "version": "0.15.2",
+    "version": "0.16.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -2417,7 +2417,7 @@
   },
   {
     "name": "wordcraft-docx",
-    "version": "0.15.2",
+    "version": "0.16.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [
@@ -2437,7 +2437,7 @@
   },
   {
     "name": "wordcraft-geom",
-    "version": "0.15.2",
+    "version": "0.16.0",
     "license": "MIT OR Apache-2.0",
     "repository": null,
     "texts": [

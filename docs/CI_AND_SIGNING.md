@@ -86,3 +86,12 @@ Its deployment rules and signing secret stay unchanged. The isolated publisher
 retains its no-checkout rule, existing certificate/hash/source checks and refusal
 to overwrite a published release. No signing key is exposed to the request job or
 test jobs. Ordinary branches and PRs cannot enter the signing environment.
+
+## Preparing an engine refresh
+
+The `Prepare pinned engine refresh` workflow stages the exact source commits in
+`upstream/engines.lock.json`, synchronizes the Cargo paths, resolves the updated
+workspace dependencies and runs the adapter tests. Push an `engine-refresh/**`
+branch or dispatch the workflow on the reviewed source branch. The
+`engine-refresh-inputs` artifact contains the generated Cargo manifest, lockfile,
+engine pins and dependency notices for review and the subsequent Android build.
