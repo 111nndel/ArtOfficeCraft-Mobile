@@ -8,6 +8,7 @@
 - Move between results with large touch controls. The editor reveals distant cells and switches sheets while retaining zoom.
 - Starting a search commits pending cell input. Moving to another result after typing refreshes the results. Search uses the existing undo history for edits.
 - Search walks sparse native cells in bounded background batches with progress and cancellation.
+- Hidden formulas on protected sheets stay concealed in both search and the cell input bar.
 
 ## Known Limitations
 

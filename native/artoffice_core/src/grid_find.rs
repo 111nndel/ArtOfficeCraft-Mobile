@@ -137,6 +137,25 @@ mod tests {
         let batch = find(&wb, &req).unwrap();
         assert_eq!(batch["hits"][0]["hidden"], true);
         assert_eq!(batch["hits"][0]["address"], "A1");
+        let bytes = super::super::grid::write(&wb).unwrap();
+        let unpack = |result: super::super::AcResult| {
+            let status = result.status;
+            let body = unsafe { std::slice::from_raw_parts(result.ptr, result.len) }.to_vec();
+            super::super::ac_result_free(result);
+            assert_eq!(status, 0, "{}", String::from_utf8_lossy(&body));
+            serde_json::from_slice::<Json>(&body).unwrap()
+        };
+        let preview = unpack(super::super::grid::ac_xlsx_inspect(bytes.as_ptr(), bytes.len()));
+        assert_eq!(preview["sheets"][0]["cells"]["A1"]["input"], "42");
+        let view = json!({
+            "sheet":0,"row":0,"column":0,"rows":1,"columns":1,"selected":"A1"
+        }).to_string();
+        let window = unpack(super::super::grid::ac_xlsx_inspect_window(
+            bytes.as_ptr(), bytes.len(), view.as_ptr(), view.len(),
+        ));
+        assert_eq!(window["selection"]["input"], "42");
+        assert_eq!(window["sheets"][0]["cells"]["A1"]["input"], "42");
+
     }
 
     #[test]

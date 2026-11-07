@@ -122,6 +122,7 @@ lock and complete license notices are reviewed before normal Android checks.
 GridCraft sparse cells and reuses its value formatting and hidden-formula rules.
 The mobile panel finds values or formulas on a sheet or across the workbook,
 commits pending input first and reveals the selected result at the current zoom.
+Both inspection APIs conceal protected hidden formulas in their input values.
 
 The version-labelled sections below describe historical checkpoints and retain
 their original limitations; they are not a current capability inventory.

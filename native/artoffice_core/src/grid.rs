@@ -2,6 +2,7 @@
 //! Preview is bounded and does not pretend to render full Excel features.
 use gridcraft_core::{CellRef, RangeRef, Value};
 use gridcraft_model::{Cell, Formula, Workbook};
+use gridcraft_engine::display::formula_hidden;
 use gridcraft_model::style::{Color, Fill, HAlign, NumFmt, PatternType, Underline, Borders, BorderLine, VAlign};
 use gridcraft_numfmt::{NumberFormat, format_value};
 use std::collections::HashMap;
@@ -203,7 +204,8 @@ pub extern "C" fn ac_xlsx_inspect(data:*const u8, n:usize) -> AcResult {
                 if cells.len() >= 1600 {continue;}
                 let fmt=formats.entry(c.style).or_insert_with(||NumberFormat::parse(wb.styles.get(c.style).num_fmt.as_str()));
                 let displayed=format_value(&c.value,fmt,wb.date_system);
-                cells.insert(loc.a1(),json!({"input":c.input_text(),"display":displayed.text,"numeric":displayed.numeric,
+                let input = if formula_hidden(&wb, sh, loc) { displayed.text.clone() } else { c.input_text() };
+                cells.insert(loc.a1(),json!({"input":input,"display":displayed.text,"numeric":displayed.numeric,
                     "formula":c.formula.is_some(),"style":style_json(&wb,c.style)}));
             }
             sheets.push(json!({"index":index,"name":sh.name,"cells":cells,"truncated":sh.cells.len()>1600}));
@@ -356,7 +358,8 @@ pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u
             let style=sh.style_id(loc);
             let fmt=formats.entry(style).or_insert_with(||NumberFormat::parse(wb.styles.get(style).num_fmt.as_str()));
             let displayed=format_value(&sh.value(loc),fmt,wb.date_system);
-            json!({"address":loc.a1(),"input":sh.input_text(loc),"display":displayed.text,"numeric":displayed.numeric,
+            let input = if formula_hidden(&wb, sh, loc) { displayed.text.clone() } else { sh.input_text(loc) };
+            json!({"address":loc.a1(),"input":input,"display":displayed.text,"numeric":displayed.numeric,
                 "formula":sh.cell(loc).is_some_and(|c|c.formula.is_some()),"style":style_json(&wb,style)})
         };
         let mut cells=serde_json::Map::new();
