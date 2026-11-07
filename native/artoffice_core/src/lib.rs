@@ -1,11 +1,17 @@
 //! ArtOfficeCraft Mobile native bridge (alpha).
 //! FFI is deliberately limited to tested document operations.
-//! Source engine: pinned WordCraft 0.14.0.
+//! Source engines: exact reviewed commits in upstream/engines.lock.json.
 use std::{panic::{catch_unwind, AssertUnwindSafe}, sync::Arc};
 #[cfg(test)]
 use std::ptr;
 use serde_json::json;
+mod word_edit;
 mod grid;
+mod grid_clipboard;
+mod grid_filter;
+mod grid_find;
+mod grid_sort;
+mod grid_structure;
 mod deck;
 mod pdf;
 use wordcraft_doc::{Block, CharProps, Document, Paragraph};
@@ -45,6 +51,14 @@ fn protect<F>(f:F)->AcResult where F:FnOnce()->Result<Vec<u8>,String> {
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_engine_abi_version()->u32 {1}
+#[unsafe(no_mangle)]
+pub extern "C" fn ac_engine_info()->AcResult {
+    protect(||{
+        let sources:serde_json::Value=serde_json::from_str(include_str!("../../../upstream/engines.lock.json")).map_err(|e|e.to_string())?;
+        serde_json::to_vec(&json!({"abi":1,"coreVersion":env!("CARGO_PKG_VERSION"),"engines":sources["engines"],
+            "capabilities":["docx.paragraph.edit","docx.character.format","docx.paragraph.format","xlsx.cell.formula","xlsx.cell.style","xlsx.clipboard","xlsx.find","xlsx.window.view","xlsx.layout.geometry","xlsx.line.resize","xlsx.line.structure","pptx.slide.text","pdf.page.organize","pdf.page.text","pdf.page.text.insert","pdf.page.ocr.layer","pdf.document.find"]})).map_err(|e|e.to_string())
+    })
+}
 
 /// A compact JSON preview. It is NOT a layout-preserving DOCX renderer.
 #[unsafe(no_mangle)]
@@ -62,7 +76,7 @@ pub extern "C" fn ac_docx_inspect(data:*const u8,len:usize)->AcResult {
         }
         serde_json::to_vec(&json!({
             "type":"docx","engine":"wordcraft","mode":"text_preview",
-            "paragraphs":paragraphs,"tables":table_count,
+            "paragraphs":paragraphs,"blocks":word_edit::preview(&doc),"tables":table_count,
             "warnings":["Text preview omits document layout, images, and table contents. Saving via append preserves the parsed WordCraft document model, but round-trip fidelity is not yet validated for all DOCX features."]
         })).map_err(|e|e.to_string())
     })
@@ -80,7 +94,12 @@ pub extern "C" fn ac_docx_append_paragraph(
         let value=std::str::from_utf8(text_bytes).map_err(|_|"Paragraph is not valid UTF-8".to_string())?;
         if value.contains('\0') {return Err("Paragraph contains zero byte".to_string());}
         let mut doc=wordcraft_docx::read(bytes).map_err(|e|format!("DOCX read failed: {e}"))?;
-        doc.body.push(Arc::new(Block::Para(Paragraph::with_text(value,CharProps::default()))));
+        if doc.settings.protection.is_some() || doc.settings.protect_formatting {return Err("Protected DOCX cannot be edited".into())}
+        if doc.settings.track_changes {return Err("Track changes must be resolved in a full editor first".into())}
+        let mut p=Paragraph::with_text(value,CharProps::default());
+        p.props.align=Some(wordcraft_doc::props::Align::Justify);
+        p.props.suppress_hyphens=Some(true);
+        doc.body.push(Arc::new(Block::Para(p)));
         wordcraft_docx::write(&doc).map_err(|e|format!("DOCX write failed: {e}"))
     })
 }
@@ -90,8 +109,12 @@ pub extern "C" fn ac_docx_create(text:*const u8,text_len:usize)->AcResult {
     protect(||{
         let value=std::str::from_utf8(decode(text,text_len,MAX_TEXT_BYTES)?).map_err(|_|"Paragraph is not valid UTF-8".to_string())?;
         let mut doc=Document::new();
+        doc.settings.auto_hyphenation=false;
         doc.body.clear();
-        doc.body.push(Arc::new(Block::Para(Paragraph::with_text(value,CharProps::default()))));
+        let mut p=Paragraph::with_text(value,CharProps::default());
+        p.props.align=Some(wordcraft_doc::props::Align::Justify);
+        p.props.suppress_hyphens=Some(true);
+        doc.body.push(Arc::new(Block::Para(p)));
         wordcraft_docx::write(&doc).map_err(|e|format!("DOCX create failed: {e}"))
     })
 }

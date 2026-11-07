@@ -1,0 +1,35 @@
+name: Request tagged Android preview
+
+on:
+  push:
+    branches: ['release-request/v*-alpha.*']
+
+permissions:
+  contents: read
+
+jobs:
+  request:
+    name: Create release tag and dispatch its checks
+    if: github.repository == '111nndel/ArtOfficeCraft-Mobile'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      # No signing environment or key. The protected publisher runs separately
+      # in the allowed tag context, after the full CI gate has passed there.
+      - name: Tag this exact source and run the full tag workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" =~ ^refs/heads/release-request/(v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+)$ ]]
+          tag="${BASH_REMATCH[1]}"
+          if existing="$(gh api "repos/$GH_REPO/commits/$tag" --jq .sha 2>/dev/null)"; then
+            [[ "$existing" == "$GITHUB_SHA" ]] || { echo 'Existing tag points to another commit'; exit 1; }
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA"
+          fi
+          gh workflow run ci.yml --repo "$GH_REPO" --ref "$tag"

@@ -1,5 +1,10 @@
 package ai.artofficecraft.artofficecraft_mobile
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
@@ -36,11 +41,80 @@ class MainActivity : FlutterActivity() {
     }
 
     private val worker = Executors.newSingleThreadExecutor()
+    private val pdfOcr by lazy { PdfOcr(applicationContext) }
     private var active: PdfSession? = null
     private var nextId = 0
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/workspace")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "directory") {
+                    try {
+                        val directory = File(filesDir, "workspace")
+                        check(directory.isDirectory || directory.mkdirs()) { "Workspace unavailable" }
+                        result.success(directory.absolutePath)
+                    } catch (_: Exception) {
+                        result.error("WORKSPACE_UNAVAILABLE", "Cannot open private workspace", null)
+                    }
+                } else result.notImplemented()
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/reading")
+            .setMethodCallHandler { call, result ->
+                val format = call.argument<String>("format")
+                if (format != "pdf" && format != "deck") {
+                    result.error("BAD_FORMAT", "Unknown reading format", null)
+                    return@setMethodCallHandler
+                }
+                val preferences = getSharedPreferences("reading_modes", Context.MODE_PRIVATE)
+                when (call.method) {
+                    "read" -> result.success(preferences.getString(format, null))
+                    "write" -> {
+                        val mode = call.argument<String>("mode")
+                        if (mode == "horizontal" || mode == "vertical" || mode == "continuous") {
+                            preferences.edit().putString(format, mode).apply()
+                            result.success(null)
+                        } else result.error("BAD_MODE", "Unknown reading mode", null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/grid_clipboard")
+            .setMethodCallHandler { call, result ->
+                try {
+                    val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    when (call.method) {
+                        "write" -> {
+                            val text = call.argument<String>("text")
+                            val token = call.argument<String>("token")
+                            require(text != null && text.length <= 256 * 1024 &&
+                                token != null && token.matches(Regex("[0-9a-f]{32}"))) { "Invalid clipboard data" }
+                            val clip = ClipData.newPlainText("ArtOfficeCraft cells", text)
+                            if (Build.VERSION.SDK_INT >= 24) {
+                                clip.description.extras = PersistableBundle().apply { putString("ai.artofficecraft.gridToken", token) }
+                            }
+                            manager.setPrimaryClip(clip)
+                            result.success(null)
+                        }
+                        "read" -> {
+                            val clip = manager.primaryClip
+                            val text = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString() else null
+                            if (text == null) result.success(null)
+                            else {
+                                require(text.length <= 256 * 1024) { "Clipboard text too large" }
+                                val token = if (Build.VERSION.SDK_INT >= 24) clip?.description?.extras?.getString("ai.artofficecraft.gridToken") else null
+                                result.success(mapOf("text" to text, "token" to token))
+                            }
+                        }
+                        else -> result.notImplemented()
+                    }
+                } catch (_: Exception) {
+                    result.error("CLIPBOARD_UNAVAILABLE", "Cannot access Android clipboard", null)
+                }
+            }
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "artofficecraft/pdf_renderer",
@@ -69,10 +143,11 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
-                "renderPage" -> {
+                "renderPage", "recognizePage" -> {
+                    val recognize = call.method == "recognizePage"
                     val id = call.argument<Int>("session")
                     val pageIndex = call.argument<Int>("page")
-                    val width = call.argument<Int>("width")
+                    val width = if (recognize) 1440 else call.argument<Int>("width")
                     if (id == null || id <= 0 ||
                         pageIndex == null || pageIndex < 0 ||
                         width == null || width !in 96..1600
@@ -86,13 +161,21 @@ class MainActivity : FlutterActivity() {
                             require(session != null && session.id == id) {
                                 "PDF document session is no longer active"
                             }
-                            val png = renderPage(session, pageIndex, width)
-                            runOnUiThread { result.success(png) }
-                        } catch (_: Exception) {
+                            val bitmap = renderPage(session, pageIndex, width)
+                            val output = try {
+                                if (recognize) pdfOcr.recognize(bitmap)
+                                else encodePng(bitmap)
+                            } finally {
+                                bitmap.recycle()
+                            }
+                            runOnUiThread { result.success(output) }
+                        } catch (error: Throwable) {
+                            if (error !is Exception && error !is LinkageError) throw error
                             runOnUiThread {
                                 result.error(
-                                    "PDF_RENDER",
-                                    "Cannot render this page or the PDF session is closed",
+                                    if (recognize) "PDF_OCR" else "PDF_RENDER",
+                                    if (recognize) "Cannot recognize this page"
+                                    else "Cannot render this page or the PDF session is closed",
                                     null,
                                 )
                             }
@@ -155,7 +238,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun renderPage(session: PdfSession, index: Int, widthRequest: Int): ByteArray {
+    private fun renderPage(session: PdfSession, index: Int, widthRequest: Int): Bitmap {
         require(index < session.renderer.pageCount) { "Invalid page" }
         session.renderer.openPage(index).use { page ->
             require(page.width > 0 && page.height > 0) { "Invalid page dimensions" }
@@ -170,17 +253,19 @@ class MainActivity : FlutterActivity() {
             try {
                 bitmap.eraseColor(Color.WHITE)
                 page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                return ByteArrayOutputStream().use { output ->
-                    require(bitmap.compress(Bitmap.CompressFormat.PNG, 90, output)) {
-                        "Cannot encode PNG"
-                    }
-                    output.toByteArray()
-                }
-            } finally {
+                return bitmap
+            } catch (error: Throwable) {
                 bitmap.recycle()
+                throw error
             }
         }
     }
+
+    private fun encodePng(bitmap: Bitmap): ByteArray =
+        ByteArrayOutputStream().use { output ->
+            require(bitmap.compress(Bitmap.CompressFormat.PNG, 90, output)) { "Cannot encode PNG" }
+            output.toByteArray()
+        }
 
     override fun onDestroy() {
         worker.execute { closeActive() }

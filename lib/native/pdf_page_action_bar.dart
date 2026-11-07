@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 import 'package:flutter/material.dart';
 
 /// Labelled, touch-friendly actions that scroll on small portrait screens.
@@ -21,9 +23,9 @@ class PdfPageActionBar extends StatelessWidget {
       return OutlinedButton.icon(
         onPressed: enabled && !busy ? () => onAction(name) : null,
         icon: Icon(icon, size: 20),
-        label: Text(text, maxLines: 1),
+        label: UiText(text, maxLines: 1),
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size(0, 48),
+          minimumSize: const Size(0, 52),
           padding: const EdgeInsets.symmetric(horizontal: 12),
         ),
       );
@@ -38,13 +40,13 @@ class PdfPageActionBar extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-            child: Text(
+            child: UiText(
               'Страница $pageNumber из $pageCount · действия листаются вбок',
-              style: Theme.of(context).textTheme.labelSmall,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
           SizedBox(
-            height: 56,
+            height: 68,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

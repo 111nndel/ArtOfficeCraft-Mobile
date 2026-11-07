@@ -2,14 +2,78 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Status: alpha 0.8.3 — not a finished office suite.**
+**Current preview — alpha 0.38.0.**
+
+[Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
+· [Contribute or fork this app](CONTRIBUTING.md)
+
+English and Russian UI follow the Android language, with a persisted override in
+About. Spreadsheets support pinch zoom and pan; PDF opens at page width in the
+full available canvas, with optional thumbnails and fit controls. PDF and PPTX
+offer horizontal or vertical single-page swipes and a continuous vertical strip. Large editor
+tool targets and the approved nested slab navigation remain unchanged. Light/dark
+appearance is saved locally and restored before the first Flutter frame.
+Excel sorts selected rows and filters them by values or blank cells.
+Find searches displayed values or formulas across the current sheet or the workbook,
+including populated cells beyond the viewport.
+PDF searches document text, including OCR layers, and highlights the matching text area.
+PDF bookmarks are also searchable. PDF and PowerPoint can jump by page or slide number.
+PowerPoint can move and resize supported objects. PDF can save notes, edit
+supported paragraphs, insert text at a touched location and recognize
+Russian and English on a scanned page. The recognized words can be copied or
+added as invisible, searchable text in the exported PDF copy.
+Word builds only the paragraphs near the viewport.
+See the [0.38.0 release notes and limits](docs/release-0.38.0-alpha.1.md).
+The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
+future tagged publication requires that job to pass. See
+[Android CI coverage and evidence](docs/android-ci.md).
 
 | Format | Current capability |
 | --- | --- |
-| DOCX / WordCraft | Rust FFI: create, parse text, append paragraph and save a new copy. No complete layout or formatting editing. |
-| XLSX / GridCraft | Rust FFI: create/read XLSX, edit cells and formulas, recalculate, save a new copy. Limited preview; no full charts/styles. |
-| PPTX / DeckCraft | Create/import PPTX, add/delete slides, add/edit text, Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
-| PDF / PDFCraft + Android | Real Android page rendering, thumbnails and zoom; Rust COS/model basic page organization and Save As. Complex editing/forms/signing not complete. |
+| DOCX / WordCraft | Create/read DOCX, edit plain paragraphs directly on the page with cursor/selection, selected bold/italic/underline/font size/color and paragraph alignment/spacing/left indent; undo/redo; exact case-sensitive find/replace in text paragraphs, with run preservation; save a new copy. Tables are excluded from search. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
+| XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; edge headings with optional pinning and Go to cell inside View. Imported dimensions/hidden rows and columns/merged regions; finger-driven row/column resizing with undo/redo and saved XLSX sizes. Compact edge headings, imported shrink-to-fit and AutoSum/recalculate commands. Continuous 10–500% zoom, surrounding empty cells, exact visible-cell queries and touch inertia; no thumbnail/overview mode. Touch range handles with edge scrolling, range style/clear operations (4096 cells), named new sheets, positional undo/redo and reopening the saved active sheet are connected. Copy/paste ranges across files/sheets with rebased formulas and styles; values/formulas/formats-only modes and external TSV. Insert/delete whole rows and columns from the selected range, with adjusted references across sheets and undo/redo. Charts and complex styles remain incomplete. |
+| PPTX / DeckCraft | Create/import PPTX, add/delete/reorder slides, add/edit text, undo/redo and Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
+| PDF / PDFCraft + Android | Android page rendering, thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page or adding a searchable text layer to the saved PDF. Document-wide text search supports embedded text and OCR layers, with match navigation and a highlighted region. Forms and digital signing remain in progress. |
+
+### Architecture and current limits
+
+Flutter owns touch interaction and display. `DocumentBackend` sends file parsing,
+editing, recalculation and serialization to one persistent Dart worker per native
+backend, where the bounded C ABI invokes the four pinned Rust adapters. Applied
+edits return immutable bytes and their checked view together; PPTX picture reads
+share that worker. Explicit shutdown drains accepted calls before exit. Native
+buffers are released on success and on error. Each edit still serializes and reparses a whole document;
+a persistent native document/session model and faithful page layout are future work.
+Grid's mobile view bypasses the legacy first-1600-cell inspection limit: it reads
+the requested rectangle plus the selected cell independently. Panning is debounced
+and does not replace pending formula input. Sparse geometry and visible index lists handle hidden lines. Hold a row/column heading and drag to resize; pinch zoom runs from 10% to 500%. Window reads still reparse the XLSX.
+DOCX keeps the active paragraph draft locally while typing; moving to another
+paragraph, Done, formatting and Save As flush it through the native adapter.
+Failed commits keep the visible draft and block export of stale bytes.
+Grid similarly flushes pending input before Save As or changing cells/sheets,
+and preserves styles on value/formula replacement. Applied Grid edits update
+the app-private working copy. Locally written recovery checkpoints retain pending
+Word/Grid/Deck input and modified PDF bytes after process termination; Home offers
+to resume them. Only the last completed checkpoint is recoverable, and undo history
+is session-local. See docs/validation-0.24.0.md for current checks and limits.
+Opening another file or creating a new one inside any editor starts a separate recent-file identity, preserving previous imports and favorites.
+The shared panel navigation follows design/INTERACTION_SPEC.md.
+
+The mobile app integrates four independent upstream projects. It is an independent
+Android port, rather than a GitHub fork with a single upstream parent:
+
+| Engine | Original source | Pinned version |
+| --- | --- | --- |
+| WordCraft | https://github.com/storytold/wordcraft | v0.15.1 |
+| GridCraft | https://github.com/storytold/gridcraft | v0.16.0 |
+| DeckCraft | https://github.com/storytold/deckcraft | v0.15.0 |
+| PDFCraft | https://github.com/storytold/pdfcraft | v0.18.1 |
+
+Exact commits are recorded in `upstream/engines.lock.json` and embedded in the
+native binary (`ac_engine_info`). The About screen reads those binary values.
+Rust dependency license texts are included in the APK and in its Licenses screen.
+Updates require reviewed source changes, compatible adapters, tests and a new APK;
+there is no runtime download or replacement of native engines.
 
 ### Independence and license
 
@@ -32,7 +96,8 @@ Then from a PowerShell prompt in this repository:
     flutter pub get
     flutter analyze
     flutter test
-    .\native\build_android_arm64.ps1
+    python tools/collect_rust_licenses.py
+    .\native\build_android_arm64.ps1 -Release
     flutter build apk --debug --target-platform android-arm64
 
 The native build verifies locked source commits and refuses modified upstream checkouts. ANDROID_HOME should point to Android SDK; ANDROID_NDK_HOME is optional if Android NDK is installed under SDK/ndk.
@@ -45,7 +110,11 @@ For one-command Windows debug build: run build_native_preview.ps1. Debug APK is 
 - stage-rust-engines.ps1 -Latest — download new stable source revisions into ignored staging folders.
 - Update the pinned commit only after reviewing licenses and API compatibility, building and testing all document formats.
 
-Automated GitHub Actions checks are not yet enabled in this public repository. Local scripts can check and stage upstream releases without publishing executable binaries.
+GitHub Actions now defines Flutter/Python checks, Rust tests and an offline ARM64
+APK build. Version tags additionally use an isolated signing job with the existing
+preview certificate, then publish through GitHub CLI. See
+[CI and signing](docs/CI_AND_SIGNING.md) for setup, provenance and remaining manual
+Android QA requirements. Engine pins are never automatically advanced.
 
 ### Offline permission policy
 
@@ -55,7 +124,12 @@ INTERNET permission added for VM-service debugging and hot reload.
 Consequently Flutter network debugging/hot reload may be unavailable.
 Verified APKs must pass an aapt dump permissions check before release.
 Android PdfRenderer uses a temporary app-private copy of the document
-and removes it after the page has been rendered.
+and removes it when its session closes or is replaced.
+
+### Earlier release validation and history
+
+The version-specific results below describe earlier builds. They are not a
+claim of complete compatibility or of testing on Vivo hardware.
 
 ### PDF session lifecycle (0.7.0)
 
@@ -176,10 +250,51 @@ are outstanding.
 
 ### Limitations and safe handling
 
-The WordCraft mobile UI is currently only a text preview of the document body. Existing rich text, images, tables and page layout are not rendered faithfully. Round-trip behavior for complex DOCX has not been established. Keep originals and save edited files as new copies.
+WordCraft now supports in-page paragraph edits and selected character/paragraph formatting. Images, tables and page layout are not rendered faithfully. Round-trip behavior for complex DOCX has not been established. Keep originals and save edited files as new copies.
 
-XLSX now uses native GridCraft for actual file operations, but has a limited 55-row, 12-column preview. PPTX uses real DeckCraft operations with limited preview; PDF now displays real page contents with Android PdfRenderer, but advanced PDF editing is unfinished. No format is yet fully featured.
+XLSX uses native GridCraft for actual file operations and, since 0.17.0, windowed
+cell reads across the full Excel address range. Version 0.18.0 connects imported
+dimensions, hidden lines and merged regions, plus touch resizing. Conditional/table
+styles, images/charts and several other layout features remain incomplete. PPTX uses real DeckCraft operations with limited preview; PDF displays
+real page contents with Android PdfRenderer, but advanced PDF editing is unfinished.
+No format is yet fully featured.
 
 Never publish personal documents in issues, secret keys, signing files, source caches, third-party branding or third-party installers. Read NATIVE_INTEGRATION_STATUS.md for the exact integration status.
 
 Contributions are welcome subject to license notices and safe source review.
+
+
+### Approved mobile workspace design (0.9.0)
+
+The Flutter home screen now follows `design/ArtOfficeCraft_Mobile.html`:
+light workspace, four format colors, search, recent files, favorites,
+format filters, templates, and bottom navigation. This HTML is a design
+reference, never the running editor. The unused in-memory demo editor
+has been removed; every document card opens the existing native screen.
+
+Primary controls use 52 dp touch targets with 14–18 sp labels. Cards
+switch between one, two and four columns; large system text causes
+reflow rather than forced font shrinking. Spreadsheet cells are now
+56 dp high with 16 sp values. All four native headers share a readable
+filename and status. Native file editing capabilities remain limited
+as described above; this is not the complete HTML feature catalog.
+
+Successfully opened files and successful Save As results receive an
+app-private local copy. The file list, search and favorites use this
+persistent index and reopen the private copy through the native engine.
+Unsaved edits are **not** silently autosaved; the existing exit guard
+and explicit Save As workflow remain. Clearing app data/uninstalling
+removes private copies. Export important files through Save copy.
+The storage channel requests no broad storage or network permissions.
+
+Plan document, team budget and idea presentation starters are created
+through WordCraft, GridCraft and DeckCraft. Their content is basic and
+not an exact reproduction of the HTML formatting.
+
+Validation: Flutter analyze reports no issues; all 33 Flutter tests pass.
+New checks cover 320/360/393 dp at 100%/200% text, editor navigation,
+search/favorites, storage restart, concurrent imports and corrupt-index
+handling. ARM64 and x86_64 debug APKs compile with the existing pinned
+native libraries; aapt confirms no INTERNET/Wi-Fi permission in ARM64.
+This iteration has not completed a physical Android phone / TalkBack /
+keyboard-and-SAF end-to-end test. Full Office fidelity remains unverified.

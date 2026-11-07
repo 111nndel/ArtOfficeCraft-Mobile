@@ -1,14 +1,139 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Date: 2026-11-02. Android UI preview with WordCraft DOCX, GridCraft XLSX, DeckCraft PPTX and PDFCraft COS/model operations.
+Current checkpoint: app 0.38.0 / core 0.38.0, native ABI 1. The approved mobile
+panel design is implemented across all editors. DOCX supports in-page paragraph
+editing and selected formatting. XLSX additionally supports guarded pending input,
+undo/redo, native cell styles and number formats. Deck text forms stay within the
+slab; PDF uses Android rendering with explicit session cleanup. See
+`docs/release-0.38.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
+English/Russian UI, sheet pinch/pan and full-width PDF viewing are connected.
+Native backends now own persistent Dart workers with ordered processing, checked
+edit/view snapshots and explicit shutdown. Word history restoration is guarded;
+undo/redo share a bounded memory budget. Persistent parsed Rust models remain future work.
+XLSX now exposes additive `ac_xlsx_inspect_window` for bounded rectangle/selection
+queries, independent of the legacy global preview cutoff. The mobile view mounts
+only visible rows and columns, with full Excel coordinate bounds and Go to cell.
+App appearance is durably saved and preloaded before startup paint.
+XLSX imports sparse dimensions, hidden lines, merges and vertical alignment.
+Long-press/drag on headings previews and persists row/column sizes with undo/redo.
+The selected value remains independent of the loaded window. Picker MIME/extension
+filters are shared by Home and all editor open commands.
+0.19.0 reduces heading labels to 11 logical pixels and the column bar to 28;
+row labels remain 46 wide, independent of document zoom and system text scale.
+AutoSum/recalculate use real native workbook operations, checked snapshots and
+existing undo/redo. Imported shrink-to-fit is displayed and can be changed in
+Cell format. Original PDFCraft vendored JBIG2 fixes are preserved by a managed
+root Cargo patch, resolved from the exact reviewed upstream source.
+
+0.21.0 removes the 0.20 thumbnail overview and automatic centering. The sheet
+stays editable at 10–500%, including surrounding empty cells. Reduced zoom paints
+only the viewport, with the same exact native window data and hit-testing; tapping
+does not change zoom. Exact queries allow up to 262,144 visible intersections
+(8,192 rows / 2,048 columns per axis), with no sampling or text truncation.
+Coordinate headings still follow physical sheet edges by default; optional pinning
+stays in View. Inertial pan, focal-point pinch and touch resizing are preserved.
+Successful imports and new documents reset the workspace identity in all four
+editors, preventing a new import from overwriting the previous recent copy.
+
+0.23.0 connects rectangular touch selection with 44-dp handles and edge scrolling.
+Range formatting/clear use the pinned native workbook and preserve clear-time
+styles; recalculation, checked snapshots and history still apply. Range actions
+are limited to 4096 cells and complete merges. Word exposes selected RGB/automatic
+color and left-indent presets; preview and inline/static display share foreground
+color and multiple line spacing. Four upstream pins and dependencies are unchanged.
+
+0.24.0 adds the pinned gridcraft-engine command facade for copy/paste. The C ABI
+adds bounded copy-range metadata and a three-buffer rich paste operation; the
+Dart worker returns checked XLSX/view snapshots before publishing edits. Only
+selected TSV and an opaque identity token enter Android's clipboard. One source
+snapshot stays in memory (24 MiB maximum); pasted selections are limited to 4096
+cells and text to 256 KiB UTF-8. All/values/formulas/formats modes use upstream
+commands and rebasing/style interning. Partial merges, protected destinations,
+array/spill ranges and format-only merged sources are guarded. Upstream source
+pins remain unchanged; nine transitive packages are newly resolved and their
+notices are bundled. Word/Deck/PDF have no new feature in this release.
+
+0.25.0 connects the four pinned GridCraft whole-row and whole-column operations
+through the existing edit ABI. The selection supplies a contiguous span, and
+native serialization preserves the shifted model and rewritten supported formula
+references. The worker checks the resulting view before the editor records one
+undo step. Deletion lists the exact lines in the same nested panel. The app
+bounds each operation to 256 lines and keeps both snapshots within the existing
+24 MiB history budget. No dependency or upstream pin changes are required.
+
+0.26.0 adds touch page turns and a virtualized continuous reader to PDF and PPTX.
+Single-page swipes turn at the visible page edge. The continuous canvas mounts
+visible pages and tracks the active page for the editor tools and thumbnails.
+Reading preferences are stored per format in Android's private settings.
+DOCX currently provides an editable continuous paragraph view.
+
+0.27.0 connects GridCraft range sorting through the existing edit ABI.
+The Data panel accepts a sort column, direction and an optional header row.
+The Dart worker validates the new XLSX view before committing an undo step.
+All four original engine source pins and their bundled notices are updated.
+
+0.28.0 exposes worksheet AutoFilter value lists and apply/remove commands.
+The background worker reads options, writes the real XLSX filter and verifies
+the view before the editor commits an undo step. Rows hidden by a filter keep
+their cells and styles. The four engine pins match their latest stable tags.
+
+0.29.0 adds searchable PDF bookmarks and direct page/slide number navigation.
+PDFCraft's pinned organize crate resolves local destinations on the worker.
+The viewer uses the resolved page numbers and titles for navigation.
+
+0.30.0 adds touch positioning and resizing of supported PPTX objects,
+standard text annotations in PDF and a lazy Word paragraph viewport.
+Search and draft restoration can anchor the Word viewport at a distant block.
+
+0.31.0 connects PDFCraft's page-content editor. The worker loads up to 256
+supported text blocks on demand for the current page. It checks the source block
+before rewriting its text and passes the saved bytes back to Android for rendering.
+Invisible OCR text is excluded.
+
+0.32.0 adds touch-positioned PDF text insertion. The worker embeds the pinned
+PDFCraft Inter font, checks that the text fits and adds a page content stream
+using the displayed crop and rotation. The saved text remains selectable.
+
+0.33.0 adds PDF scan recognition on the Android renderer's background worker.
+The offline recognizer uses Tesseract4Android 4.9.0 and Russian and English
+tessdata_fast models. The build pins all input hashes and the app bundles the
+models and notices. The result is available in the text panel for selection
+and copying. PDFCraft continues to own PDF serialization and editing.
+
+0.34.0 publishes Flutter release APKs with Android debugging disabled. Android
+16 QA exercises an in-place upgrade from a profile build, then reopens the
+recent imported documents. The publisher uses the established preview certificate.
+
+0.35.0 adds per-page searchable OCR export. The Android worker returns recognized
+word positions. PDFCraft adds an invisible Unicode text layer aligned to the
+existing page image and checks for existing searchable text before adding it.
+The layer uses the existing edit history and Save PDF flow.
+
+0.36.0 adds PDF text search to the Reading panel. The persistent Dart worker
+reads bounded page batches through the pinned PDFCraft reading blocks API,
+including invisible OCR text. Search highlights the matching text region, jumps
+to it in each reading mode and reports when some results may be missing.
+
+0.37.0 refreshes the four pinned engine sources and resolves their path
+dependencies through the isolated engine-refresh workflow. The generated Cargo
+lock and complete license notices are reviewed before normal Android checks.
+
+0.38.0 adds Excel cell search. The native adapter walks bounded batches of
+GridCraft sparse cells and reuses its value formatting and hidden-formula rules.
+The mobile panel finds values or formulas on a sheet or across the workbook,
+commits pending input first and reveals the selected result at the current zoom.
+Both inspection APIs conceal protected hidden formulas in their input values.
+
+The version-labelled sections below describe historical checkpoints and retain
+their original limitations; they are not a current capability inventory.
 
 ## Source and provenance
 
 Pinned upstream repositories:
-- WordCraft v0.14.0, commit `5cd53f184aab11def13b7fced18727159b9bc96a`.
-- GridCraft v0.15.0, commit `30b210b4ef03b30616923465efa70766cefba379`.
-- DeckCraft v0.14.1, commit `ee39ff67816d0039143ec7c98ea604cefe0cd2e5`.
-- PDFCraft v0.17.0, commit `7d78f3e14474b978be014715e0cc64895d77025a`.
+- WordCraft v0.16.0, commit `02a802cbafe45b5c8fecc00490c8f6b78c5ba251`.
+- GridCraft v0.17.0, commit `a6a6a49a0415087474251b08e887a3581fab9e14`.
+- DeckCraft v0.16.0, commit `a3e2254d3de32ed1718f156f070b54a34b949b54`.
+- PDFCraft v0.19.0, commit `8c572792d6760bdc903d6f9a032e3e38e8f71cb8`.
 
 All repositories are downloaded and checked against pinned SHAs; original ZIP files untouched.
 
@@ -348,3 +473,16 @@ Testing with an actual Android phone via ADB remains outstanding.
 ## Constraints
 
 APK is debug; Android ARM64 target verified by build. It must not be represented as a finished office suite. Full features require significant engineering and tests, not just exposing existing Rust source trees.
+
+
+0.22.0 connects exact, case-sensitive paragraph find/replace in Word, including
+Unicode offsets, unchanged run preservation and one history step per replacement
+operation. Table content remains excluded and protected matches refuse edits.
+Grid adds validated named sheets through the pinned upstream model, saves the
+active tab and restores sheet context through undo/redo. Deck reorders whole
+slides without rebuilding their shapes/media; its history and PDF page history
+now preserve selected indices and mutate only after a checked restore. Pending
+Deck text is committed without silently switching the slide being reordered.
+PDF supports direct page-number moves; displayed width/height from Rust are no
+longer swapped a second time for rotated pages. New controls use the existing
+nested panel and include English strings. Full Office fidelity remains incomplete.
