@@ -1,5 +1,7 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
+  "Доступна вставка текста через «Вставить всё». Формулы и оформление не переносятся.":
+      "Paste text using Paste all. Formulas and formatting are not transferred.",
   "Удерживайте и тяните для изменения размера": "Hold and drag to resize",
   "Высота строки": "Row height",
   "Ширина столбца": "Column width",

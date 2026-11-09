@@ -1,3 +1,4 @@
+import '../native/grid_clipboard.dart';
 import '../platform/application_storage.dart';
 import '../platform/document_files.dart';
 import '../native/pdf_page_renderer.dart';
@@ -31,6 +32,7 @@ class HomeScreen extends StatefulWidget {
     this.storage = const AndroidApplicationStorage(),
     this.files = const MobileDocumentFiles(),
     this.pdfRenderer,
+    this.clipboard,
   });
   final VoidCallback toggleTheme;
   final ThemeMode theme;
@@ -39,6 +41,7 @@ class HomeScreen extends StatefulWidget {
   final ApplicationStorage storage;
   final DocumentFiles files;
   final PdfPageRenderer? pdfRenderer;
+  final GridClipboard? clipboard;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -135,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
           files: widget.files,
         ),
         EditorKind.excel => NativeGridScreen(
+          clipboard: widget.clipboard,
           launch: launch,
           onRemember: remember,
           onDocumentChanged: documentChanged,

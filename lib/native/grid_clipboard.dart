@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
-import 'package:flutter/services.dart';
+import '../platform/system_clipboard.dart';
 
 import 'document_backend.dart';
 import 'grid_selection.dart';
 
 /// Exactly one bounded rich snapshot per app session. Only selected TSV text
-/// and an opaque identity token are placed on Android's system clipboard.
+/// and an opaque identity token are placed on a capable system clipboard.
 class GridClip {
   GridClip(Uint8List bytes, this.sheet, Map<String, dynamic> info)
     : source = _snapshot(bytes, sheet),
@@ -18,6 +19,7 @@ class GridClip {
       token = _token() {
     if (bytes.length > maxSource ||
         range.cellCount > GridSelection.maxCells ||
+        text.length > maxText ||
         utf8.encode(text).length > maxText ||
         info['rows'] != rows ||
         info['columns'] != columns) {
@@ -50,34 +52,52 @@ class GridClip {
 }
 
 class GridClipboard {
-  static const channel = MethodChannel('artofficecraft/grid_clipboard');
-  static GridClip? _current;
-  static GridClip? get current => _current;
-  static void clearLocal() => _current = null;
-  static Future<void> write(GridClip entry) async {
-    await channel.invokeMethod<void>('write', {
-      'text': entry.text,
-      'token': entry.token,
-    });
-    _current = entry;
+  GridClipboard(this.system);
+  final SystemClipboard system;
+  bool get supportsFormatting => system.supportsIdentity;
+  GridClip? _current;
+  GridClip? get current => _current;
+  Future<void> _queue = Future.value();
+  int _generation = 0;
+
+  void clearLocal() {
+    _generation++;
+    _current = null;
   }
 
-  static Future<({String text, GridClip? rich})?> read() async {
-    final value = await channel.invokeMapMethod<String, dynamic>('read');
-    final text = value?['text'];
-    if (text is! String) {
-      clearLocal();
+  Future<T> _serialize<T>(Future<T> Function() work) {
+    final next = _queue.then((_) => work());
+    _queue = next.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return next;
+  }
+
+  Future<void> write(GridClip entry) {
+    final generation = _generation;
+    return _serialize(() async {
+      await system.write((text: entry.text, token: entry.token));
+      if (generation == _generation) {
+        _current = supportsFormatting ? entry : null;
+      }
+    });
+  }
+
+  Future<({String text, GridClip? rich})?> read() => _serialize(() async {
+    final value = await system.read();
+    if (value == null) {
+      _current = null;
       return null;
     }
-    if (utf8.encode(text).length > GridClip.maxText) {
-      clearLocal();
+    final text = value.text;
+    if (text.length > GridClip.maxText ||
+        utf8.encode(text).length > GridClip.maxText) {
+      _current = null;
       throw const FormatException('Текст буфера обмена превышает 256 КиБ');
     }
     final rich = _current;
-    if (rich == null || value?['token'] != rich.token || text != rich.text) {
-      clearLocal();
+    if (rich == null || value.token != rich.token || text != rich.text) {
+      _current = null;
       return text.isEmpty ? null : (text: text, rich: null);
     }
     return (text: text, rich: rich);
-  }
+  });
 }

@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
-import 'package:artofficecraft_mobile/native/grid_clipboard.dart';
+import 'package:artofficecraft_mobile/platform/clipboards.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/ui/editor_tools.dart';
@@ -91,7 +91,7 @@ void main() {
     command.onPressed!();
     await until(
       tester,
-      () => GridClipboard.current != null,
+      () => defaultGridClipboard.current != null,
       'Android rich clipboard',
     );
     await tester.pumpAndSettle();
@@ -167,8 +167,8 @@ void main() {
     debugPrint('DESIGN_SCREENSHOT $path');
   }
 
-  setUp(GridClipboard.clearLocal);
-  tearDown(GridClipboard.clearLocal);
+  setUp(defaultGridClipboard.clearLocal);
+  tearDown(defaultGridClipboard.clearLocal);
 
   testWidgets(
     'Rich Android clipboard survives source screen closure and pastes across workbooks and sheets with undo',
@@ -266,7 +266,7 @@ void main() {
       addTearDown(b.close);
       await present(tester, b, await source(b));
       await copy(tester, 'A1:B1');
-      final plain = GridClipboard.current!.text;
+      final plain = defaultGridClipboard.current!.text;
       await Clipboard.setData(ClipboardData(text: plain));
       var target = await b.create();
       target = await b.edit(target, {
@@ -278,7 +278,7 @@ void main() {
       await present(tester, b, target);
       await paste(tester, 'Вставить всё');
       var saved = await save(tester);
-      expect(GridClipboard.current, isNull);
+      expect(defaultGridClipboard.current, isNull);
       expect((await cell(b, saved, 'A1'))['style']['italic'], true);
       expect((await cell(b, saved, 'A1'))['style']['bold'], false);
       expect((await cell(b, saved, 'B1'))['input'], '20');
