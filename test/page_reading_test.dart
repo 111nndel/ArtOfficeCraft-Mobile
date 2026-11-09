@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
 import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
+import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'package:artofficecraft_mobile/ui/page_reading.dart';
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
@@ -12,6 +15,20 @@ import 'loaded_editors_test.dart' show setup;
 import 'mobile_viewports_test.dart' show pinch, pixel;
 import 'office_features_backend.dart';
 import 'office_features_test.dart' show press, tool;
+
+class _ReadingStorage implements ApplicationStorage {
+  _ReadingStorage(this.preferences);
+  final Map<String, String> preferences;
+  @override
+  Future<Directory> workspaceDirectory() async =>
+      throw UnsupportedError('No document workspace in reading gesture tests');
+  @override
+  Future<String?> readReadingMode(String format) async => preferences[format];
+  @override
+  Future<void> writeReadingMode(String format, String mode) async {
+    preferences[format] = mode;
+  }
+}
 
 Future<void> changeMode(
   WidgetTester tester,
@@ -25,9 +42,9 @@ Future<void> changeMode(
 }
 
 void main() {
-  const preferenceChannel = MethodChannel('artofficecraft/reading');
   const rendererChannel = MethodChannel('artofficecraft/pdf_renderer');
   final preferences = <String, String>{};
+  late _ReadingStorage storage;
   final renders = <int>[];
   late TestDefaultBinaryMessenger messenger;
 
@@ -35,14 +52,8 @@ void main() {
     messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     preferences.clear();
+    storage = _ReadingStorage(preferences);
     renders.clear();
-    messenger.setMockMethodCallHandler(preferenceChannel, (call) async {
-      final args = call.arguments as Map;
-      final format = args['format'] as String;
-      if (call.method == 'read') return preferences[format];
-      preferences[format] = args['mode'] as String;
-      return null;
-    });
     var session = 0;
     messenger.setMockMethodCallHandler(rendererChannel, (call) async {
       if (call.method == 'openDocument') {
@@ -58,7 +69,6 @@ void main() {
   });
 
   tearDown(() {
-    messenger.setMockMethodCallHandler(preferenceChannel, null);
     messenger.setMockMethodCallHandler(rendererChannel, null);
   });
 
@@ -81,6 +91,7 @@ void main() {
       const Size(393, 873),
       1,
       NativePdfScreen(
+        storage: storage,
         backend: backend,
         renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
         launch: EditorLaunch(bytes: await backend.create()),
@@ -124,6 +135,7 @@ void main() {
       });
       final bytes = await backend.create();
       Widget pdf() => NativePdfScreen(
+        storage: storage,
         backend: backend,
         renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
         launch: EditorLaunch(bytes: bytes),
@@ -208,6 +220,7 @@ void main() {
         const Size(393, 873),
         1,
         NativeDeckScreen(
+          storage: storage,
           backend: backend,
           launch: EditorLaunch(bytes: await backend.create()),
         ),

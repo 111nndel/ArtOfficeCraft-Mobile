@@ -102,6 +102,21 @@ def checks(device, output):
         with test_manifest(manifest):
             for suite in SUITES:
                 start = time.monotonic()
+                if suite == 'office_features':
+                    # Seed pre-Dart preferences in the disposable debug app,
+                    # before Flutter reinstalls it with the next test target.
+                    package = 'ai.artofficecraft.artofficecraft_mobile'
+                    capture([*adb, 'install', '-r', ROOT / 'build/app/outputs/flutter-apk/app-debug.apk'])
+                    capture([*adb, 'shell', 'am', 'force-stop', package])
+                    capture([*adb, 'shell', 'run-as', package, 'mkdir', '-p', 'shared_prefs'])
+                    capture([*adb, 'shell', 'run-as', package, 'rm', '-f',
+                             'files/workspace/reading-pdf.json', 'files/workspace/reading-deck.json'])
+                    with (output / 'legacy-reading-fixture.txt').open('wb') as stream:
+                        subprocess.run([*adb, 'shell', '-T', 'run-as', package, 'tee',
+                                        'shared_prefs/reading_modes.xml'],
+                                       input=b'<?xml version="1.0" encoding="utf-8"?><map><string name="pdf">continuous</string><string name="deck">vertical</string></map>',
+                                       stdout=stream, stderr=subprocess.STDOUT,
+                                       timeout=30, check=True)
                 directory = output / 'screenshots' / suite
                 if directory.exists():
                     shutil.rmtree(directory)

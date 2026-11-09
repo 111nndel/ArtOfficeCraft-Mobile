@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.42.0.**
+**Current preview — alpha 0.43.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -69,10 +69,10 @@ Android port, rather than a GitHub fork with a single upstream parent:
 
 | Engine | Original source | Pinned version |
 | --- | --- | --- |
-| WordCraft | https://github.com/storytold/wordcraft | v0.15.1 |
-| GridCraft | https://github.com/storytold/gridcraft | v0.16.0 |
-| DeckCraft | https://github.com/storytold/deckcraft | v0.15.0 |
-| PDFCraft | https://github.com/storytold/pdfcraft | v0.18.1 |
+| WordCraft | https://github.com/storytold/wordcraft | v0.17.0 |
+| GridCraft | https://github.com/storytold/gridcraft | v0.18.0 |
+| DeckCraft | https://github.com/storytold/deckcraft | v0.17.0 |
+| PDFCraft | https://github.com/storytold/pdfcraft | v0.20.0 |
 
 Exact commits are recorded in `upstream/engines.lock.json` and embedded in the
 native binary (`ac_engine_info`). The About screen reads those binary values.
