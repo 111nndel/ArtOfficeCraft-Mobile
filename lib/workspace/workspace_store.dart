@@ -53,10 +53,9 @@ class WorkspaceFile {
 /// Unsaved native editing sessions keep their existing explicit Save As guard.
 class WorkspaceStore extends ChangeNotifier {
   WorkspaceStore({
-    Directory? directory,
+    this._directory,
     this.storage = const AndroidApplicationStorage(),
-  })
-    : _directory = directory;
+  });
   final ApplicationStorage storage;
   Directory? _directory;
   final List<WorkspaceFile> _files = [];

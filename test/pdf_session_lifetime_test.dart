@@ -55,7 +55,7 @@ class MemoryPdfRenderer implements PdfPageRenderer {
   @override
   Future<Uint8List> render(int session, int page, {int width = 1000}) async => image;
   @override
-  Future<PdfOcrResult> recognize(int session, int page) async => (text: '', words: []);
+  Future<PdfOcrResult> recognize(int session, int page) async => (text: '', words: <PdfOcrWord>[]);
   @override
   Future<void> close(int session) async { closed.add(session); }
 }
