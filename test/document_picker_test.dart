@@ -121,7 +121,13 @@ void main() {
       await setup(tester, const Size(393, 873), 1, screen);
       await tester.tap(find.byTooltip('Меню файла'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Сохранить как ${kind.format}'));
+      final saveLabel = switch (kind) {
+        EditorKind.word => 'Сохранить как DOCX',
+        EditorKind.excel => 'Сохранить копию',
+        EditorKind.slides => 'Сохранить копию PPTX',
+        EditorKind.pdf => 'Сохранить PDF',
+      };
+      await tester.tap(find.text(saveLabel));
       await tester.pumpAndSettle();
       expect(files.kind, kind);
       expect(files.bytes, isNotEmpty);
