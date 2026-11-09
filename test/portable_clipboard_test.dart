@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:artofficecraft_mobile/native/grid_clipboard.dart';
 import 'package:artofficecraft_mobile/platform/flutter_text_clipboard.dart';
