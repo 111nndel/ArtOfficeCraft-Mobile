@@ -22,6 +22,7 @@ env:
 jobs:
   flutter:
     name: Flutter and updater tests
+    if: ${{ !startsWith(github.ref, 'refs/heads/codex/release-v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -36,6 +37,7 @@ jobs:
 
   native:
     name: Rust tests and ARM64 core
+    if: ${{ !startsWith(github.ref, 'refs/heads/codex/release-v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -106,6 +108,7 @@ jobs:
 
   emulator:
     name: Android 16 emulator and editor scenarios
+    if: ${{ !startsWith(github.ref, 'refs/heads/codex/release-v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
@@ -167,8 +170,7 @@ jobs:
           retention-days: 7
 
   release-request:
-    name: Request verified tag preview
-    needs: [android, emulator]
+    name: Request tag preview
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/codex/release-v') && github.repository == '111nndel/ArtOfficeCraft-Mobile'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -176,7 +178,7 @@ jobs:
       contents: write
       actions: write
     steps:
-      - name: Create checked tag and request its preview
+      - name: Create requested tag and run its checks
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
