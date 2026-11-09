@@ -18,6 +18,14 @@ missing output or invalid/empty content region fails; rasters are never resized
 for the numerical comparison. These are a small fixture's regression criteria,
 not a standard or proof of universal PDF compatibility.
 
+The second workflow job uses the exact generated fixture with the existing
+Android adapter on an API 36 x86_64 emulator. It adds the fixture, manifest and
+font notice only to an isolated debug test build and restores `pubspec.yaml`
+afterwards. A dedicated integration driver transfers bounded raw PNGs before
+the test application is removed. No test APK is published, and no Rust core is
+required for the Android reference job. `comparison-android.json` records its
+comparison with the same Poppler reference under the same numerical policy.
+
 Run on Linux with Rust 1.99.1, Poppler and DejaVu fonts installed:
 
 ```sh

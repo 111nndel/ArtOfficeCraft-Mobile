@@ -199,6 +199,7 @@ def make_fixture(output, font_directory):
     assert '/OpenAction' not in check.trailer['/Root']
     assert '/JavaScript' not in check.trailer['/Root'].get('/Names', {})
     manifest = {'schema': 1, 'scale': SCALE, 'pages': cases, 'fonts': fonts,
+                'pdfBytes': (output / 'fixture.pdf').stat().st_size,
                 'pdfSha256': hashlib.sha256((output / 'fixture.pdf').read_bytes()).hexdigest()}
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
     copyright_file = Path('/usr/share/doc/fonts-dejavu-core/copyright')

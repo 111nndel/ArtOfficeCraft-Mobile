@@ -36,12 +36,44 @@ one synthetic fixture on one Linux runner. No Android speed, battery, APK-size
 or visual-fidelity comparison was performed. Deterministic hashes do not prove
 that a page is rendered correctly.
 
+## Six-page image comparison
+
+The first image-fidelity run compared the same original PDF at 144 dpi with
+Poppler 24.02.0 and the pinned PDFCraft CPU renderer. The fixture embeds DejaVu
+regular/bold/italic TTF subsets and contains only original graphics and labels.
+Its font hashes and licence notices are retained with the evidence.
+
+[First six-page run and raster pairs](https://github.com/111nndel/ArtOfficeCraft-Mobile/actions/runs/42575413644)
+using app probe source `eaeb9c2529db4d29846b72e75117783f1b48778c`:
+
+| Case | Raster size | Mean absolute channel error, 0-255 | Pixels with a channel difference >32 |
+| --- | --- | ---: | ---: |
+| Embedded Cyrillic TTF styles | 1200 x 1600 | 0.520 | 0.526% |
+| JPEG raster document | 1200 x 1600 | 0.840 | 0.957% |
+| PDF alpha and RGBA PNG | 1200 x 1600 | 0.367 | 0.283% |
+| Vector clipping | 1200 x 1600 | 0.766 | 1.075% |
+| 90-degree page rotation | 1600 x 1200 | 0.361 | 0.323% |
+| Offset CropBox | 1040 x 1400 | 2.059 | 2.007% |
+
+All six sizes matched without resizing; all 13 content regions passed the
+fixed comparison policy. Region dark-pixel ratios ranged from 0.973 to 1.038,
+and the largest regional mean channel error was 5.108. The renderer reported
+zero warnings. Peak process RSS for this six-page run was 42.8 MiB. Raster pairs
+were also visually reviewed; no missing text, graphics or misplaced page boxes
+were observed in these cases. Pixel differences remain, including antialiasing
+and image resampling, so this is not a pixel-identity claim.
+
+`tools/pdf_fidelity/` keeps the fixture generator, exact comparison policy and
+seven tests against false-positive comparisons. Its workflow also provides a
+separate Android PdfRenderer comparison using the same fixture and reference;
+those results are recorded independently in the Android job's evidence.
+
 ## Integration decision
 
 Keep this as a development-only probe. Before selecting it as an application
-renderer, compare page images with Android and an independent reference using
-embedded Cyrillic fonts, scanned images, transparency, rotation and large or
-malformed PDFs. Then measure native ABI transfer, Flutter display/cache memory
+renderer, complete the Android image comparison and broaden document coverage
+to large or malformed PDFs, forms, CFF/Type 3 fonts and complex colour spaces.
+Then measure native ABI transfer, Flutter display/cache memory
 and lifecycle cleanup on Android ARM64 and an actual desktop runner.
 
 The current shared `PdfPageRenderer` contract provides a replacement boundary.

@@ -65,16 +65,21 @@ def compare_images(reference, candidate, expected_size, regions):
     return result
 
 
-def compare_suite(root):
+def compare_suite(root, candidate='rust'):
+    if candidate not in ('rust', 'android'):
+        raise ValueError('Unknown candidate renderer')
     manifest = json.loads((root / 'fixture/manifest.json').read_text())
     report = {'schema': 1, 'policy': POLICY, 'scale': manifest['scale'],
               'pdfSha256': manifest['pdfSha256'], 'pages': [],
-              'scope': 'Six synthetic cases on Linux; no Android or universal document-fidelity claim.'}
-    output = root / 'comparison'
+              'candidate': candidate,
+              'scope': 'Six synthetic cases; no universal document-fidelity claim.'}
+    suffix = '' if candidate == 'rust' else '-android'
+    output = root / ('comparison' + suffix)
     output.mkdir(exist_ok=True)
     for page in manifest['pages']:
         number = page['page']
-        paths = [root / f'reference/page-{number}.png', root / f'rust/page-{number:02}.ppm']
+        ext = 'ppm' if candidate == 'rust' else 'png'
+        paths = [root / f'reference/page-{number}.png', root / f'{candidate}/page-{number:02}.{ext}']
         if not all(p.is_file() for p in paths):
             report['pages'].append({'name': page['name'], 'page': number,
                                     'passed': False, 'errors': ['Missing renderer output']})
@@ -83,11 +88,13 @@ def compare_suite(root):
             ref, actual = ref.convert('RGB'), actual.convert('RGB')
             result = compare_images(ref, actual, page['size'], page['regions'])
             result.update(name=page['name'], page=number)
-            actual.save(root / f'rust/page-{number:02}.png')
+            if candidate == 'rust':
+                actual.save(root / f'rust/page-{number:02}.png')
             # Resizing is for the review sheet only. Metrics always use exact rasters.
             sheet = Image.new('RGB', (1200, 850), 'white')
             draw = ImageDraw.Draw(sheet)
-            draw.text((14, 8), f"{page['name']}: Poppler reference / PDFCraft Rust", fill='black')
+            label = 'PDFCraft Rust' if candidate == 'rust' else 'Android PdfRenderer'
+            draw.text((14, 8), f"{page['name']}: Poppler reference / {label}", fill='black')
             for image, x in ((ref, 0), (actual, 600)):
                 preview = image.copy()
                 preview.thumbnail((590, 800))
@@ -98,13 +105,15 @@ def compare_suite(root):
                 diff.save(output / f'diff-{number:02}.png')
             report['pages'].append(result)
     report['passed'] = len(report['pages']) == 6 and all(p['passed'] for p in report['pages'])
-    (root / 'comparison.json').write_text(json.dumps(report, indent=2) + '\n')
+    (root / ('comparison' + suffix + '.json')).write_text(json.dumps(report, indent=2) + '\n')
     return report
 
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('root', type=Path)
-    report = compare_suite(p.parse_args().root)
+    p.add_argument('--candidate', choices=('rust', 'android'), default='rust')
+    args = p.parse_args()
+    report = compare_suite(args.root, args.candidate)
     print(json.dumps(report, indent=2))
     raise SystemExit(0 if report['passed'] else 1)
