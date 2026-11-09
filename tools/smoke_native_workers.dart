@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
 import 'package:artofficecraft_mobile/native/native_build_info.dart';
+import 'package:artofficecraft_mobile/native/grid_clipboard.dart';
+import 'package:artofficecraft_mobile/native/grid_window.dart';
+import 'package:artofficecraft_mobile/platform/system_clipboard.dart';
 
 void check(bool condition, String message) {
   if (!condition) throw StateError(message);
@@ -45,6 +48,25 @@ Future<void> main() async {
           case NativeDocumentKind.grid:
             final cells = (preview['sheets'] as List).first['cells'] as Map;
             check(cells['B2']['display'] == '20', 'Grid formula lost');
+            final clipboard = GridClipboard(_HostClipboard());
+            final copied = await backend.copyGrid(edited.bytes, {
+              'sheet': 0, 'range': 'B2',
+            });
+            await clipboard.write(GridClip(edited.bytes, 0, copied));
+            final rich = (await clipboard.read())?.rich;
+            check(rich != null, 'Portable rich clipboard unavailable');
+            final pasted = await backend.pasteGrid(
+              created, rich!.source,
+              {'sheet': 0, 'address': 'C3', 'sourceSheet': rich.sheet,
+                'sourceRange': rich.range.address, 'mode': 'all'},
+              GridWindow(0, 0, 0), 'C3',
+            );
+            final reopened = await backend.inspect(pasted.bytes);
+            final pastedCells = (reopened['sheets'] as List).first['cells'] as Map;
+            check(pastedCells['C3']['input'] == '=SUM(12,8)' &&
+              pastedCells['C3']['display'] == '20', 'Clipboard formula lost');
+            clipboard.clearLocal();
+            stdout.writeln('PASS grid clipboard: portable session, native copy/paste, reopen');
           case NativeDocumentKind.deck:
             check(jsonEncode(preview).contains('Linux edit 😀'), 'Deck edit lost');
           case NativeDocumentKind.pdf:
@@ -58,4 +80,14 @@ Future<void> main() async {
   } finally {
     await directory.delete(recursive: true);
   }
+}
+
+class _HostClipboard implements SystemClipboard {
+  @override
+  bool get supportsIdentity => true;
+  SystemClipboardContents? value;
+  @override
+  Future<void> write(SystemClipboardContents contents) async { value = contents; }
+  @override
+  Future<SystemClipboardContents?> read() async => value;
 }

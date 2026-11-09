@@ -1,3 +1,4 @@
+import 'native/grid_clipboard.dart';
 import 'platform/application_storage.dart';
 import 'platform/document_files.dart';
 import 'native/pdf_page_renderer.dart';
@@ -33,11 +34,13 @@ class ArtOfficeCraftApp extends StatefulWidget {
     this.storage = const AndroidApplicationStorage(),
     this.files = const MobileDocumentFiles(),
     this.pdfRenderer,
+    this.clipboard,
   });
   final String? initialLanguage;
   final ApplicationStorage storage;
   final DocumentFiles files;
   final PdfPageRenderer? pdfRenderer;
+  final GridClipboard? clipboard;
 
   /// Owned by the app; main supplies an already loaded preference before paint.
   final ThemeSettings? themeSettings;
@@ -88,6 +91,7 @@ class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp> {
           storage: widget.storage,
           files: widget.files,
           pdfRenderer: widget.pdfRenderer,
+          clipboard: widget.clipboard,
           theme: appearance.mode,
           toggleTheme: () async {
             final saved = await appearance.select(

@@ -12,8 +12,9 @@ operations do not establish that the entire UI works on another OS.
 | Open/export | `DocumentFiles` | Existing Android/iOS file-dialog plugin, isolated in `lib/platform/document_files.dart` |
 | Storage | `ApplicationStorage` | Existing Android channels; portable directory-backed Dart storage |
 | PDF display/OCR | `PdfPageRenderer` | Android PdfRenderer and offline OCR channel |
+| Spreadsheet clipboard | `SystemClipboard`, `GridClipboard` | Android identity-bearing clipboard; Flutter text-only fallback |
 
-`ArtOfficeCraftApp` accepts storage, file and PDF-renderer services and passes
+`ArtOfficeCraftApp` accepts storage, file, PDF-renderer and clipboard services and passes
 them through Home to the editors. A new platform entry point can supply these
 without changing document editing or save guards. Directory storage needs an
 application support directory supplied by that entry point. It does not guess a
@@ -23,6 +24,14 @@ Android keeps the existing directory, filenames and reading-preference keys, so
 upgrades do not relocate recent files, drafts, appearance or language choices.
 The directory-backed adapter stores reading preferences as small JSON files,
 serializes writes and rejects path-like format identifiers.
+
+`GridClipboard` owns an immutable, bounded workbook snapshot in Dart and orders
+reads/writes through an injectable `SystemClipboard`. Android exports selected
+text and a random entry identity; workbook bytes stay private. Text equality
+alone never authorizes formulas or formatting. The Flutter fallback has no entry
+identity, immediately releases rich snapshot data and offers text-only paste.
+Clearing a pending copy cannot resurrect its snapshot. An editor closed while
+native copying is pending cannot overwrite a more recent copy from another file.
 
 ## Native packaging contract
 
@@ -49,7 +58,8 @@ FFI/worker layer; it does not launch a Linux Flutter app or render PDF pages.
 
 - Add native desktop/iOS runner projects, packaging and builds.
 - Supply each target's application support directory and native file dialogs.
-- Isolate the rich spreadsheet clipboard channel and validate desktop behavior.
+- Implement identity-bearing desktop clipboards if rich cross-file paste is needed;
+  validate them on actual desktop runners. Portable text paste is already isolated.
 - Evaluate a portable PDF rasterizer/OCR integration using representative files,
   fidelity, peak memory and latency before adding a dependency.
 - Exercise desktop text input, windows, keyboard shortcuts and large-screen UI.

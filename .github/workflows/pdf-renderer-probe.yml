@@ -1,0 +1,29 @@
+name: Pinned PDF renderer feasibility probe
+
+on:
+  push:
+    branches: ['probes/pdf-renderer-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Measure the pinned upstream CPU renderer on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build and measure the approved PDF source
+        run: bash tools/ci/probe_pdf_renderer.sh
+      - name: Retain measurements and provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pdf-renderer-probe
+          path: build/pdf-renderer-probe/results/
+          if-no-files-found: warn
+          retention-days: 7

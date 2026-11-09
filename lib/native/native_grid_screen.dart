@@ -1,3 +1,4 @@
+import '../platform/clipboards.dart';
 import '../platform/document_files.dart';
 import 'grid_layout.dart';
 import '../workspace/document_picker.dart';
@@ -36,6 +37,7 @@ class NativeGridScreen extends StatefulWidget {
     this.onDocumentChanged,
     this.draft,
     this.backend,
+    this.clipboard,
     this.files = const MobileDocumentFiles(),
   });
   final EditorLaunch? launch;
@@ -43,12 +45,14 @@ class NativeGridScreen extends StatefulWidget {
   final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
+  final GridClipboard? clipboard;
   final DocumentFiles files;
   @override
   State<NativeGridScreen> createState() => _NativeGridScreenState();
 }
 
 class _NativeGridScreenState extends State<NativeGridScreen> {
+  late final clipboard = widget.clipboard ?? defaultGridClipboard;
   bool restoringDraft = false, draftQueued = false;
   void draftStatusChanged() {
     if (mounted) setState(() {});
@@ -1218,8 +1222,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       'sheet': sheetIndex,
       'range': area.address,
     });
+    if (!mounted) return;
     final entry = GridClip(book!, sheetIndex, info);
-    await GridClipboard.write(entry);
+    await clipboard.write(entry);
     if (!mounted) return;
     setState(() {});
     inputFocus.unfocus();
@@ -1227,7 +1232,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
   Future<void> pasteClipboard(String mode) => run(() async {
     if (book == null) return;
-    final data = await GridClipboard.read();
+    final data = await clipboard.read();
     if (data == null) {
       if (mounted) setState(() {});
       tip('В буфере обмена нет текста');
@@ -1812,7 +1817,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     onPressed:
                         busy ||
                             (choice.$2 != 'all' &&
-                                GridClipboard.current == null)
+                                clipboard.current == null)
                         ? null
                         : () => pasteClipboard(choice.$2),
                     icon: Icon(
@@ -1824,9 +1829,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                if (GridClipboard.current == null)
-                  const UiText(
-                    'Копирование в приложении сохраняет формулы и оформление. Текст из других приложений можно вставить через «Вставить всё».',
+                if (clipboard.current == null)
+                  UiText(
+                    clipboard.supportsFormatting
+                        ? 'Копирование в приложении сохраняет формулы и оформление. Текст из других приложений можно вставить через «Вставить всё».'
+                        : 'Доступна вставка текста через «Вставить всё». Формулы и оформление не переносятся.',
                   ),
               ],
             ),

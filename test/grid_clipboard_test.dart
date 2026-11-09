@@ -1,3 +1,4 @@
+import 'package:artofficecraft_mobile/platform/android_clipboard.dart';
 import 'package:artofficecraft_mobile/native/grid_clipboard.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  final clipboard = GridClipboard(const AndroidSystemClipboard());
   Map<String, dynamic>? system;
   var failWrite = false;
   GridClip clip({String text = '10\t20'}) => GridClip(
@@ -16,8 +18,8 @@ void main() {
   setUp(() {
     system = null;
     failWrite = false;
-    GridClipboard.clearLocal();
-    messenger.setMockMethodCallHandler(GridClipboard.channel, (call) async {
+    clipboard.clearLocal();
+    messenger.setMockMethodCallHandler(AndroidSystemClipboard.channel, (call) async {
       if (call.method == 'write') {
         if (failWrite) throw PlatformException(code: 'unavailable');
         system = Map<String, dynamic>.from(call.arguments as Map);
@@ -27,8 +29,8 @@ void main() {
     });
   });
   tearDown(() {
-    GridClipboard.clearLocal();
-    messenger.setMockMethodCallHandler(GridClipboard.channel, null);
+    clipboard.clearLocal();
+    messenger.setMockMethodCallHandler(AndroidSystemClipboard.channel, null);
   });
   test('snapshot is immutable and Android receives only selected text and identity', () async {
     final bytes = Uint8List.fromList([1, 2, 3]);
@@ -41,46 +43,46 @@ void main() {
     bytes[0] = 9;
     expect(entry.source[0], 1);
     expect(() => entry.source[0] = 9, throwsUnsupportedError);
-    await GridClipboard.write(entry);
+    await clipboard.write(entry);
     expect(system!.keys, unorderedEquals(['text', 'token']));
     expect(system!['text'], 'Selected');
-    expect((await GridClipboard.read())!.rich, same(entry));
+    expect((await clipboard.read())!.rich, same(entry));
   });
   test(
     'equal external text never reuses rich source without matching identity',
     () async {
       final entry = clip();
-      await GridClipboard.write(entry);
+      await clipboard.write(entry);
       system = {'text': entry.text};
-      expect((await GridClipboard.read())!.rich, isNull);
-      expect(GridClipboard.current, isNull);
-      await GridClipboard.write(entry);
+      expect((await clipboard.read())!.rich, isNull);
+      expect(clipboard.current, isNull);
+      await clipboard.write(entry);
       system!['token'] = '0' * 32;
-      expect((await GridClipboard.read())!.rich, isNull);
+      expect((await clipboard.read())!.rich, isNull);
     },
   );
   test('changed text invalidates even a matching identity', () async {
-    await GridClipboard.write(clip());
+    await clipboard.write(clip());
     system!['text'] = 'different';
-    expect((await GridClipboard.read())!.text, 'different');
-    expect(GridClipboard.current, isNull);
+    expect((await clipboard.read())!.text, 'different');
+    expect(clipboard.current, isNull);
   });
   test('hidden-only rich range works with empty selected text', () async {
     final entry = clip(text: '');
-    await GridClipboard.write(entry);
-    expect((await GridClipboard.read())!.rich, same(entry));
+    await clipboard.write(entry);
+    expect((await clipboard.read())!.rich, same(entry));
     system = {'text': ''};
-    expect(await GridClipboard.read(), isNull);
+    expect(await clipboard.read(), isNull);
   });
   test('failed Android write leaves prior snapshot available', () async {
     final first = clip();
-    await GridClipboard.write(first);
+    await clipboard.write(first);
     failWrite = true;
     await expectLater(
-      GridClipboard.write(clip(text: 'new')),
+      clipboard.write(clip(text: 'new')),
       throwsA(isA<PlatformException>()),
     );
-    expect((await GridClipboard.read())!.rich, same(first));
+    expect((await clipboard.read())!.rich, same(first));
   });
   test('dimension mismatch and oversized Unicode text are rejected', () async {
     expect(
@@ -96,7 +98,7 @@ void main() {
       throwsFormatException,
     );
     system = {'text': 'я' * (GridClip.maxText ~/ 2 + 1)};
-    await expectLater(GridClipboard.read(), throwsFormatException);
-    expect(GridClipboard.current, isNull);
+    await expectLater(clipboard.read(), throwsFormatException);
+    expect(clipboard.current, isNull);
   });
 }
