@@ -21,8 +21,8 @@ void main() {
     final native = NativePdfPageRenderer();
     final renderers = <String, PdfPageRenderer>{'rust-android': native, 'android': AndroidPdfPageRenderer()};
     final images = <Map<String, Object>>[];
-    for (final entry in renderers.entries) {
-    final renderer = entry.value;
+    for (final rendererEntry in renderers.entries) {
+    final renderer = rendererEntry.value;
     final session = await renderer.open(pdf);
     try {
       for (final entry in pages) {
@@ -33,7 +33,7 @@ void main() {
         final header = ByteData.sublistView(png);
         expect(header.getUint32(16), size[0]);
         expect(header.getUint32(20), size[1]);
-        images.add({'renderer': entry.key, 'page': number, 'width': size[0], 'height': size[1], 'png': base64Encode(png)});
+        images.add({'renderer': rendererEntry.key, 'page': number, 'width': size[0], 'height': size[1], 'png': base64Encode(png)});
       }
     } finally {
       await renderer.close(session);

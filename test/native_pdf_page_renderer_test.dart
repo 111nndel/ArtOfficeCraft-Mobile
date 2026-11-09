@@ -40,11 +40,16 @@ class Fallback implements PdfPageRenderer {
   @override
   bool get supportsOcr => true;
   @override
-  Future<int> open(Uint8List bytes) async { opened++; return opening?.future ?? opened; }
+  Future<int> open(Uint8List bytes) async {
+    opened++;
+    final pending = opening;
+    if (pending != null) return pending.future;
+    return opened;
+  }
   @override
   Future<Uint8List> render(int session, int page, {int width = 1000}) async { rendered++; return image(); }
   @override
-  Future<PdfOcrResult> recognize(int session, int page) async => (text: 'local OCR', words: []);
+  Future<PdfOcrResult> recognize(int session, int page) async => (text: 'local OCR', words: <PdfOcrWord>[]);
   @override
   Future<void> close(int session) async { closed.add(session); }
 }

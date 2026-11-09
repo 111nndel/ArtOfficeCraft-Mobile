@@ -41,6 +41,7 @@ pub extern "C" fn ac_pdf_render(data: *const u8, len: usize, request: *const u8,
                 if sizes.iter().any(|(w,h)| !w.is_finite() || !h.is_finite() || *w <= 0.0 || *h <= 0.0 || *w > 1e6 || *h > 1e6) {
                     return Err("Invalid PDF page geometry".into());
                 }
+                drop(pages);
                 drop(doc);
                 let renderer = PageRenderer::new(shared, RenderConfig { reject_oversize: true, ..RenderConfig::default() });
                 if renderer.page_count() != sizes.len() { return Err("PDF raster page-tree mismatch".into()); }

@@ -1,48 +1,38 @@
 # PDF renderer fidelity harness
 
-Development-only consumer of the exact PDFCraft source in `upstream/engines.lock.json`.
-No renderer or Python dependency is linked into the Android application.
+The harness exercises the application C ABI on Linux and the existing Dart worker
+and FFI on an API 36 x86_64 Android emulator. Native evidence deliberately has no
+OS fallback. Android PdfRenderer renders the identical generated fixture as a
+separate baseline. Poppler is the independent reference; all three candidates use
+the same fixed numerical policy in `compare.py`.
 
-The workflow installs Poppler and openly licensed DejaVu fonts, generates one
-original six-page PDF, and renders it at two pixels per PDF point. It compares
-the pinned Rust CPU renderer with Poppler at the original pixel dimensions.
-Cases cover embedded Cyrillic TTF styles, JPEG, RGBA/PDF alpha, vector clipping,
-page rotation and an offset CropBox.
+Eight original pages cover embedded Cyrillic TTF styles, JPEG, RGBA/PDF alpha,
+vector clipping, rotation, offset CropBox, original Type3 vector glyphs and
+AcroForm text/checkbox appearances. Type3 geometry is original; embedded DejaVu
+subsets retain their Bitstream-Vera notice. No personal or third-party sample
+PDFs are used. These cases are regression evidence, not universal PDF fidelity.
+CFF fonts, complex ICC/spot colour and arbitrary real documents need more testing.
 
-`compare.py` contains the thresholds chosen before the first comparison:
-page mean channel error <= 8/255 and at most 5% of pixels differing by >32 in any
-channel; each named content region additionally requires mean error <=12/255,
-large-difference fraction <=15%, and candidate/reference ink ratio 0.75-1.45.
-Reference regions must contain at least 100 dark pixels. A page-size mismatch,
-missing output or invalid/empty content region fails; rasters are never resized
-for the numerical comparison. These are a small fixture's regression criteria,
-not a standard or proof of universal PDF compatibility.
-
-The second workflow job uses the exact generated fixture with the existing
-Android adapter on an API 36 x86_64 emulator. It adds the fixture, manifest and
-font notice only to an isolated debug test build and restores `pubspec.yaml`
-afterwards. The existing emulator-only runner temporarily permits the local
-Flutter test connection, bounds it to ten minutes, and restores the offline
-debug manifest even on failure. A dedicated driver transfers bounded raw PNGs before
-the test application is removed. No test APK is published, and no Rust core is
-required for the Android reference job. `comparison-android.json` records its
-comparison with the same Poppler reference under the same numerical policy.
-
-Run on Linux with Rust 1.99.1, Poppler and DejaVu fonts installed:
+Page mean error must be <=8/255, with <=5% of pixels differing by >32 in any
+channel. Each content region must have mean error <=12/255, severe differences
+<=15%, ink ratio 0.75..1.45 and at least 100 dark reference pixels. Missing pages,
+wrong dimensions and empty/invalid regions fail. Metrics never resize images.
 
 ```sh
 python -m pip install -r tools/pdf_fidelity/requirements.txt
 bash tools/pdf_fidelity/run.sh
 ```
 
-Results under `build/pdf-renderer-fidelity/results/` include the generated PDF,
-font hashes and notices, unscaled PNG/PPM rasters, amplified differences, review
-pairs, numerical comparison JSON, renderer warnings, memory and source pins.
-The screenshot pairs are resized only for review; inspect original rasters for
-small text. A matching hash or a low average alone does not establish correctness.
+Requires Linux, Rust 1.99.1, Poppler and DejaVu fonts. Results are under
+`build/pdf-renderer-fidelity/results/`: fixture provenance/notices, actual PNGs,
+comparison JSON, amplified differences, review pairs and Linux process memory.
+The Python ctypes consumer uses `ac_pdf_render` and `ac_result_free`; there is no
+second test-only renderer implementation or modification of staged engine code.
 
-The build adds this repository's test consumer as an auto-discovered Cargo
-example in the isolated staged checkout. It does not edit upstream `src/`,
-change a lockfile or feed that checkout into application builds. Its SHA-256 is
-recorded with the results. Fixture graphics and labels are original under MIT;
-DejaVu subsets retain the Bitstream-Vera notice alongside the PDF.
+Android builds the real x86_64 core from the same pinned sources and dependency
+lock. Fixture assets and the local driver network permission exist only in the
+isolated debug build; the runner restores both pubspec and manifest on exit.
+The driver bounds PNG transfers and separates `android` from `rust-android`
+evidence. `comparison-rust-android.json` proves native output rather than silently
+accepting the OS fallback. Python/reference tools are development dependencies,
+not shipped application dependencies. The signed app remains offline.

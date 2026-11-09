@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfReader, PdfWriter
 from pypdf.generic import (RectangleObject, DictionaryObject, ArrayObject,
                            NameObject, NumberObject, FloatObject, DecodedStreamObject)
+from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -191,11 +192,11 @@ def make_fixture(output, font_directory):
     case = start('08 Form appearance', 'AcroForm text field and checkbox appearance streams; no actions.')
     c.acroForm.textfield(name='original_text', x=80, y=480, width=400, height=52,
                         value='Mobile PDF 123', fontName='Helvetica', fontSize=22,
-                        borderWidth=1, forceBorder=True)
+                        borderWidth=1, forceBorder=True, fillColor=colors.white, textColor=colors.black)
     c.acroForm.checkbox(name='original_check', x=90, y=360, size=36,
-                       checked=True, buttonStyle='check', forceBorder=True)
-    region(case, 'form text', [76, 476, 484, 536])
-    region(case, 'checkbox', [86, 356, 130, 400])
+                       checked=True, buttonStyle='check', forceBorder=True, fillColor=colors.white, textColor=colors.black)
+    region(case, 'form text', [84, 492, 350, 524])
+    region(case, 'checkbox', [94, 364, 122, 392])
     c.showPage()
     c.save()
 
