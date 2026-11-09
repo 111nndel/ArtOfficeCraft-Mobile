@@ -21,7 +21,9 @@ not a standard or proof of universal PDF compatibility.
 The second workflow job uses the exact generated fixture with the existing
 Android adapter on an API 36 x86_64 emulator. It adds the fixture, manifest and
 font notice only to an isolated debug test build and restores `pubspec.yaml`
-afterwards. A dedicated integration driver transfers bounded raw PNGs before
+afterwards. The existing emulator-only runner temporarily permits the local
+Flutter test connection, bounds it to ten minutes, and restores the offline
+debug manifest even on failure. A dedicated driver transfers bounded raw PNGs before
 the test application is removed. No test APK is published, and no Rust core is
 required for the Android reference job. `comparison-android.json` records its
 comparison with the same Poppler reference under the same numerical policy.

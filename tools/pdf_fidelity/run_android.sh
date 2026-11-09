@@ -20,6 +20,19 @@ p.write_text(source.replace(needle, needle + '\n    - assets/qa/pdf-fidelity.pdf
 PY
 { adb shell getprop ro.build.version.sdk; adb shell getprop ro.product.cpu.abi; } \
   > "$results/android-environment.txt"
-flutter drive --debug --target=integration_test/pdf_fidelity_test.dart \
-  --driver=test_driver/pdf_fidelity.dart -d emulator-5554 > "$results/android-driver.txt" 2>&1
+python - <<'PY'
+from pathlib import Path
+import sys
+
+sys.path.insert(0, 'tools/ci')
+from run_android_checks import run, test_manifest
+
+# Only the disposable test build needs the local Flutter driver connection.
+# Reuse the existing bounded runner and restore the offline manifest on exit.
+with test_manifest(Path('android/app/src/debug/AndroidManifest.xml')):
+    run(['flutter', 'drive', '--debug', '--disable-dds',
+         '--target=integration_test/pdf_fidelity_test.dart',
+         '--driver=test_driver/pdf_fidelity.dart', '-d', 'emulator-5554'],
+        Path('build/pdf-renderer-fidelity/results/android-driver.txt'), timeout=600)
+PY
 python tools/pdf_fidelity/compare.py "$results" --candidate android
