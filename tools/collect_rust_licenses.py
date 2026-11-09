@@ -30,6 +30,13 @@ def collect(metadata):
         root=Path(pkg['manifest_path']).parent
         candidates=[]
         if pkg.get('license_file'): candidates.append(Path(pkg['license_file']))
+        if pkg['name']=='hayro-interpret' and pkg.get('source') is None:
+            # Embedded standard-font substitutes and CMYK profile have their own
+            # notices below the crate root; retain the original attribution too.
+            for name in ('LICENSE_FOXIT', 'CGATS_LICENSE.txt', 'README.md'):
+                notice=root/'assets'/name
+                if not notice.is_file():raise RuntimeError('Missing raster asset notice: '+name)
+                candidates.append(notice)
         if pkg['name']=='pdfcraft-fonts' and pkg.get('source') is None:
             inter_notice=root.parents[1]/'assets'/'fonts'/'OFL-Inter.txt'
             if not inter_notice.is_file():

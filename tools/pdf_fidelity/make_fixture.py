@@ -6,7 +6,9 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfReader, PdfWriter
-from pypdf.generic import RectangleObject
+from pypdf.generic import (RectangleObject, DictionaryObject, ArrayObject,
+                           NameObject, NumberObject, FloatObject, DecodedStreamObject)
+from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -181,21 +183,56 @@ def make_fixture(output, font_directory):
     region(case, 'inset text', [80, 590, 530, 630])
     region(case, 'inset image', [85, 190, 515, 537])
     c.showPage()
+    case = start('07 Original Type3 glyphs', 'Original vector glyph programs with explicit widths and font matrix.')
+    c.setFillColorRGB(.1, .22, .4)
+    c._code.append('BT /AOCType3 96 Tf 1 0 0 1 80 400 Tm (ABBAAB) Tj ET')
+    region(case, 'type3 glyphs', [75, 390, 450, 480])
+    c.showPage()
+
+    case = start('08 Form appearance', 'AcroForm text field and checkbox appearance streams; no actions.')
+    c.acroForm.textfield(name='original_text', x=80, y=480, width=400, height=52,
+                        value='Mobile PDF 123', fontName='Helvetica', fontSize=22,
+                        borderWidth=1, forceBorder=True, fillColor=colors.white, textColor=colors.black)
+    c.acroForm.checkbox(name='original_check', x=90, y=360, size=36,
+                       checked=True, buttonStyle='check', forceBorder=True, fillColor=colors.white, textColor=colors.black)
+    region(case, 'form text', [84, 492, 350, 524])
+    region(case, 'checkbox', [94, 364, 122, 392])
+    c.showPage()
     c.save()
 
     reader = PdfReader(raw)
     writer = PdfWriter()
-    for page, case in zip(reader.pages, cases, strict=True):
+    writer.clone_document_from_reader(reader)
+    for page, case in zip(writer.pages, cases, strict=True):
         page.cropbox = RectangleObject(case['crop'])
         if case['rotation']:
             page.rotate(case['rotation'])
-        writer.add_page(page)
+    # These glyphs are original geometric drawings, not extracted font outlines.
+    procs = DictionaryObject()
+    for name, program in {
+        'A': b'600 0 0 0 600 700 d1 40 0 m 300 700 l 560 0 l h f',
+        'B': b'600 0 0 0 600 700 d1 50 0 480 280 re f 50 420 480 280 re f',
+    }.items():
+        stream = DecodedStreamObject()
+        stream.set_data(program)
+        procs[NameObject('/' + name)] = writer._add_object(stream)
+    font = DictionaryObject({
+        NameObject('/Type'): NameObject('/Font'), NameObject('/Subtype'): NameObject('/Type3'),
+        NameObject('/FontBBox'): RectangleObject([0, 0, 600, 700]),
+        NameObject('/FontMatrix'): ArrayObject([FloatObject(.001), NumberObject(0), NumberObject(0), FloatObject(.001), NumberObject(0), NumberObject(0)]),
+        NameObject('/CharProcs'): procs,
+        NameObject('/Encoding'): DictionaryObject({NameObject('/Differences'): ArrayObject([NumberObject(65), NameObject('/A'), NameObject('/B')])}),
+        NameObject('/FirstChar'): NumberObject(65), NameObject('/LastChar'): NumberObject(66),
+        NameObject('/Widths'): ArrayObject([NumberObject(600), NumberObject(600)]),
+        NameObject('/Resources'): DictionaryObject(),
+    })
+    writer.pages[6]['/Resources']['/Font'][NameObject('/AOCType3')] = writer._add_object(font)
     writer.add_metadata({'/Title': 'ArtOfficeCraft synthetic PDF fidelity fixture',
                          '/Author': 'ArtOfficeCraft Mobile test fixture'})
     with (output / 'fixture.pdf').open('wb') as stream:
         writer.write(stream)
     check = PdfReader(output / 'fixture.pdf')
-    assert len(check.pages) == 6 and 'Кириллица' in check.pages[0].extract_text()
+    assert len(check.pages) == 8 and 'Кириллица' in check.pages[0].extract_text()
     assert '/OpenAction' not in check.trailer['/Root']
     assert '/JavaScript' not in check.trailer['/Root'].get('/Names', {})
     manifest = {'schema': 1, 'scale': SCALE, 'pages': cases, 'fonts': fonts,

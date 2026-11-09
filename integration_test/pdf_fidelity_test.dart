@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:artofficecraft_mobile/native/native_pdf_page_renderer.dart';
+import 'package:artofficecraft_mobile/native/pdf_page_renderer.dart';
 import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,17 +9,21 @@ import 'package:integration_test/integration_test.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets('Android PdfRenderer renders the six shared fidelity cases', (tester) async {
+  testWidgets('Real Rust FFI and Android render the eight shared fidelity cases', (tester) async {
     // These assets are added only in the isolated fidelity job's debug build.
     final data = await rootBundle.load('assets/qa/pdf-fidelity.pdf');
     final pdf = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     final manifest = jsonDecode(await rootBundle.loadString('assets/qa/pdf-fidelity.json')) as Map;
     expect(pdf.length, manifest['pdfBytes']);
     final pages = manifest['pages'] as List;
-    expect(pages, hasLength(6));
-    final renderer = AndroidPdfPageRenderer();
-    final session = await renderer.open(pdf);
+    expect(pages, hasLength(8));
+    // No fallback: an OS-rendered page cannot pass as Rust evidence.
+    final native = NativePdfPageRenderer();
+    final renderers = <String, PdfPageRenderer>{'rust-android': native, 'android': AndroidPdfPageRenderer()};
     final images = <Map<String, Object>>[];
+    for (final rendererEntry in renderers.entries) {
+    final renderer = rendererEntry.value;
+    final session = await renderer.open(pdf);
     try {
       for (final entry in pages) {
         final page = entry as Map;
@@ -27,11 +33,14 @@ void main() {
         final header = ByteData.sublistView(png);
         expect(header.getUint32(16), size[0]);
         expect(header.getUint32(20), size[1]);
-        images.add({'page': number, 'width': size[0], 'height': size[1], 'png': base64Encode(png)});
+        images.add({'renderer': rendererEntry.key, 'page': number, 'width': size[0], 'height': size[1], 'png': base64Encode(png)});
       }
     } finally {
       await renderer.close(session);
     }
+    }
+    expect(native.nativeRenders, 8);
+    expect(native.fallbackRenders, 0);
     binding.reportData = {'rasters': images, 'fixtureSha256': manifest['pdfSha256']};
   });
 }

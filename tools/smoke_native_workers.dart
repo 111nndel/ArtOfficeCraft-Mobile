@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
 import 'package:artofficecraft_mobile/native/native_build_info.dart';
+import 'package:artofficecraft_mobile/native/native_pdf_page_renderer.dart';
 import 'package:artofficecraft_mobile/native/grid_clipboard.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
 import 'package:artofficecraft_mobile/platform/system_clipboard.dart';
@@ -71,6 +72,15 @@ Future<void> main() async {
             check(jsonEncode(preview).contains('Linux edit 😀'), 'Deck edit lost');
           case NativeDocumentKind.pdf:
             check((preview['pages'] as List).length == 2, 'PDF edit lost');
+            final renderer = NativePdfPageRenderer();
+            final session = await renderer.open(edited.bytes);
+            try {
+              final png = await renderer.render(session, 1, width: 600);
+              check(png.take(8).join(',') == '137,80,78,71,13,10,26,10' &&
+                renderer.nativeRenders == 1 && renderer.fallbackRenders == 0,
+                'Portable PDF worker raster failed');
+            } finally { await renderer.close(session); }
+            stdout.writeln('PASS PDF raster: portable worker, real FFI, no OS fallback');
         }
         stdout.writeln('PASS ${kind.name}: default loader, worker, edit, reopen');
       } finally {

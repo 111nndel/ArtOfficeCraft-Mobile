@@ -1,6 +1,6 @@
 [package]
 name = "artoffice_core"
-version = "0.41.0"
+version = "0.42.0"
 edition = "2024"
 publish = false
 license = "MIT OR Apache-2.0"
@@ -12,6 +12,8 @@ crate-type = ["cdylib", "rlib"]
 wordcraft-doc = { path = "../../upstream/staged/wordcraft/v0.17.0-5574b32600aa/crates/doc" }
 wordcraft-docx = { path = "../../upstream/staged/wordcraft/v0.17.0-5574b32600aa/crates/docx" }
 serde_json = "1"
+png = "0.18.1"
+pdfcraft-render = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/crates/render" }
 pdfcraft-cos = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/crates/cos" }
 pdfcraft-model = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/crates/model" }
 pdfcraft-annot = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/crates/annot" }
@@ -29,6 +31,13 @@ gridcraft-engine = { path = "../../upstream/staged/gridcraft/v0.18.0-17cb3c83d9e
 
 # BEGIN ArtOfficeCraft reviewed PDF dependency patches
 [patch.crates-io]
-hayro-jbig2 = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/hayro-jbig2" }
+hayro = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/hayro" }
+hayro-interpret = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/hayro-interpret" }
 hayro-syntax = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/hayro-syntax" }
+hayro-cmap = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/hayro-cmap" }
+hayro-postscript = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/hayro-postscript" }
+hayro-jbig2 = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/hayro-jbig2" }
+lopdf = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/lopdf" }
+vello_common = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/vello_common" }
+vello_cpu = { path = "../../upstream/staged/pdfcraft/v0.20.0-2ad7717f87ad/vendor/vello_cpu" }
 # END ArtOfficeCraft reviewed PDF dependency patches

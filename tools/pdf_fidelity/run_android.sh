@@ -36,3 +36,4 @@ with test_manifest(Path('android/app/src/debug/AndroidManifest.xml')):
         Path('build/pdf-renderer-fidelity/results/android-driver.txt'), timeout=600)
 PY
 python tools/pdf_fidelity/compare.py "$results" --candidate android
+python tools/pdf_fidelity/compare.py "$results" --candidate rust-android

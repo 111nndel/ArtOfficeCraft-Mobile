@@ -45,6 +45,8 @@ void main() {
 
 // No Android channel: the editor only needs the renderer contract.
 class MemoryPdfRenderer implements PdfPageRenderer {
+  @override
+  bool get supportsOcr => true;
   int opened = 0;
   final closed = <int>[];
   final image = base64Decode(

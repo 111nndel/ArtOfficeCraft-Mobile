@@ -48,7 +48,7 @@ typedef _DartFree = void Function(_NativeResult);
 typedef _NativeVersion = ffi.Uint32 Function();
 typedef _DartVersion = int Function();
 
-/// PDFCraft page operations. File bytes stay on Android.
+/// PDFCraft operations. File bytes stay on the device.
 final class PdfCraftBridge {
   PdfCraftBridge._(this._library)
     : _create = _library.lookupFunction<_NativeSingle, _DartSingle>(
@@ -75,6 +75,9 @@ final class PdfCraftBridge {
 
   late final _DartEdit _find = _library.lookupFunction<_NativeEdit, _DartEdit>(
     'ac_pdf_find',
+  );
+  late final _DartEdit _raster = _library.lookupFunction<_NativeEdit, _DartEdit>(
+    'ac_pdf_render',
   );
 
   static PdfCraftBridge? tryOpen() {
@@ -149,6 +152,9 @@ final class PdfCraftBridge {
 
   Uint8List edit(Uint8List bytes, Map<String, dynamic> request) =>
       _request(bytes, request, _edit);
+
+  Uint8List raster(Uint8List bytes, Map<String, dynamic> request) =>
+      _request(bytes, request, _raster);
 
   Uint8List _request(
     Uint8List bytes,

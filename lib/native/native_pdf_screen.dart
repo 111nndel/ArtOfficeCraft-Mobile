@@ -772,7 +772,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     final page = selected;
     return PdfOcrPanel(
       key: ValueKey((session, page)),
-      recognize: busy || session == null
+      recognize: busy || session == null || !_pageRenderer.supportsOcr
           ? null
           : () => _pageRenderer.recognize(session, page),
       addLayer: busy || session == null

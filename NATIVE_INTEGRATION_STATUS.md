@@ -449,7 +449,7 @@ pixel-perfect PowerPoint rendering, or physical ARM64 device success.
 - Comprehensive document fidelity tests on complex real files.
 - Signature/release packaging, real-device test, performance benchmarks, crash recovery.
 
-All four formats have partial Rust operations; PDF now displays pages via Android platform renderer, while complex editing is still incomplete.
+All four formats have partial Rust operations. Since 0.42.0, PDF rasterization also uses the Rust worker and C ABI, with a lazy Android compatibility/OCR adapter. Complex editing remains incomplete.
 
 ## Upstream updates integration
 
