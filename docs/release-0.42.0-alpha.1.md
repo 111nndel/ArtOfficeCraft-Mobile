@@ -2,7 +2,7 @@
 
 > Android ARM64 development preview.
 
-## What's new
+## What's New
 
 - PDF pages and thumbnails now render through PDFCraft Rust and the existing background document worker. A parsed document stays open between page requests.
 - Raster sessions use opaque IDs, explicit close, bounded page dimensions and a two-document limit for safe replacement. Closing an editor discards stale results and drains its worker.
@@ -11,7 +11,7 @@
 - Bundles 219 resolved Rust packages instead of 168: the added local renderer, font/image codecs and their dependencies carry their licence notices, including embedded standard-font substitutes.
 - Retains WordCraft 0.17.0, GridCraft 0.18.0, DeckCraft 0.17.0 and PDFCraft 0.20.0 at the reviewed source pins from 0.41.0. Native ABI remains 1.
 
-## Limits
+## Known Limitations
 
 - This changes PDF display, not the set of PDF editing tools. Full forms editing, digital signing and arbitrary document fidelity remain incomplete.
 - CFF fonts, complex ICC/spot colour and more real documents still need compatibility testing. A successful synthetic comparison is not proof that every PDF renders correctly.
