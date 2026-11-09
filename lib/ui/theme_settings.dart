@@ -2,24 +2,26 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../platform/application_storage.dart';
 
 /// Persist the explicit choice independently of the OS and document files.
 class ThemeSettings extends ChangeNotifier {
-  ThemeSettings({this.directory, this.mode = ThemeMode.light});
+  ThemeSettings({
+    this.directory,
+    this.mode = ThemeMode.light,
+    this.storage = const AndroidApplicationStorage(),
+  });
   final Directory? directory;
+  final ApplicationStorage storage;
   ThemeMode mode;
   int _revision = 0;
   bool _disposed = false;
   Future<void> _writes = Future.value();
 
   Future<File> _file() async {
-    final path =
-        directory?.path ??
-        await const MethodChannel('artofficecraft/workspace')
-            .invokeMethod<String>('directory');
-    if (path == null) throw const FileSystemException('Settings unavailable');
-    final root = await Directory(path).create(recursive: true);
+    final root = directory == null
+        ? await storage.workspaceDirectory()
+        : await directory!.create(recursive: true);
     return File('${root.path}/appearance.json');
   }
 

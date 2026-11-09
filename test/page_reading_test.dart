@@ -1,6 +1,6 @@
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
-import 'package:artofficecraft_mobile/native/pdf_page_renderer.dart';
+import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
 import 'package:artofficecraft_mobile/ui/page_reading.dart';
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
@@ -82,7 +82,7 @@ void main() {
       1,
       NativePdfScreen(
         backend: backend,
-        renderer: PdfPageRenderer(allowNonAndroidForTesting: true),
+        renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
         launch: EditorLaunch(bytes: await backend.create()),
       ),
     );
@@ -125,7 +125,7 @@ void main() {
       final bytes = await backend.create();
       Widget pdf() => NativePdfScreen(
         backend: backend,
-        renderer: PdfPageRenderer(allowNonAndroidForTesting: true),
+        renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
         launch: EditorLaunch(bytes: bytes),
       );
       await setup(tester, const Size(393, 873), 1, pdf());

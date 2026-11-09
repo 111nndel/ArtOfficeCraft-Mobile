@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.38.0.**
+**Current preview — alpha 0.39.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -23,7 +23,7 @@ supported paragraphs, insert text at a touched location and recognize
 Russian and English on a scanned page. The recognized words can be copied or
 added as invisible, searchable text in the exported PDF copy.
 Word builds only the paragraphs near the viewport.
-See the [0.38.0 release notes and limits](docs/release-0.38.0-alpha.1.md).
+See the [0.39.0 release notes and limits](docs/release-0.39.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
@@ -36,6 +36,11 @@ future tagged publication requires that job to pass. See
 | PDF / PDFCraft + Android | Android page rendering, thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page or adding a searchable text layer to the saved PDF. Document-wide text search supports embedded text and OCR layers, with match navigation and a highlighted region. Forms and digital signing remain in progress. |
 
 ### Architecture and current limits
+
+Cross-platform portability is a project goal. Android is the packaged UI target.
+Native loading, document file dialogs, application storage and PDF page rendering
+now have shared boundaries; see [platform contracts and remaining work](docs/platform-boundaries.md).
+No additional runtime packages or online services were introduced for these boundaries.
 
 Flutter owns touch interaction and display. `DocumentBackend` sends file parsing,
 editing, recalculation and serialization to one persistent Dart worker per native

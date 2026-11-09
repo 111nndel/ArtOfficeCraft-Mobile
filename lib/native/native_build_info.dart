@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'dart:isolate';
+
+import 'native_core_library.dart';
 
 final class _InfoResult extends ffi.Struct {
   @ffi.Int32()
@@ -21,10 +22,13 @@ typedef _DartFree = void Function(_InfoResult);
 Future<Map<String, dynamic>?> readNativeBuildInfo({
   String? libraryPath,
 }) => Isolate.run(() {
-  if (!Platform.isAndroid && libraryPath == null) return null;
-  final library = ffi.DynamicLibrary.open(
-    libraryPath ?? 'libartoffice_core.so',
-  );
+  final ffi.DynamicLibrary library;
+  try {
+    library = openNativeCore(libraryPath: libraryPath);
+  } catch (_) {
+    if (libraryPath != null) rethrow;
+    return null;
+  }
   final info = library.lookupFunction<_NativeInfo, _DartInfo>('ac_engine_info');
   final free = library.lookupFunction<_NativeFree, _DartFree>('ac_result_free');
   final result = info();

@@ -1,7 +1,8 @@
+import 'package:artofficecraft_mobile/platform/document_files.dart';
+import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
 import 'package:artofficecraft_mobile/workspace/workspace_store.dart';
 import 'package:artofficecraft_mobile/workspace/draft_store.dart';
 import 'package:artofficecraft_mobile/ui/home_screen.dart';
-import 'package:artofficecraft_mobile/workspace/document_picker.dart';
 import 'package:artofficecraft_mobile/workspace/editor_kind.dart';
 import 'package:artofficecraft_mobile/native/document_backend.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
@@ -12,7 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'loaded_editors_test.dart' show FakeDocumentBackend;
+import 'loaded_editors_test.dart' show FakeDocumentBackend, setup;
 
 void main() {
   const channel = MethodChannel('flutter_file_dialog');
@@ -101,12 +102,48 @@ void main() {
       },
     );
   }
-  test('Picker types include only formats supported by these engines', () {
-    expect(documentPickerParams(EditorKind.excel).mimeTypesFilter, [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ]);
-    expect(documentPickerParams(EditorKind.pdf).mimeTypesFilter, [
-      'application/pdf',
-    ]);
-  });
+  for (final kind in EditorKind.values) {
+    testWidgets('${kind.name} exports through an injected file service', (tester) async {
+      final files = RecordingDocumentFiles();
+      final backend = FakeDocumentBackend(switch (kind) {
+        EditorKind.word => NativeDocumentKind.word,
+        EditorKind.excel => NativeDocumentKind.grid,
+        EditorKind.slides => NativeDocumentKind.deck,
+        EditorKind.pdf => NativeDocumentKind.pdf,
+      });
+      const launch = EditorLaunch(create: true);
+      final screen = switch (kind) {
+        EditorKind.word => NativeWordScreen(backend: backend, files: files, launch: launch),
+        EditorKind.excel => NativeGridScreen(backend: backend, files: files, launch: launch),
+        EditorKind.slides => NativeDeckScreen(backend: backend, files: files, launch: launch),
+        EditorKind.pdf => NativePdfScreen(backend: backend, files: files, launch: launch),
+      };
+      await setup(tester, const Size(393, 873), 1, screen);
+      await tester.tap(find.byTooltip('Меню файла'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить как ${kind.format}'));
+      await tester.pumpAndSettle();
+      expect(files.kind, kind);
+      expect(files.bytes, isNotEmpty);
+      expect(files.name, endsWith('.${kind.extension}'));
+      expect(tester.takeException(), isNull);
+    });
+  }
+}
+
+class RecordingDocumentFiles implements DocumentFiles {
+  EditorKind? kind;
+  Uint8List? bytes;
+  String? name;
+
+  @override
+  Future<String?> open(EditorKind kind) async => null;
+
+  @override
+  Future<String?> save({required EditorKind kind, required Uint8List bytes, required String name}) async {
+    this.kind = kind;
+    this.bytes = bytes;
+    this.name = name;
+    return null; // Cancellation still uses the editor's existing save guard.
+  }
 }

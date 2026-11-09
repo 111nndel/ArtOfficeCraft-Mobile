@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'editor_kind.dart';
+import '../platform/application_storage.dart';
 
 Future<List<int>> _encodeDraft(Map<String, dynamic> data) =>
     Isolate.run(() => utf8.encode(jsonEncode(data)));
@@ -64,7 +65,11 @@ class RecoveredDraft {
 /// Immutable Office snapshots + an atomically replaced, small editor journal.
 /// The manifest never references an incomplete snapshot; typing reuses its base.
 class DraftStore extends ChangeNotifier {
-  DraftStore({this.directory});
+  DraftStore({
+    this.directory,
+    this.storage = const AndroidApplicationStorage(),
+  });
+  final ApplicationStorage storage;
   final Directory? directory;
   Future<Directory>? _rootFuture;
   Future<void> _queue = Future.value();
@@ -82,17 +87,13 @@ class DraftStore extends ChangeNotifier {
   }
 
   String? error;
-  static const channel = MethodChannel('artofficecraft/workspace');
   static const maxDocumentBytes = 64 * 1024 * 1024,
       maxJournalBytes = 4 * 1024 * 1024;
   Future<Directory> _root() => _rootFuture ??= (() async {
     final base = directory;
     if (base != null) return base.create(recursive: true);
-    final path = await channel.invokeMethod<String>('directory');
-    if (path == null) {
-      throw const FileSystemException('Recovery storage unavailable');
-    }
-    return Directory('$path/drafts').create(recursive: true);
+    final root = await storage.workspaceDirectory();
+    return Directory('${root.path}/drafts').create(recursive: true);
   })();
   Future<T> _serialize<T>(Future<T> Function() work) {
     final next = _queue.then((_) => work());

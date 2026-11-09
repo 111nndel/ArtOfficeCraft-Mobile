@@ -1,3 +1,4 @@
+import '../platform/document_files.dart';
 import '../workspace/document_picker.dart';
 import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
@@ -17,7 +18,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
@@ -31,12 +31,14 @@ class NativeWordScreen extends StatefulWidget {
     this.onDocumentChanged,
     this.draft,
     this.backend,
+    this.files = const MobileDocumentFiles(),
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
   final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
+  final DocumentFiles files;
   @override
   State<NativeWordScreen> createState() => _NativeWordScreenState();
 }
@@ -456,7 +458,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
 
   Future<void> openDocument() => guarded(() async {
     if (!await confirmReplace()) return;
-    final selected = await pickDocument(EditorKind.word);
+    final selected = await pickDocument(EditorKind.word, files: widget.files);
     if (selected == null) return;
     final file = File(selected);
     final length = await file.length();
@@ -539,14 +541,10 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     final suggested =
         '${filename.replaceFirst(RegExp(r'\.docx$', caseSensitive: false), '')}-ArtOfficeCraft.docx';
     // Android SAF requests a new output destination; original never overwritten.
-    final path = await FlutterFileDialog.saveFile(
-      params: SaveFileDialogParams(
-        data: bytes,
-        fileName: suggested,
-        mimeTypesFilter: const [
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        ],
-      ),
+    final path = await widget.files.save(
+      kind: EditorKind.word,
+      bytes: bytes,
+      name: suggested,
     );
     if (path == null) return;
     setState(() => changed = false);

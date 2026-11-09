@@ -1,3 +1,4 @@
+import '../platform/document_files.dart';
 import 'grid_layout.dart';
 import '../workspace/document_picker.dart';
 import '../workspace/editor_kind.dart';
@@ -23,7 +24,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
@@ -36,12 +36,14 @@ class NativeGridScreen extends StatefulWidget {
     this.onDocumentChanged,
     this.draft,
     this.backend,
+    this.files = const MobileDocumentFiles(),
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
   final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
+  final DocumentFiles files;
   @override
   State<NativeGridScreen> createState() => _NativeGridScreenState();
 }
@@ -493,7 +495,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
   Future<void> open() => run(() async {
     if (!await askDiscard()) return;
-    final path = await pickDocument(EditorKind.excel);
+    final path = await pickDocument(EditorKind.excel, files: widget.files);
     if (path == null) return;
     final file = File(path);
     if (await file.length() > 64 * 1024 * 1024) {
@@ -515,14 +517,10 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await flushInput();
     final name =
         '${filename.replaceFirst(RegExp(r'\.xlsx$', caseSensitive: false), '')}-ArtOfficeCraft.xlsx';
-    final path = await FlutterFileDialog.saveFile(
-      params: SaveFileDialogParams(
-        data: book!,
-        fileName: name,
-        mimeTypesFilter: const [
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ],
-      ),
+    final path = await widget.files.save(
+      kind: EditorKind.excel,
+      bytes: book!,
+      name: name,
     );
     if (path == null) return;
     setState(() => modified = false);

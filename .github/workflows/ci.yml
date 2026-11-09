@@ -48,6 +48,16 @@ jobs:
           java-version: '21'
       - name: Test approved sources and compile native core
         run: bash tools/ci/build_native.sh
+      - name: Install pinned Flutter for native host checks
+        run: bash tools/ci/install_flutter.sh
+      - name: Verify default core loading and document workers on Linux
+        run: |
+          cargo build --locked --manifest-path native/artoffice_core/Cargo.toml
+          mkdir -p build/host-smoke/lib
+          cp native/artoffice_core/target/debug/libartoffice_core.so build/host-smoke/lib/
+          dart compile exe tools/smoke_native_workers.dart -o build/host-smoke/native-workers
+          cd /tmp
+          "$GITHUB_WORKSPACE/build/host-smoke/native-workers"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-arm64

@@ -1,3 +1,6 @@
+import 'platform/application_storage.dart';
+import 'platform/document_files.dart';
+import 'native/pdf_page_renderer.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -27,8 +30,14 @@ class ArtOfficeCraftApp extends StatefulWidget {
     super.key,
     this.initialLanguage,
     this.themeSettings,
+    this.storage = const AndroidApplicationStorage(),
+    this.files = const MobileDocumentFiles(),
+    this.pdfRenderer,
   });
   final String? initialLanguage;
+  final ApplicationStorage storage;
+  final DocumentFiles files;
+  final PdfPageRenderer? pdfRenderer;
 
   /// Owned by the app; main supplies an already loaded preference before paint.
   final ThemeSettings? themeSettings;
@@ -37,9 +46,10 @@ class ArtOfficeCraftApp extends StatefulWidget {
 }
 
 class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp> {
-  late final appearance = widget.themeSettings ?? ThemeSettings();
+  late final appearance = widget.themeSettings ?? ThemeSettings(storage: widget.storage);
   final messenger = GlobalKey<ScaffoldMessengerState>();
   late final settings = LanguageSettings(
+    storage: widget.storage,
     initial: widget.initialLanguage ?? 'system',
   );
   @override
@@ -75,6 +85,9 @@ class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp> {
         theme: OfficeTheme.build(Brightness.light),
         darkTheme: OfficeTheme.build(Brightness.dark),
         home: HomeScreen(
+          storage: widget.storage,
+          files: widget.files,
+          pdfRenderer: widget.pdfRenderer,
           theme: appearance.mode,
           toggleTheme: () async {
             final saved = await appearance.select(

@@ -1,4 +1,4 @@
-import 'package:artofficecraft_mobile/native/pdf_page_renderer.dart';
+import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,7 +43,7 @@ void main() {
             }
             throw StateError('Unexpected channel action: ${call.method}');
           });
-      final renderer = PdfPageRenderer(allowNonAndroidForTesting: true);
+      final renderer = AndroidPdfPageRenderer(allowNonAndroidForTesting: true);
       final session = await renderer.open(pdf);
       expect(session, 52);
       expect(await renderer.render(session, 0, width: 480), orderedEquals(png));
@@ -59,7 +59,7 @@ void main() {
   );
 
   test('Reject invalid PDF, session, page, and raster width', () async {
-    final renderer = PdfPageRenderer(allowNonAndroidForTesting: true);
+    final renderer = AndroidPdfPageRenderer(allowNonAndroidForTesting: true);
     await expectLater(renderer.open(Uint8List(0)), throwsFormatException);
     await expectLater(
       renderer.open(Uint8List.fromList(<int>[1, 2, 3, 4, 5])),
@@ -75,7 +75,7 @@ void main() {
         .setMockMethodCallHandler(channel, (call) async {
           return <String, int>{'session': 0, 'pageCount': 100};
         });
-    final renderer = PdfPageRenderer(allowNonAndroidForTesting: true);
+    final renderer = AndroidPdfPageRenderer(allowNonAndroidForTesting: true);
     await expectLater(renderer.open(pdf), throwsFormatException);
   });
 
@@ -96,7 +96,7 @@ void main() {
             65,
           ]);
         });
-    final renderer = PdfPageRenderer(allowNonAndroidForTesting: true);
+    final renderer = AndroidPdfPageRenderer(allowNonAndroidForTesting: true);
     await expectLater(renderer.render(5, 0), throwsFormatException);
   });
 }

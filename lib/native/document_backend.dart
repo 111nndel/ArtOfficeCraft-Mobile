@@ -1,8 +1,7 @@
-import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'dart:isolate';
 
 import 'document_worker.dart';
+import 'native_core_library.dart';
 import 'grid_window.dart';
 
 import 'dart:typed_data';
@@ -269,11 +268,14 @@ final class NativeDocumentBackend
   int inputTransfers = 0;
   int get workerStarts => _started ? _worker.starts : 0;
 
-  static DocumentBackend? tryOpen(NativeDocumentKind kind) {
-    if (!Platform.isAndroid) return null;
+  static DocumentBackend? tryOpen(
+    NativeDocumentKind kind, {
+    String? libraryPath,
+  }) {
     try {
-      ffi.DynamicLibrary.open('libartoffice_core.so');
-      return NativeDocumentBackend(kind);
+      openNativeCore(libraryPath: libraryPath);
+      _NativeEngine(kind, libraryPath)._open();
+      return NativeDocumentBackend(kind, libraryPath: libraryPath);
     } catch (_) {
       return null;
     }

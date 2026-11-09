@@ -1,3 +1,6 @@
+import '../platform/application_storage.dart';
+import '../platform/document_files.dart';
+import '../native/pdf_page_renderer.dart';
 import '../workspace/document_picker.dart';
 import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
@@ -25,18 +28,24 @@ class HomeScreen extends StatefulWidget {
     required this.theme,
     this.workspace,
     this.drafts,
+    this.storage = const AndroidApplicationStorage(),
+    this.files = const MobileDocumentFiles(),
+    this.pdfRenderer,
   });
   final VoidCallback toggleTheme;
   final ThemeMode theme;
   final WorkspaceStore? workspace;
   final DraftStore? drafts;
+  final ApplicationStorage storage;
+  final DocumentFiles files;
+  final PdfPageRenderer? pdfRenderer;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late final WorkspaceStore store = widget.workspace ?? WorkspaceStore();
-  late final recoveryStore = widget.drafts ?? DraftStore();
+  late final WorkspaceStore store = widget.workspace ?? WorkspaceStore(storage: widget.storage);
+  late final recoveryStore = widget.drafts ?? DraftStore(storage: widget.storage);
   final search = TextEditingController();
   int section = 0;
   EditorKind? filter;
@@ -123,24 +132,31 @@ class _HomeScreenState extends State<HomeScreen> {
           onRemember: remember,
           onDocumentChanged: documentChanged,
           draft: session,
+          files: widget.files,
         ),
         EditorKind.excel => NativeGridScreen(
           launch: launch,
           onRemember: remember,
           onDocumentChanged: documentChanged,
           draft: session,
+          files: widget.files,
         ),
         EditorKind.slides => NativeDeckScreen(
+          storage: widget.storage,
           launch: launch,
           onRemember: remember,
           onDocumentChanged: documentChanged,
           draft: session,
+          files: widget.files,
         ),
         EditorKind.pdf => NativePdfScreen(
+          storage: widget.storage,
+          renderer: widget.pdfRenderer,
           launch: launch,
           onRemember: remember,
           onDocumentChanged: documentChanged,
           draft: session,
+          files: widget.files,
         ),
       };
       await Navigator.of(context)
@@ -271,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await open(kind, launch: const EditorLaunch(create: true));
     } else {
       try {
-        final path = await pickDocument(kind);
+        final path = await pickDocument(kind, files: widget.files);
         if (path == null || !mounted) return;
         final file = File(path);
         if (await file.length() > 64 * 1024 * 1024) {

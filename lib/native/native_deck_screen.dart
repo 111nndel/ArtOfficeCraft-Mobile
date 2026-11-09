@@ -1,3 +1,5 @@
+import '../platform/application_storage.dart';
+import '../platform/document_files.dart';
 import '../workspace/document_picker.dart';
 import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
@@ -18,7 +20,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
@@ -31,12 +32,16 @@ class NativeDeckScreen extends StatefulWidget {
     this.onDocumentChanged,
     this.draft,
     this.backend,
+    this.files = const MobileDocumentFiles(),
+    this.storage = const AndroidApplicationStorage(),
   });
   final EditorLaunch? launch;
   final RememberFile? onRemember;
   final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
+  final DocumentFiles files;
+  final ApplicationStorage storage;
   @override
   State<NativeDeckScreen> createState() => _NativeDeckScreenState();
 }
@@ -75,7 +80,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   final toolPanel = GlobalKey<EditorToolPanelState>();
   final stripViewport = GlobalKey<ContinuousPagesState>();
   final slideTransform = TransformationController();
-  final reading = ReadingModePreference('deck');
+  late final reading = ReadingModePreference('deck', storage: widget.storage);
   bool toolsExpanded = false;
   bool objectEditing = false;
   int? selectedObject;
@@ -209,7 +214,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   });
   Future<void> open() => action(() async {
     if (!await discard()) return;
-    final path = await pickDocument(EditorKind.slides);
+    final path = await pickDocument(EditorKind.slides, files: widget.files);
     if (path == null) return;
     final file = File(path);
     if (await file.length() > 64 * 1024 * 1024) {
@@ -230,14 +235,10 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     if (textDraftDirty) await applyTextDraft();
     final saveName =
         '${filename.replaceFirst(RegExp(r'\.pptx$', caseSensitive: false), '')}-ArtOfficeCraft.pptx';
-    final destination = await FlutterFileDialog.saveFile(
-      params: SaveFileDialogParams(
-        data: data!,
-        fileName: saveName,
-        mimeTypesFilter: const [
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        ],
-      ),
+    final destination = await widget.files.save(
+      kind: EditorKind.slides,
+      bytes: data!,
+      name: saveName,
     );
     if (destination == null) return;
     setState(() => modified = false);

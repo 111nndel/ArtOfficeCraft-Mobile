@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+
+import 'native_core_library.dart';
 
 final class _NativeResult extends ffi.Struct {
   @ffi.Int32()
@@ -39,7 +40,7 @@ typedef _DartFree = void Function(_NativeResult);
 typedef _RustVersion = ffi.Uint32 Function();
 typedef _DartVersion = int Function();
 
-/// WordCraft native Android adapter. No document data is sent over the network.
+/// WordCraft native adapter. No document data is sent over the network.
 ///
 /// All Rust allocated buffers are freed even when decoding throws.
 /// This low-level API is synchronous. UI screens use DocumentBackend to call it
@@ -68,14 +69,13 @@ final class WordCraftBridge {
   final _DartFree _free;
   final _DartVersion _abi;
 
-  /// Desktop smoke tests may inject the native Windows library explicitly.
+  /// Native smoke tests may inject a compiled library explicitly.
   static WordCraftBridge openLibraryForTesting(String path) =>
-      WordCraftBridge._(ffi.DynamicLibrary.open(path));
+      WordCraftBridge._(openNativeCore(libraryPath: path));
 
   static WordCraftBridge? tryOpen() {
-    if (!Platform.isAndroid) return null;
     try {
-      return WordCraftBridge._(ffi.DynamicLibrary.open('libartoffice_core.so'));
+      return WordCraftBridge._(openNativeCore());
     } catch (_) {
       return null;
     }

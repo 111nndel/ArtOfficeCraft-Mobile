@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'editor_kind.dart';
+import '../platform/application_storage.dart';
 
 class WorkspaceFile {
   const WorkspaceFile({
@@ -51,20 +52,22 @@ class WorkspaceFile {
 /// App-private copies of opened/exported documents and applied Grid edits.
 /// Unsaved native editing sessions keep their existing explicit Save As guard.
 class WorkspaceStore extends ChangeNotifier {
-  WorkspaceStore({this._directory});
+  WorkspaceStore({
+    Directory? directory,
+    this.storage = const AndroidApplicationStorage(),
+  })
+    : _directory = directory;
+  final ApplicationStorage storage;
   Directory? _directory;
   final List<WorkspaceFile> _files = [];
   List<WorkspaceFile> get files => List.unmodifiable(_files);
   bool loaded = false;
   String? error;
   Future<void> _queue = Future.value();
-  static const _channel = MethodChannel('artofficecraft/workspace');
 
   Future<Directory> _root() async {
     if (_directory != null) return _directory!;
-    final path = await _channel.invokeMethod<String>('directory');
-    if (path == null) throw const FileSystemException('Хранилище недоступно');
-    return _directory = await Directory(path).create(recursive: true);
+    return _directory = await storage.workspaceDirectory();
   }
 
   Future<void> load() async {

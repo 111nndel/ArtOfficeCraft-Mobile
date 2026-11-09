@@ -14,52 +14,48 @@ void main() {
   testWidgets(
     'Replacing a PDF render session closes the old document and disposes the current one',
     (tester) async {
-      const channel = MethodChannel('artofficecraft/pdf_renderer');
-      final closed = <int>[];
-      var opened = 0;
-      final image = base64Decode(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-      );
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'openDocument') {
-              return {'session': ++opened, 'pageCount': 1};
-            }
-            if (call.method == 'renderPage') return Uint8List.fromList(image);
-            if (call.method == 'closeDocument') {
-              closed.add((call.arguments as Map)['session'] as int);
-              return null;
-            }
-            throw StateError(call.method);
-          });
-      addTearDown(
-        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null),
-      );
+      final renderer = MemoryPdfRenderer();
       await setup(
         tester,
         const Size(393, 873),
         1,
         NativePdfScreen(
           backend: FakeDocumentBackend(NativeDocumentKind.pdf),
-          renderer: PdfPageRenderer(allowNonAndroidForTesting: true),
+          renderer: renderer,
           launch: const EditorLaunch(create: true),
         ),
       );
-      expect(opened, 1);
-      expect(closed, isEmpty);
+      expect(renderer.opened, 1);
+      expect(renderer.closed, isEmpty);
       await tester.tap(find.text('Чтение'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Страницы'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Дублировать'));
       await tester.pumpAndSettle();
-      expect(opened, 2);
-      expect(closed, [1]);
+      expect(renderer.opened, 2);
+      expect(renderer.closed, [1]);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
-      expect(closed, [1, 2]);
+      expect(renderer.closed, [1, 2]);
       expect(tester.takeException(), isNull);
     },
   );
+}
+
+// No Android channel: the editor only needs the renderer contract.
+class MemoryPdfRenderer implements PdfPageRenderer {
+  int opened = 0;
+  final closed = <int>[];
+  final image = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  );
+  @override
+  Future<int> open(Uint8List pdf) async => ++opened;
+  @override
+  Future<Uint8List> render(int session, int page, {int width = 1000}) async => image;
+  @override
+  Future<PdfOcrResult> recognize(int session, int page) async => (text: '', words: []);
+  @override
+  Future<void> close(int session) async { closed.add(session); }
 }

@@ -1,3 +1,6 @@
+import '../platform/application_storage.dart';
+import '../platform/pdf_renderers.dart';
+import '../platform/document_files.dart';
 import '../workspace/document_picker.dart';
 import '../workspace/editor_kind.dart';
 import '../l10n/app_strings.dart';
@@ -20,7 +23,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
-import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 
 import 'imported_filename.dart';
 import 'unsaved_changes_guard.dart';
@@ -35,6 +37,8 @@ class NativePdfScreen extends StatefulWidget {
     this.onDocumentChanged,
     this.draft,
     this.backend,
+    this.files = const MobileDocumentFiles(),
+    this.storage = const AndroidApplicationStorage(),
     this.renderer,
   });
   final EditorLaunch? launch;
@@ -42,6 +46,8 @@ class NativePdfScreen extends StatefulWidget {
   final VoidCallback? onDocumentChanged;
   final DraftSession? draft;
   final DocumentBackend? backend;
+  final DocumentFiles files;
+  final ApplicationStorage storage;
   final PdfPageRenderer? renderer;
   @override
   State<NativePdfScreen> createState() => _NativePdfScreenState();
@@ -73,7 +79,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   bool toolsExpanded = false, showThumbnails = false;
   final pdfViewport = GlobalKey<PdfViewportState>();
   final stripViewport = GlobalKey<ContinuousPagesState>();
-  final reading = ReadingModePreference('pdf');
+  late final reading = ReadingModePreference('pdf', storage: widget.storage);
   late final DocumentBackend? engine =
       widget.backend ?? NativeDocumentBackend.tryOpen(NativeDocumentKind.pdf);
   final history = DocumentHistory();
@@ -287,7 +293,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   int selected = 0;
   bool busy = false, changed = false;
   late final PdfPageRenderer _pageRenderer =
-      widget.renderer ?? PdfPageRenderer();
+      widget.renderer ?? createPdfPageRenderer();
   int? _session;
   final Map<int, Future<Uint8List>> _thumbnailImages = {};
   final Map<int, Future<Uint8List>> _pageImages = {};
@@ -482,7 +488,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   });
   Future<void> open() => execute(() async {
     if (!await discard()) return;
-    final path = await pickDocument(EditorKind.pdf);
+    final path = await pickDocument(EditorKind.pdf, files: widget.files);
     if (path == null) return;
     final f = File(path);
     if (await f.length() > 64 * 1024 * 1024) {
@@ -502,12 +508,10 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     if (contents == null) return;
     final name =
         '${filename.replaceFirst(RegExp(r'\.pdf$', caseSensitive: false), '')}-ArtOfficeCraft.pdf';
-    final path = await FlutterFileDialog.saveFile(
-      params: SaveFileDialogParams(
-        data: contents!,
-        fileName: name,
-        mimeTypesFilter: const ['application/pdf'],
-      ),
+    final path = await widget.files.save(
+      kind: EditorKind.pdf,
+      bytes: contents!,
+      name: name,
     );
     if (path == null) return;
     setState(() => changed = false);

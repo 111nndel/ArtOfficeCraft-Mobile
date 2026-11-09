@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+
+import 'native_core_library.dart';
 
 final class _NativeResult extends ffi.Struct {
   @ffi.Int32()
@@ -62,16 +63,15 @@ final class DeckCraftBridge {
   final _DartVersion _version;
 
   static DeckCraftBridge? tryOpen() {
-    if (!Platform.isAndroid) return null;
     try {
-      return DeckCraftBridge._(ffi.DynamicLibrary.open('libartoffice_core.so'));
+      return DeckCraftBridge._(openNativeCore());
     } catch (_) {
       return null;
     }
   }
 
   static DeckCraftBridge openLibraryForTesting(String path) =>
-      DeckCraftBridge._(ffi.DynamicLibrary.open(path));
+      DeckCraftBridge._(openNativeCore(libraryPath: path));
 
   ffi.Pointer<ffi.Uint8> _allocate(Uint8List bytes) {
     final p = calloc<ffi.Uint8>(bytes.isEmpty ? 1 : bytes.length);

@@ -2,12 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../platform/application_storage.dart';
 
 class LanguageSettings extends ChangeNotifier {
-  LanguageSettings({this.directory, String initial = 'system'})
+  LanguageSettings({
+    this.directory,
+    String initial = 'system',
+    this.storage = const AndroidApplicationStorage(),
+  })
     : language = initial;
   final Directory? directory;
+  final ApplicationStorage storage;
   String language;
   int _revision = 0;
   bool _disposed = false;
@@ -25,12 +30,9 @@ class LanguageSettings extends ChangeNotifier {
   static const choices = ['system', 'ru', 'en'];
   Locale? get locale => language == 'system' ? null : Locale(language);
   Future<File> _file() async {
-    final path =
-        directory?.path ??
-        await const MethodChannel('artofficecraft/workspace')
-            .invokeMethod<String>('directory');
-    if (path == null) throw const FileSystemException('Settings unavailable');
-    final root = await Directory(path).create(recursive: true);
+    final root = directory == null
+        ? await storage.workspaceDirectory()
+        : await directory!.create(recursive: true);
     return File('${root.path}/language.json');
   }
 

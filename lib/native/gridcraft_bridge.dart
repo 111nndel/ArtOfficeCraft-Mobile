@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+
+import 'native_core_library.dart';
 
 final class _GridResult extends ffi.Struct {
   @ffi.Int32()
@@ -84,16 +85,15 @@ final class GridCraftBridge {
   final _DartAbi _abi;
 
   static GridCraftBridge? tryOpen() {
-    if (!Platform.isAndroid) return null;
     try {
-      return GridCraftBridge._(ffi.DynamicLibrary.open('libartoffice_core.so'));
+      return GridCraftBridge._(openNativeCore());
     } catch (_) {
       return null;
     }
   }
 
   static GridCraftBridge openLibraryForTesting(String path) =>
-      GridCraftBridge._(ffi.DynamicLibrary.open(path));
+      GridCraftBridge._(openNativeCore(libraryPath: path));
 
   ffi.Pointer<ffi.Uint8> _alloc(Uint8List bytes) {
     final p = calloc<ffi.Uint8>(bytes.isEmpty ? 1 : bytes.length);

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/app_strings.dart';
+import '../platform/application_storage.dart';
 import 'editor_tools.dart';
 
 EditorTool pageJumpTool({
@@ -121,18 +122,21 @@ enum ReadingMode {
 }
 
 class ReadingModePreference extends ValueNotifier<ReadingMode> {
-  ReadingModePreference(this.format) : super(ReadingMode.horizontal);
+  ReadingModePreference(
+    this.format, {
+    this.storage = const AndroidApplicationStorage(),
+  })
+    : super(ReadingMode.horizontal);
+
+  final ApplicationStorage storage;
 
   final String format;
-  static const _channel = MethodChannel('artofficecraft/reading');
   bool _chosen = false;
   bool _disposed = false;
 
   Future<void> load() async {
     try {
-      final name = await _channel.invokeMethod<String>('read', {
-        'format': format,
-      });
+      final name = await storage.readReadingMode(format);
       if (_chosen || _disposed) return;
       for (final mode in ReadingMode.values) {
         if (mode.name == name) value = mode;
@@ -150,10 +154,7 @@ class ReadingModePreference extends ValueNotifier<ReadingMode> {
 
   Future<void> _write(ReadingMode mode) async {
     try {
-      await _channel.invokeMethod<void>('write', {
-        'format': format,
-        'mode': mode.name,
-      });
+      await storage.writeReadingMode(format, mode.name);
     } catch (_) {
       // The selected mode remains available for this reader session.
     }
