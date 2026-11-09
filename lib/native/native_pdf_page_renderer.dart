@@ -104,6 +104,15 @@ final class NativePdfPageRenderer implements PdfPageRenderer {
           'op': 'page', 'session': state.native, 'page': page, 'width': width,
         }) as Uint8List;
         if (state.closed) throw StateError('PDF raster session is closed');
+        if (png.length < 24 || png.length > 24 * 1024 * 1024 ||
+            png.take(8).join(',') != '137,80,78,71,13,10,26,10') {
+          throw const FormatException('Invalid native PDF PNG');
+        }
+        final header = ByteData.sublistView(png);
+        final w = header.getUint32(16), h = header.getUint32(20);
+        if (w == 0 || h == 0 || w > 2880 || h > 2880 || w*h > 4200000) {
+          throw const FormatException('Invalid native PDF raster dimensions');
+        }
         nativeRenders++;
         return png;
       } catch (_) {

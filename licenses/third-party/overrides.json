@@ -29,5 +29,20 @@
         "sha256": "e3cf753ddd8012543a3297b62b4cf5450db1d5a3ae7ddd7afae593db927c2980"
       }
     ]
+  },
+  {
+    "packages": [
+      "alloc-stdlib"
+    ],
+    "version": "0.2.4",
+    "repository": "https://github.com/dropbox/rust-alloc-no-stdlib",
+    "license": "BSD-3-Clause",
+    "commit": "ae42d22078b98549e987d2f03d12df7b984fde47",
+    "texts": [
+      {
+        "path": "licenses/third-party/alloc-stdlib-0.2.4/LICENSE",
+        "sha256": "c0c56f26d9c051cac4d200c34c84e7ae9aaa853e01a982a1df08b09931e518ae"
+      }
+    ]
   }
 ]

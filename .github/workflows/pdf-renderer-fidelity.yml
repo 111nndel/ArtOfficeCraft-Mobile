@@ -26,7 +26,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y poppler-utils fonts-dejavu-core
           python -m pip install -r tools/pdf_fidelity/requirements.txt
-      - name: Generate, render and compare six original cases
+      - name: Generate eight cases and compare the application C ABI
         run: bash tools/pdf_fidelity/run.sh
       - name: Retain images, comparisons and provenance
         if: always()
@@ -38,7 +38,7 @@ jobs:
           retention-days: 7
 
   android-reference:
-    name: Compare Android PdfRenderer on the shared fixture
+    name: Compare real Rust FFI and Android on the shared fixture
     needs: fidelity
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -71,7 +71,12 @@ jobs:
         with:
           name: pdf-renderer-fidelity
           path: build/pdf-renderer-fidelity/results/
-      - name: Render fixture pages through the real Android adapter
+      - name: Build the application Rust core for the emulator
+        run: |
+          bash tools/ci/build_native.sh x86_64-linux-android
+          mkdir -p android/app/src/main/jniLibs/x86_64
+          cp build/native-candidate/libartoffice_core.so android/app/src/main/jniLibs/x86_64/
+      - name: Render fixture pages through both real adapters
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 36
