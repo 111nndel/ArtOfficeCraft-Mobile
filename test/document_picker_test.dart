@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'loaded_editors_test.dart' show FakeDocumentBackend, setup;
+import 'pdf_session_lifetime_test.dart' show MemoryPdfRenderer;
 
 void main() {
   const channel = MethodChannel('flutter_file_dialog');
@@ -116,7 +117,7 @@ void main() {
         EditorKind.word => NativeWordScreen(backend: backend, files: files, launch: launch),
         EditorKind.excel => NativeGridScreen(backend: backend, files: files, launch: launch),
         EditorKind.slides => NativeDeckScreen(backend: backend, files: files, launch: launch),
-        EditorKind.pdf => NativePdfScreen(backend: backend, files: files, launch: launch),
+        EditorKind.pdf => NativePdfScreen(backend: backend, files: files, launch: launch, renderer: MemoryPdfRenderer()),
       };
       await setup(tester, const Size(393, 873), 1, screen);
       await tester.tap(find.byTooltip('Меню файла'));

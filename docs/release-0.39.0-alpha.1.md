@@ -10,6 +10,7 @@
 - Separated the PDF renderer contract from the Android implementation. PDF session replacement and cleanup can be checked without an Android channel.
 - Added a Linux AOT smoke check for default native loading, background workers, all four document edits, saving and reopening from disk. This runs outside the source working directory.
 - Added no runtime dependencies or network services. Existing engine pins remain at the latest reviewed stable releases.
+- Added fast Flutter checks for intermediate `checks/**` branches while retaining the full release gate.
 
 ## Known Limitations
 

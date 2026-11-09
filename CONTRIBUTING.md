@@ -29,6 +29,11 @@ flutter analyze
 flutter test
 ```
 
+For intermediate Dart-only work, push a `checks/**` branch to run the fast
+Flutter/analyzer/updater workflow without building native Android libraries.
+Pull requests and release tags still run the full Rust, Flutter, APK and Android
+emulator gate. A successful fast run alone does not qualify an APK for release.
+
 For native changes also run the Rust tests, verify all four pins with
 `tools/sync_native_pins.py`, and review updated dependency notices. Exercise real
 engine operations on an Android 16 QA emulator using `tools/test_android_editors.ps1`.

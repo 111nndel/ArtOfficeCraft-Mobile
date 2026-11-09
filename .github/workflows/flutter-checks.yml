@@ -1,0 +1,32 @@
+name: Fast Flutter checks
+
+on:
+  push:
+    branches: ['checks/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+  DART_SUPPRESS_ANALYTICS: 'true'
+
+jobs:
+  flutter:
+    name: Analyze and test Flutter changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Flutter
+        run: bash tools/ci/install_flutter.sh
+      - run: python -m unittest discover -s tools -p 'test_*.py' -v
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
