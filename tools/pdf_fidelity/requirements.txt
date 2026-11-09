@@ -1,0 +1,5 @@
+# Development-only PDF fixture generation and raster inspection.
+# None of these packages is an application dependency.
+reportlab==4.4.9
+pypdf==6.21.4
+Pillow==13.0.0
