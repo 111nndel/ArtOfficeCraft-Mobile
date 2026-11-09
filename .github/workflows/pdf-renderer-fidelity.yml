@@ -2,7 +2,7 @@ name: PDF renderer image fidelity
 
 on:
   push:
-    branches: ['fidelity/**']
+    branches: ['fidelity/**', 'engine-refresh/**']
   workflow_dispatch:
 
 permissions:
