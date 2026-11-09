@@ -1,0 +1,38 @@
+name: PDF renderer image fidelity
+
+on:
+  push:
+    branches: ['fidelity/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdf-fidelity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fidelity:
+    name: Compare the pinned PDF renderer with Poppler
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install development-only reference and fixture tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils fonts-dejavu-core
+          python -m pip install -r tools/pdf_fidelity/requirements.txt
+      - name: Generate, render and compare six original cases
+        run: bash tools/pdf_fidelity/run.sh
+      - name: Retain images, comparisons and provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pdf-renderer-fidelity
+          path: build/pdf-renderer-fidelity/results/
+          if-no-files-found: warn
+          retention-days: 7
