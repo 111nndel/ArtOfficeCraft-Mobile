@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mobile-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  group: mobile-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}${{ startsWith(github.ref, 'refs/heads/codex/release-') && '-publish' || '' }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
