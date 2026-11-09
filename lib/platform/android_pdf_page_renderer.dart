@@ -15,6 +15,9 @@ final class AndroidPdfPageRenderer implements PdfPageRenderer {
   final MethodChannel _channel;
   final bool allowNonAndroidForTesting;
 
+  @override
+  bool get supportsOcr => Platform.isAndroid || allowNonAndroidForTesting;
+
   void _platformCheck() {
     if (!Platform.isAndroid && !allowNonAndroidForTesting) {
       throw UnsupportedError('PDF rendering requires Android');

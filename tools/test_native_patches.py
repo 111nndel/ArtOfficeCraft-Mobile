@@ -8,13 +8,16 @@ from sync_native_pins import pdf_patch_block, install_patch_block
 class NativePatchTests(unittest.TestCase):
     def source(self, root, *, path='vendor/hayro-jbig2', name='hayro-jbig2'):
         root.mkdir(parents=True, exist_ok=True)
-        (root / 'Cargo.toml').write_text('[patch.crates-io]\nhayro-jbig2 = {path = "' + path + '"}\nhayro-syntax = {path = "vendor/hayro-syntax"}\n')
-        package = root / 'vendor/hayro-jbig2'
-        package.mkdir(parents=True)
-        (package / 'Cargo.toml').write_text(f'[package]\nname = "{name}"\nversion = "0.3.0"\n')
-        syntax = root / 'vendor/hayro-syntax'
-        syntax.mkdir()
-        (syntax / 'Cargo.toml').write_text('[package]\nname = "hayro-syntax"\nversion = "0.7.2"\n')
+        names = ('hayro', 'hayro-interpret', 'hayro-syntax', 'hayro-cmap', 'hayro-postscript', 'hayro-jbig2', 'lopdf', 'vello_common', 'vello_cpu')
+        entries = []
+        for item in names:
+            target = path if item == 'hayro-jbig2' else 'vendor/' + item
+            entries.append(f'{item} = {{path = "{target}"}}')
+            package = root / 'vendor' / item
+            package.mkdir(parents=True)
+            actual = name if item == 'hayro-jbig2' else item
+            (package / 'Cargo.toml').write_text(f'[package]\nname = "{actual}"\nversion = "0.1.0"\n')
+        (root / 'Cargo.toml').write_text('[patch.crates-io]\n' + '\n'.join(entries) + '\n')
 
     def test_patch_is_exactly_inside_verified_source_and_updates_idempotently(self):
         with tempfile.TemporaryDirectory() as tmp:
