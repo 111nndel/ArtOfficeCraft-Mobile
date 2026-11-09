@@ -1,3 +1,4 @@
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,6 +17,16 @@ class UpdaterTests(unittest.TestCase):
         for n,c in x['engines'].items():
             self.assertTrue(c['repo'].endswith('/'+n+'.git'))
             self.assertEqual(40,len(c['commit']))
+
+    def test_reject_untracked_compiler_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp)
+            subprocess.run(['git','init','--quiet',str(folder)],check=True)
+            self.assertTrue(m.clean_source(folder))
+            (folder/'ARTOFFICECRAFT_SOURCE_ATTESTATION.json').write_text('{}')
+            self.assertTrue(m.clean_source(folder))
+            (folder/'build.rs').write_text('fn main() {}')
+            self.assertFalse(m.clean_source(folder))
 
     def test_cargo_version(self):
         with tempfile.TemporaryDirectory() as tmp:

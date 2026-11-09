@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 import 'package:flutter/material.dart';
 
 /// The dialog owns its TextFormField through the entire route transition.
@@ -11,22 +13,22 @@ Future<String?> showDeckTextDialog(
   return showDialog<String>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: Text(heading),
+      title: UiText(heading),
       content: TextFormField(
         initialValue: initial,
         onChanged: (next) => value = next,
         maxLines: 3,
         autofocus: true,
-        decoration: const InputDecoration(border: OutlineInputBorder()),
+        decoration: InputDecoration(border: OutlineInputBorder()),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('Отмена'),
+          child: const UiText('Отмена'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(dialogContext, value),
-          child: const Text('Применить'),
+          child: const UiText('Применить'),
         ),
       ],
     ),

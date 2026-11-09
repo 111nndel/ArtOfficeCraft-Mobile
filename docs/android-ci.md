@@ -1,0 +1,58 @@
+# Android editor checks on GitHub Actions
+
+The `Android 16 emulator and editor scenarios` job runs on a GitHub-hosted
+Ubuntu 24.04 machine. It does not need a contributor's PC, a self-hosted runner,
+an attached phone, or the preview signing key. It runs on the same push/PR/manual
+events as the existing workflow. Future tagged publication requires both the
+ordinary ARM64 package job and this emulator job to succeed.
+
+The job stages the four exact upstream source pins, runs native tests and compiles
+the Rust core for x86_64 with 16-KiB ELF alignment. Flutter/Java/NDK match the
+ordinary build. A pinned emulator-runner action starts an API 36 Google APIs
+x86_64 image with the Pixel 7 hardware profile and KVM acceleration.
+
+`tools/ci/run_android_checks.py` drives all four integration suites:
+
+| Suite | Current scenarios | Coverage |
+| --- | ---: | --- |
+| native_editors | 9 | Four real engines, in-page editing/export, recovery, English UI, worker/media lifetime, distant cells, imported layout, resizing, formulas and zoom |
+| office_features | 12 | Word replacement, active/new sheets, PPTX order and touch object editing, PDF rotation, notes, text editing and insertion, offline Russian and English OCR from a raster-only PDF, searchable export, identical rendered images, duplicate-layer rejection and undo/redo, text search and highlighted jumps in both page layouts, reading modes and direct navigation |
+| range_features | 7 | Cell search with distant matches, formulas, sheet switching and pending input, touch range selection/format/clear, sort direction and header, worksheet filtering by value and blanks, whole rows and columns, cross-sheet formulas, undo/redo, Word color/indent/spacing, export and reopen |
+| clipboard_features | 3 | Real Android clipboard identity, cross-workbook/sheet style and formula paste, special modes, external Unicode TSV, export and undo |
+
+Flutter's host-side integration driver saves the existing screenshots directly
+under `build/android-qa/screenshots`. A screenshot must contain a PNG signature;
+a missing/invalid screenshot or failing suite fails the job. Screenshots are
+evidence for inspection, not automatic pixel-perfect golden comparisons.
+The driver avoids the race in which the test app is uninstalled before a host
+can copy app-private screenshot files.
+
+Only the test debug manifest temporarily receives INTERNET for the Flutter VM
+service. It is restored byte-for-byte on normal completion or a Python exception,
+including command timeouts. The job then builds `lib/main.dart` as an ordinary
+release APK and checks the manifest, bundled notices and native 16-KiB
+alignment. A disposable QA certificate signs this APK and a profile build
+recreated with version 0.33.0 for x86_64. The ADB checks import two files in the
+profile build, install the release APK over it and reopen both recent copies.
+They also check DocumentsUI filters, touch resizing and undo on the release APK.
+
+The `android-16-qa` artifact retains logs, logcat, screenshots, permission/package
+reports and `summary.json` for seven days, including partial evidence on failure.
+Test/QA APKs are excluded from that upload. The separate publication job consumes
+only the ordinary ARM64 candidate, holds the signing secret and verifies the
+existing certificate. Emulator tests do not gain signing credentials.
+
+The default image does not prove operation on a device using actual 16-KiB memory
+pages, and a virtual Pixel does not replace testing on a physical Vivo. Complex
+Office fidelity and visual quality still need human review of the captured images
+and representative files. The ordinary APK remains offline. Clipboard text and an opaque token use the
+Android clipboard; the rich source snapshot stays only in process memory.
+
+On a disposable Linux Android 16 x86_64 emulator, the runner can also be reproduced
+with `python3 tools/ci/run_android_checks.py --device emulator-5554` after installing
+the pinned tools, compiling/copying the matching core and running `flutter pub get`.
+The script rejects physical-device serials. A failed suite stops before ordinary
+app checks and cannot satisfy the publication dependency.
+
+References: [emulator runner source](https://github.com/ReactiveCircus/android-emulator-runner/tree/a421e43855164a8197daf9d8d40fe71c6996bb0d)
+and [Flutter integration screenshot driver](https://github.com/flutter/flutter/blob/c197ca5199e9ee5661e865596c9c07294dfab51c/packages/integration_test/lib/integration_test_driver_extended.dart).

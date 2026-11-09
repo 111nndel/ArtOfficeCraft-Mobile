@@ -29,6 +29,11 @@ def git(*args,cwd=None,timeout=240):
     if p.returncode:raise RuntimeError('git failed: '+p.stderr[-600:])
     return p.stdout.strip()
 
+def clean_source(folder):
+    # Our attestation is metadata, never compiler input. Reject every other untracked file.
+    return not git("status","--porcelain","--untracked-files=all","--",".",
+                   ":(exclude)ARTOFFICECRAFT_SOURCE_ATTESTATION.json",cwd=folder)
+
 def remote_commit(repo,tag):
     version(tag)
     out=git('ls-remote','--tags',repo,f'refs/tags/{tag}',f'refs/tags/{tag}^{{}}')
@@ -75,7 +80,7 @@ def stage_one(name,tag):
     if tag==cfg['tag'] and sha!=cfg['commit']:raise RuntimeError('Pinned tag moved on GitHub')
     dest=STAGED/name/f'{tag}-{sha[:12]}'
     if dest.exists():
-        if git('rev-parse','HEAD',cwd=dest)!=sha or git('status','--porcelain','--untracked-files=no',cwd=dest):raise RuntimeError('Staged directory is modified')
+        if git('rev-parse','HEAD',cwd=dest)!=sha or not clean_source(dest):raise RuntimeError('Staged directory is modified')
         cargo_valid(dest,tag);print(f'{name}: staged already: {dest}');return
     dest.parent.mkdir(parents=True,exist_ok=True)
     tmp=Path(tempfile.mkdtemp(prefix='.new-',dir=dest.parent))
@@ -95,7 +100,7 @@ def pin(name,tag,approved):
     if not approved:raise ValueError('Use --ack-review after comparing changes and dependencies')
     cfg=config();sha=remote_commit(cfg['engines'][name]['repo'],tag)
     path=STAGED/name/f'{tag}-{sha[:12]}'
-    if not path.is_dir() or git('rev-parse','HEAD',cwd=path)!=sha or git('status','--porcelain','--untracked-files=no',cwd=path):
+    if not path.is_dir() or git('rev-parse','HEAD',cwd=path)!=sha or not clean_source(path):
         raise RuntimeError('Run stage for exact version first')
     cargo_valid(path,tag)
     history=ROOT/'upstream'/'lock-history';history.mkdir(exist_ok=True,parents=True)

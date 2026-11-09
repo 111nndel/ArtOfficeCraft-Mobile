@@ -22,7 +22,9 @@ if($Release){$args+='--release'}
 & cargo @args
 if($LASTEXITCODE -ne 0){throw 'Rust Android build failed'}
 $profile = if($Release){'release'}else{'debug'}
-$binary=Join-Path $root ("native\artoffice_core\target\aarch64-linux-android\$profile\libartoffice_core.so")
+$targetRoot = $env:CARGO_TARGET_DIR
+if (-not $targetRoot) {$targetRoot = Join-Path $root "native\artoffice_core\target"}
+$binary=Join-Path $targetRoot ("aarch64-linux-android\$profile\libartoffice_core.so")
 $folder=Join-Path $root 'android\app\src\main\jniLibs\arm64-v8a'
 New-Item $folder -ItemType Directory -Force | Out-Null
 Copy-Item $binary (Join-Path $folder 'libartoffice_core.so') -Force

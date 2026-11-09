@@ -10,7 +10,7 @@ This is a checklist for **actual Android UX tests**, not a claim of complete fun
 - Show only important contextual information while retaining maximum document canvas area.
 
 ## Touch and accessibility
-- All primary interactive controls should have a touch target of at least **48 dp**.
+- All primary interactive controls should have a touch target of at least **52 dp**.
 - Show readable text labels for editing commands; do not rely on icons whose meanings are ambiguous.
 - Test widths 320, 360, 393, 412 dp and common landscape configurations.
 - Avoid text/clipping overflow at enlarged system font sizes.
@@ -78,3 +78,27 @@ physical-phone result from these emulator tests.
   or marketing banners that push the editing canvas below the fold.
 - Physical ARM64 smartphone, landscape and other text scaling/device
   combinations still require additional testing.
+
+
+## 0.9.0 approved mockup transfer
+
+- Canonical visual reference: `design/ArtOfficeCraft_Mobile.html`.
+  Preserve its workspace hierarchy and format colors; do not preserve
+  its tiny labels or small hit rectangles.
+- App theme: light by default, dark variant retained. Main labels are
+  14–18 sp, general command targets at least 52 dp, spreadsheet values
+  16 sp with 56 dp cells. Native document/slide content is not globally
+  magnified or reformatted to enlarge application controls.
+- At 320 dp the format cards use one column; at 360/393 dp normal text
+  uses two. At 200% text, cards flow into a single column. Tablet widths
+  can use four columns and a navigation rail. No text-scale clamping.
+- Typing a search hides creation cards and templates so matching files
+  immediately follow the query. Favorites and recent entries refer to
+  real private local copies, never decorative demo rows.
+- Opened/exported copies survive restart; unsaved edits still require
+  explicit Save copy. Clearing app data removes those private copies.
+- Automated acceptance: 33 passing Flutter tests, including six
+  320/360/393 dp × 100/200% size/navigation cases. Flutter analyze clean.
+- Both debug ABIs compile. Android device keyboard, TalkBack, landscape,
+  the new workspace channel plus SAF/reopen cycle, and template file
+  fidelity need real-device validation; do not report them as passed.

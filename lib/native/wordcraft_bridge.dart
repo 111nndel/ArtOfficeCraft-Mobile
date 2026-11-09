@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:ffi' as ffi;
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
+
+import 'native_core_library.dart';
 
 final class _NativeResult extends ffi.Struct {
   @ffi.Int32()
@@ -39,11 +40,11 @@ typedef _DartFree = void Function(_NativeResult);
 typedef _RustVersion = ffi.Uint32 Function();
 typedef _DartVersion = int Function();
 
-/// WordCraft native Android adapter. No document data is sent over the network.
+/// WordCraft native adapter. No document data is sent over the network.
 ///
 /// All Rust allocated buffers are freed even when decoding throws.
-/// This API is synchronous: keep files reasonably small until a worker isolate
-/// is wired in. Error messages are surfaced rather than pretending to save.
+/// This low-level API is synchronous. UI screens use DocumentBackend to call it
+/// in worker isolates; errors propagate without replacing the current document.
 final class WordCraftBridge {
   WordCraftBridge._(ffi.DynamicLibrary library)
     : _inspect = library.lookupFunction<_RustOne, _DartOne>('ac_docx_inspect'),
@@ -51,6 +52,7 @@ final class WordCraftBridge {
       _append = library.lookupFunction<_RustTwo, _DartTwo>(
         'ac_docx_append_paragraph',
       ),
+      _edit = library.lookupFunction<_RustTwo, _DartTwo>('ac_docx_edit'),
       _free = library.lookupFunction<_RustFree, _DartFree>('ac_result_free'),
       _abi = library.lookupFunction<_RustVersion, _DartVersion>(
         'ac_engine_abi_version',
@@ -63,17 +65,17 @@ final class WordCraftBridge {
   final _DartOne _inspect;
   final _DartOne _create;
   final _DartTwo _append;
+  final _DartTwo _edit;
   final _DartFree _free;
   final _DartVersion _abi;
 
-  /// Desktop smoke tests may inject the native Windows library explicitly.
+  /// Native smoke tests may inject a compiled library explicitly.
   static WordCraftBridge openLibraryForTesting(String path) =>
-      WordCraftBridge._(ffi.DynamicLibrary.open(path));
+      WordCraftBridge._(openNativeCore(libraryPath: path));
 
   static WordCraftBridge? tryOpen() {
-    if (!Platform.isAndroid) return null;
     try {
-      return WordCraftBridge._(ffi.DynamicLibrary.open('libartoffice_core.so'));
+      return WordCraftBridge._(openNativeCore());
     } catch (_) {
       return null;
     }
@@ -137,6 +139,18 @@ final class WordCraftBridge {
       return _receive(_append(data, docx.length, t, text.length));
     } finally {
       calloc.free(t);
+      calloc.free(data);
+    }
+  }
+
+  Uint8List edit(Uint8List docx, Map<String, dynamic> request) {
+    final data = _write(docx);
+    final payload = Uint8List.fromList(utf8.encode(jsonEncode(request)));
+    final req = _write(payload);
+    try {
+      return _receive(_edit(data, docx.length, req, payload.length));
+    } finally {
+      calloc.free(req);
       calloc.free(data);
     }
   }

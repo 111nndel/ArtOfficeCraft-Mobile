@@ -1,0 +1,54 @@
+name: Prepare pinned engine refresh
+
+on:
+  push:
+    branches: ['engine-refresh/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-refresh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: Resolve and test approved engine sources
+    if: github.repository == '111nndel/ArtOfficeCraft-Mobile'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal
+          rustup override set 1.99.1
+      - name: Verify sources and resolve updated path dependencies
+        id: resolve
+        run: |
+          python tools/engine_updater.py stage
+          python tools/sync_native_pins.py
+          cargo update --workspace --manifest-path native/artoffice_core/Cargo.toml
+      - name: Run adapter and updater tests
+        run: |
+          python -m unittest discover -s tools -p 'test_*.py' -v
+          cargo test --locked --manifest-path native/artoffice_core/Cargo.toml
+      - name: Collect resolved dependency notices
+        if: always() && steps.resolve.outcome == 'success'
+        run: |
+          cargo metadata --locked --format-version 1 --filter-platform aarch64-linux-android --manifest-path native/artoffice_core/Cargo.toml > "$RUNNER_TEMP/engine-metadata.json"
+          python tools/collect_rust_licenses.py --metadata "$RUNNER_TEMP/engine-metadata.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: engine-refresh-inputs
+          path: |
+            native/artoffice_core/Cargo.toml
+            native/artoffice_core/Cargo.lock
+            assets/legal/rust-licenses.json
+            upstream/engines.lock.json
+          if-no-files-found: error
+          retention-days: 7

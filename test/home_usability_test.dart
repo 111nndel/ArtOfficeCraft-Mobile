@@ -17,7 +17,7 @@ void main() {
         home: HomeScreen(toggleTheme: () {}, theme: ThemeMode.system),
       ),
     );
-    expect(find.text('Открыть редактор'), findsOneWidget);
+    expect(find.text('Создать файл'), findsOneWidget);
     expect(find.text('Рабочие пространства'), findsNothing);
     expect(find.textContaining('Настоящие файлы Office ещё'), findsNothing);
     expect(tester.takeException(), isNull);
