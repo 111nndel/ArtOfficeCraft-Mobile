@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:artofficecraft_mobile/l10n/language_settings.dart';
 import 'package:artofficecraft_mobile/platform/application_storage.dart';
