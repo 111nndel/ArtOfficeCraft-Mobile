@@ -9,6 +9,7 @@ import 'package:artofficecraft_mobile/native/native_word_screen.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
+import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'package:artofficecraft_mobile/ui/editor_tools.dart';
 import 'package:artofficecraft_mobile/ui/office_theme.dart';
 import 'package:artofficecraft_mobile/ui/page_reading.dart';
@@ -229,6 +230,38 @@ void main() {
     await press(tester, mode);
     await collapse(tester);
   }
+
+  testWidgets(
+    'Android legacy reading preferences survive and new Dart files take precedence',
+    (tester) async {
+      // tools/ci/run_android_checks.py seeds these old-format XML preferences.
+      final storage = AndroidApplicationStorage();
+      expect(await storage.readReadingMode('pdf'), 'continuous');
+      expect(await storage.readReadingMode('deck'), 'vertical');
+      await Future.wait([
+        storage.writeReadingMode('pdf', 'vertical'),
+        AndroidApplicationStorage().writeReadingMode('deck', 'horizontal'),
+      ]);
+      final reopened = AndroidApplicationStorage();
+      expect(await reopened.readReadingMode('pdf'), 'vertical');
+      expect(await reopened.readReadingMode('deck'), 'horizontal');
+      final root = await storage.workspaceDirectory();
+      expect(
+        jsonDecode(await File('${root.path}/reading-pdf.json').readAsString()),
+        {'mode': 'vertical'},
+      );
+      const legacy = MethodChannel('artofficecraft/reading');
+      expect(
+        await legacy.invokeMethod<String>('read', {'format': 'pdf'}),
+        'continuous',
+      );
+      expect(
+        await legacy.invokeMethod<String>('read', {'format': 'deck'}),
+        'vertical',
+      );
+      await storage.writeReadingMode('pdf', 'horizontal');
+    },
+  );
 
   testWidgets(
     'Word exact Unicode replacement is saved, undoable and reopened through Rust',

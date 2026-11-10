@@ -10,8 +10,8 @@ operations do not establish that the entire UI works on another OS.
 | --- | --- | --- |
 | Native core | `openNativeCore`, `DocumentBackend` | Bundled Rust library, ABI 1; ordered Dart isolates |
 | Open/export | `DocumentFiles` | Existing Android/iOS file-dialog plugin, isolated in `lib/platform/document_files.dart` |
-| Storage | `ApplicationStorage` | Existing Android channels; portable directory-backed Dart storage |
-| PDF display/OCR | `PdfPageRenderer` | Android PdfRenderer and offline OCR channel |
+| Storage | `ApplicationStorage` | Shared Dart files; Android supplies its private directory and reads legacy preferences |
+| PDF display/OCR | `PdfPageRenderer` | Rust worker renderer; lazy Android compatibility and offline OCR channel |
 | Spreadsheet clipboard | `SystemClipboard`, `GridClipboard` | Android identity-bearing clipboard; Flutter text-only fallback |
 
 `ArtOfficeCraftApp` accepts storage, file, PDF-renderer and clipboard services and passes
@@ -22,8 +22,11 @@ user folder or require another plugin.
 
 Android keeps the existing directory, filenames and reading-preference keys, so
 upgrades do not relocate recent files, drafts, appearance or language choices.
-The directory-backed adapter stores reading preferences as small JSON files,
-serializes writes and rejects path-like format identifiers.
+All storage adapters save reading preferences as small JSON files using the same
+ordered Dart writer, including calls from separate adapter instances. Android
+reads the old PDF/Deck SharedPreferences only when no new preference file exists;
+new choices use Dart files and take precedence. The legacy preferences remain
+untouched for upgrades. Invalid modes and path-like format identifiers are rejected.
 
 `GridClipboard` owns an immutable, bounded workbook snapshot in Dart and orders
 reads/writes through an injectable `SystemClipboard`. Android exports selected
@@ -52,7 +55,7 @@ CI compiles a standalone Dart AOT executable on Linux, places the real host core
 in its bundle location, changes to `/tmp` and runs all four document workers.
 The smoke check creates, edits, saves and reopens DOCX, XLSX, PPTX and PDF. It
 also reads native build information using automatic discovery. This checks the
-FFI/worker layer; it does not launch a Linux Flutter app or render PDF pages.
+FFI/worker layer, including PDF rasterization; it does not launch a Linux Flutter app.
 
 ## Remaining work
 
@@ -60,8 +63,8 @@ FFI/worker layer; it does not launch a Linux Flutter app or render PDF pages.
 - Supply each target's application support directory and native file dialogs.
 - Implement identity-bearing desktop clipboards if rich cross-file paste is needed;
   validate them on actual desktop runners. Portable text paste is already isolated.
-- Evaluate a portable PDF rasterizer/OCR integration using representative files,
-  fidelity, peak memory and latency before adding a dependency.
+- Extend Rust PDF fidelity coverage to representative files; portable OCR remains
+  platform work. Keep measuring peak memory and latency before adding dependencies.
 - Exercise desktop text input, windows, keyboard shortcuts and large-screen UI.
 
 Keep document engines pinned to reviewed source commits. Updating their source

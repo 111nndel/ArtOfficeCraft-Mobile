@@ -16,7 +16,7 @@ x86_64 image with the Pixel 7 hardware profile and KVM acceleration.
 | Suite | Current scenarios | Coverage |
 | --- | ---: | --- |
 | native_editors | 9 | Four real engines, in-page editing/export, recovery, English UI, worker/media lifetime, distant cells, imported layout, resizing, formulas and zoom |
-| office_features | 12 | Word replacement, active/new sheets, PPTX order and touch object editing, PDF rotation, notes, text editing and insertion, offline Russian and English OCR from a raster-only PDF, searchable export, identical rendered images, duplicate-layer rejection and undo/redo, text search and highlighted jumps in both page layouts, reading modes and direct navigation |
+| office_features | 13 | Legacy Android reading preferences and new Dart-file precedence, Word replacement, active/new sheets, PPTX order and touch object editing, PDF rotation, notes, text editing and insertion, offline Russian and English OCR from a raster-only PDF, searchable export, identical rendered images, duplicate-layer rejection and undo/redo, text search and highlighted jumps in both page layouts, reading modes and direct navigation |
 | range_features | 7 | Cell search with distant matches, formulas, sheet switching and pending input, touch range selection/format/clear, sort direction and header, worksheet filtering by value and blanks, whole rows and columns, cross-sheet formulas, undo/redo, Word color/indent/spacing, export and reopen |
 | clipboard_features | 3 | Real Android clipboard identity, cross-workbook/sheet style and formula paste, special modes, external Unicode TSV, export and undo |
 
@@ -47,6 +47,12 @@ pages, and a virtual Pixel does not replace testing on a physical Vivo. Complex
 Office fidelity and visual quality still need human review of the captured images
 and representative files. The ordinary APK remains offline. Clipboard text and an opaque token use the
 Android clipboard; the rich source snapshot stays only in process memory.
+
+Before the office suite, the runner stops the disposable debug app, seeds its
+old `reading_modes.xml` and removes only the two new reading-mode fixture files.
+The integration test reads both legacy values through the real Kotlin channel,
+saves new modes through Dart, reopens the store and confirms file precedence
+while the legacy values remain untouched. No fixture handler enters the app.
 
 On a disposable Linux Android 16 x86_64 emulator, the runner can also be reproduced
 with `python3 tools/ci/run_android_checks.py --device emulator-5554` after installing

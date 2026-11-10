@@ -19,7 +19,8 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
- * First-party Android PDF rasterization; Rust PDFCraft owns document edits.
+ * Android compatibility PDF rasterization and offline OCR. Rust PDFCraft owns
+ * primary rasterization and document edits.
  *
  * A single worker serializes all open/render/close operations. Only one
  * document is resident per FlutterActivity, with an opaque session token.
@@ -68,17 +69,9 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 val preferences = getSharedPreferences("reading_modes", Context.MODE_PRIVATE)
-                when (call.method) {
-                    "read" -> result.success(preferences.getString(format, null))
-                    "write" -> {
-                        val mode = call.argument<String>("mode")
-                        if (mode == "horizontal" || mode == "vertical" || mode == "continuous") {
-                            preferences.edit().putString(format, mode).apply()
-                            result.success(null)
-                        } else result.error("BAD_MODE", "Unknown reading mode", null)
-                    }
-                    else -> result.notImplemented()
-                }
+                // Read-only compatibility for preferences saved before Dart files.
+                if (call.method == "read") result.success(preferences.getString(format, null))
+                else result.notImplemented()
             }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/grid_clipboard")

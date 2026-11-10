@@ -1,11 +1,13 @@
 # ArtOfficeCraft Mobile — Rust/Flutter integration checkpoint
 
-Current checkpoint: app 0.40.0 / core 0.38.0, native ABI 1. The approved mobile
+Current checkpoint: app 0.43.0 / core 0.42.0, native ABI 1. The approved mobile
 panel design is implemented across all editors. DOCX supports in-page paragraph
 editing and selected formatting. XLSX additionally supports guarded pending input,
 undo/redo, native cell styles and number formats. Deck text forms stay within the
-slab; PDF uses Android rendering with explicit session cleanup. See
-`docs/release-0.40.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
+slab; PDF uses Rust rendering with a lazy Android compatibility/OCR adapter. See
+`docs/release-0.43.0-alpha.1.md` and `design/INTERACTION_SPEC.md` for the current state.
+Reading-mode writes now share the portable Dart file store. Android keeps only
+read compatibility for old preferences. Older sections below record historical checkpoints.
 Clipboard operations now use an injectable, ordered Dart session and platform
 adapters; stale copies from disposed editors are rejected. The standard Flutter
 fallback transfers text without retaining rich workbook snapshots.
