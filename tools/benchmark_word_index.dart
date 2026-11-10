@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../lib/native/word_document_index.dart';
+import 'package:artofficecraft_mobile/native/word_document_index.dart';
 
 // Synthetic unchanged-query reads, compiled to AOT by CI. Not phone frame time.
 void main(List<String> args) {
@@ -39,8 +39,9 @@ void main(List<String> args) {
   clock.reset();
   final expected = index.find('needle');
   final coldUs = clock.elapsedMicroseconds;
-  if (expected.length != 1 || expected.single.block != 39998)
+  if (expected.length != 1 || expected.single.block != 39998) {
     throw StateError('Wrong result');
+  }
   final times = {'baseline': <int>[], 'cached': <int>[]};
   for (var i = 0; i < 30; i++) {
     for (final mode

@@ -374,6 +374,7 @@ void main() {
     );
     state.openTool(view, [nav]);
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('word-jump-end')));
     await tester.tap(find.byKey(const Key('word-jump-end')));
     await tester.pumpAndSettle();
     expect(

@@ -391,6 +391,7 @@ void main() {
       expect((reopened['paragraphs'] as List).last, 'Последний раздел 😀');
       await tool(tester, 'Вид', 'Навигация');
       await tester.enterText(find.byKey(const Key('word-jump-number')), '1000');
+      await tester.ensureVisible(find.byTooltip('Перейти к абзацу'));
       await tester.tap(find.byTooltip('Перейти к абзацу'));
       await until(
         tester,
