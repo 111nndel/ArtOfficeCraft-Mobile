@@ -151,6 +151,22 @@ final class GridCraftBridge {
     return edit(workbook, {'sheet': sheet, 'address': address, 'value': value});
   }
 
+  /// Returns null when both native reader slots are occupied. Callers can use
+  /// inspectWindow in that case; opening never evicts another worker's model.
+  int? openReader(Uint8List workbook) =>
+      inspectWindow(workbook, {'reader': 'open'})['session'] as int?;
+
+  Map<String, dynamic> readWindow(int session, Map<String, dynamic> view) =>
+      inspectWindow(Uint8List(0), {
+        'reader': 'view',
+        'session': session,
+        'view': view,
+      });
+
+  void closeReader(int session) {
+    inspectWindow(Uint8List(0), {'reader': 'close', 'session': session});
+  }
+
   Map<String, dynamic> inspectWindow(
     Uint8List workbook,
     Map<String, dynamic> view,

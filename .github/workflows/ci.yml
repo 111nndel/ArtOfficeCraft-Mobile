@@ -54,9 +54,10 @@ jobs:
         run: bash tools/ci/install_flutter.sh
       - name: Verify default core loading and document workers on Linux
         run: |
-          cargo build --locked --manifest-path native/artoffice_core/Cargo.toml
+          cargo build --release --locked --manifest-path native/artoffice_core/Cargo.toml
+          python tools/benchmark_grid_windows.py native/artoffice_core/target/release/libartoffice_core.so --output build/native-candidate/grid-window-benchmark.json
           mkdir -p build/host-smoke/lib
-          cp native/artoffice_core/target/debug/libartoffice_core.so build/host-smoke/lib/
+          cp native/artoffice_core/target/release/libartoffice_core.so build/host-smoke/lib/
           dart compile exe tools/smoke_native_workers.dart -o build/host-smoke/native-workers
           cd /tmp
           "$GITHUB_WORKSPACE/build/host-smoke/native-workers"

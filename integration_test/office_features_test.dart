@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
+import 'package:artofficecraft_mobile/native/gridcraft_bridge.dart';
 import 'package:artofficecraft_mobile/native/native_word_screen.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
@@ -230,6 +231,61 @@ void main() {
     await press(tester, mode);
     await collapse(tester);
   }
+
+  testWidgets(
+    'XLSX reader reuses snapshots, replaces edits and frees worker sessions',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      final original = immutableDocumentBytes(gridLayoutFixture());
+      const window = GridWindow(0, 0, 0, rows: 6, columns: 6);
+      final before = await backend.inspectGrid(original, window, 'A1');
+      for (var i = 0; i < 4; i++) {
+        expect(await backend.inspectGrid(original, window, 'A1'), before);
+      }
+      expect(backend.inputTransfers, 1);
+      final changed = await backend.editAndInspectGrid(
+        original,
+        {'sheet': 0, 'address': 'A1', 'value': 'New snapshot'},
+        window,
+        'A1',
+      );
+      expect(changed.preview['selection']['input'], 'New snapshot');
+      expect(
+        (await backend.inspectGrid(
+          changed.bytes,
+          window,
+          'A1',
+        ))['selection']['input'],
+        'New snapshot',
+      );
+      expect(
+        (await backend.inspectGrid(
+          original,
+          window,
+          'A1',
+        ))['selection']['input'],
+        before['selection']['input'],
+      );
+      await backend.close();
+      // Two low-level readers fit only if the worker released its model on close.
+      final bridge = GridCraftBridge.tryOpen()!;
+      final first = bridge.openReader(original)!;
+      addTearDown(() => bridge.closeReader(first));
+      final second = bridge.openReader(original)!;
+      addTearDown(() => bridge.closeReader(second));
+      final fallback = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(fallback.close);
+      expect(await fallback.inspectGrid(original, window, 'A1'), before);
+      await fallback.close();
+      bridge.closeReader(first);
+      bridge.closeReader(second);
+      final reopened = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(reopened.close);
+      expect(await reopened.inspectGrid(original, window, 'A1'), before);
+      await reopened.close();
+    },
+  );
 
   testWidgets(
     'Android legacy reading preferences survive and new Dart files take precedence',
