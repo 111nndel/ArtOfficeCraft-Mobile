@@ -1,7 +1,20 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
-  "Доступна вставка текста через «Вставить всё». Формулы и оформление не переносятся.":
-      "Paste text using Paste all. Formulas and formatting are not transferred.",
+  "Абзацев основного текста: {0}": "Body text paragraphs: {0}",
+  "Таблицы и колонтитулы не включены":
+      "Tables, headers and footers are excluded",
+  "В начало документа": "Go to document start",
+  "В конец документа": "Go to document end",
+  "Номер абзаца": "Paragraph number",
+  "От 1 до {0}": "From 1 to {0}",
+  "Введите номер от 1 до {0}": "Enter a number from 1 to {0}",
+  "Перейти к абзацу": "Go to paragraph",
+  "Найти заголовок": "Find a heading",
+  "В документе нет заголовков с уровнем структуры":
+      "No headings with an outline level in this document",
+  "Заголовки не найдены": "No headings found",
+
+  "Доступна вставка текста через «Вставить всё». Формулы и оформление не переносятся.": "Paste text using Paste all. Formulas and formatting are not transferred.",
   "Удерживайте и тяните для изменения размера": "Hold and drag to resize",
   "Высота строки": "Row height",
   "Ширина столбца": "Column width",

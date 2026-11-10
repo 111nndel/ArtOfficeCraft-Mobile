@@ -343,6 +343,51 @@ void main() {
     expect(utf8.decode(exported!), contains('Новый текст после оформления 😀'));
   });
 
+  testWidgets('Failed Word navigation keeps the typed draft and its editor', (
+    tester,
+  ) async {
+    final backend = FakeDocumentBackend(NativeDocumentKind.word);
+    await setup(
+      tester,
+      const Size(393, 873),
+      1.6,
+      NativeWordScreen(
+        backend: backend,
+        launch: const EditorLaunch(create: true),
+      ),
+    );
+    await tester.tap(find.text('Проверяемый абзац'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('word-inline-input')),
+      'Несохранённый текст 😀',
+    );
+    backend.failEdits = true;
+    await tester.tap(find.byTooltip('Развернуть инструменты'));
+    await tester.pumpAndSettle();
+    final state = tester.state<EditorToolPanelState>(
+      find.byType(EditorToolPanel),
+    );
+    final view = state.widget.sections.indexWhere((s) => s.label == 'Вид');
+    final nav = state.widget.sections[view].tools.indexWhere(
+      (t) => t.label == 'Навигация',
+    );
+    state.openTool(view, [nav]);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('word-jump-end')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('word-inline-input')))
+          .controller!
+          .text,
+      'Несохранённый текст 😀',
+    );
+    expect(state.expanded, isTrue);
+    expect(backend.text, 'Проверяемый абзац');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Word retains a failed draft and never exports stale bytes', (
     tester,
   ) async {

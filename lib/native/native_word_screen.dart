@@ -9,6 +9,8 @@ import 'dart:async';
 import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'word_inline_controller.dart';
+import 'word_document_index.dart';
+import 'word_navigation_panel.dart';
 import 'document_history.dart';
 import 'document_backend.dart';
 import '../ui/editor_file_title.dart';
@@ -76,29 +78,13 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
   static const _documentCenter = ValueKey('word-document-center');
   int _anchorBlock = 0, _scrollRevision = 0;
   int findCursor = -1;
-  List<({int block, int start, int end, bool editable})> get findMatches {
-    final query = findText.text;
-    final found = <({int block, int start, int end, bool editable})>[];
-    if (query.isEmpty) return found;
-    for (final block in blocks) {
-      final id = block['block'] as int;
-      final text = activeBlock == id && inlineDirty
-          ? inline.text
-          : block['text']?.toString() ?? '';
-      var at = 0;
-      while ((at = text.indexOf(query, at)) >= 0) {
-        found.add((
-          block: id,
-          start: at,
-          end: at + query.length,
-          editable: block['editable'] == true,
-        ));
-        if (found.length >= 10000) return found;
-        at += query.length;
-      }
-    }
-    return found;
-  }
+  WordDocumentIndex textIndex = WordDocumentIndex(const []);
+  int? navigationTarget;
+  List<WordFindMatch> get findMatches => textIndex.find(
+    findText.text,
+    draftBlock: inlineDirty ? activeBlock : null,
+    draft: inlineDirty ? inline.text : null,
+  );
 
   Future<void> findNext(int direction) => guarded(() async {
     final matches = findMatches;
@@ -107,7 +93,9 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
         ? (direction > 0 ? 0 : matches.length - 1)
         : (findCursor + direction) % matches.length;
     final match = matches[findCursor];
-    final block = blocks.firstWhere((b) => b['block'] == match.block);
+    final position = textIndex.positionOf(match.block);
+    if (position == null) return;
+    final block = blocks[position];
     if (match.editable) {
       startInline(block, focus: false);
       inline.selection = TextSelection(
@@ -255,6 +243,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
       activeBlock = block['block'] as int;
       selectedBlock = activeBlock;
       inlineDirty = false;
+      navigationTarget = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && focus && activeBlock != null) inlineFocus.requestFocus();
@@ -367,9 +356,13 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     }
     setState(() {
       document = bytes;
-      blocks = (summary['blocks'] as List? ?? [])
-          .map((b) => Map<String, dynamic>.from(b as Map))
-          .toList();
+      textIndex = WordDocumentIndex(
+        (summary['blocks'] as List? ?? []).map(
+          (b) => Map<String, dynamic>.from(b as Map),
+        ),
+      );
+      blocks = textIndex.blocks;
+      if (newDocument) navigationTarget = null;
       if (newDocument || _anchorBlock >= blocks.length) {
         _anchorBlock = 0;
         _scrollRevision++;
@@ -734,6 +727,15 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
             ],
           ),
 
+          'Навигация': EditorTool(
+            'Навигация',
+            Icons.list_alt,
+            builder: (_) => WordNavigationPanel(
+              index: textIndex,
+              enabled: !busy && !operationPending,
+              onJump: (position) => jumpToParagraph(position),
+            ),
+          ),
           'Найти и заменить': EditorTool(
             'Найти и заменить',
             Icons.find_replace,
@@ -769,11 +771,23 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     );
   }
 
+  Future<void> jumpToParagraph(int position) => guarded(() async {
+    if (position < 0 || position >= blocks.length) return;
+    final id = blocks[position]['block'] as int;
+    setState(() {
+      selectedBlock = id;
+      navigationTarget = id;
+    });
+    FocusManager.instance.primaryFocus?.unfocus();
+    revealBlock(id);
+    toolPanel.currentState?.setExpanded(false);
+  });
+
   // Two lazy slivers meet at the requested paragraph. A far search result can
   // be mounted immediately, while earlier paragraphs remain scrollable.
   void revealBlock(int id) {
-    final position = blocks.indexWhere((block) => block['block'] == id);
-    if (position < 0) return;
+    final position = textIndex.positionOf(id);
+    if (position == null) return;
     setState(() {
       _anchorBlock = position;
       _scrollRevision++;
@@ -844,7 +858,7 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     final runs = block['runs'] as List? ?? const [];
     final text = block['text']?.toString() ?? '';
     return Padding(
-      key: ValueKey(('word-paragraph', block['block'])),
+      key: ValueKey(('word-paragraph', block['block'] as int)),
       padding: EdgeInsets.only(
         left:
             ((block['indentLeft'] as num?)?.toDouble() ?? 0).clamp(
@@ -855,49 +869,54 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
             3,
         bottom: (block['spaceAfter'] as num?)?.toDouble() ?? 12,
       ),
-      child: InkWell(
-        onTap: busy || block['editable'] != true
-            ? null
-            : () => editParagraph(block),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          child: activeBlock == block['block']
-              ? TextField(
-                  key: const Key('word-inline-input'),
-                  controller: inline,
-                  focusNode: inlineFocus,
-                  readOnly: busy,
-                  minLines: 1,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  textCapitalization: TextCapitalization.sentences,
-                  onChanged: (_) => setState(
-                    () => inlineDirty = inline.text != block['text'],
+      child: Material(
+        color: navigationTarget == block['block']
+            ? const Color(0xffedf2ff)
+            : Colors.transparent,
+        child: InkWell(
+          onTap: busy || block['editable'] != true
+              ? null
+              : () => editParagraph(block),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: activeBlock == block['block']
+                ? TextField(
+                    key: const Key('word-inline-input'),
+                    controller: inline,
+                    focusNode: inlineFocus,
+                    readOnly: busy,
+                    minLines: 1,
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    textCapitalization: TextCapitalization.sentences,
+                    onChanged: (_) => setState(
+                      () => inlineDirty = inline.text != block['text'],
+                    ),
+                    textAlign: alignment,
+                    style: style,
+                    decoration: InputDecoration.collapsed(
+                      hintText: tr(context, 'Начните писать'),
+                    ),
+                  )
+                : Text.rich(
+                    TextSpan(
+                      text: runs.isEmpty
+                          ? (text.isNotEmpty
+                                ? text
+                                : tr(context, 'Коснитесь, чтобы начать писать'))
+                          : null,
+                      children: [
+                        for (final run in runs)
+                          TextSpan(
+                            text: run['text']?.toString() ?? '',
+                            style: WordInlineController.runStyle(run as Map),
+                          ),
+                      ],
+                    ),
+                    textAlign: alignment,
+                    style: style,
                   ),
-                  textAlign: alignment,
-                  style: style,
-                  decoration: InputDecoration.collapsed(
-                    hintText: tr(context, 'Начните писать'),
-                  ),
-                )
-              : Text.rich(
-                  TextSpan(
-                    text: runs.isEmpty
-                        ? (text.isNotEmpty
-                              ? text
-                              : tr(context, 'Коснитесь, чтобы начать писать'))
-                        : null,
-                    children: [
-                      for (final run in runs)
-                        TextSpan(
-                          text: run['text']?.toString() ?? '',
-                          style: WordInlineController.runStyle(run as Map),
-                        ),
-                    ],
-                  ),
-                  textAlign: alignment,
-                  style: style,
-                ),
+          ),
         ),
       ),
     );
