@@ -23,6 +23,7 @@ import 'package:integration_test/integration_test.dart';
 
 import 'grid_layout_fixture.dart';
 import 'worker_media_fixture.dart';
+import 'word_navigation_fixture.dart';
 
 Uint8List pdfTextFixture({int secondPageHeight = 842}) {
   const stream =
@@ -316,6 +317,116 @@ void main() {
         'vertical',
       );
       await storage.writeReadingMode('pdf', 'horizontal');
+    },
+  );
+
+  testWidgets(
+    'Word long-document navigation keeps drafts and follows imported headings',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.word);
+      addTearDown(backend.close);
+      final original = wordNavigationFixture();
+      final imported = await backend.inspect(original);
+      final blocks = imported['blocks'] as List;
+      expect(blocks.length, 2000);
+      expect(
+        blocks
+            .where((b) => b['outlineLevel'] != null)
+            .map((b) => b['outlineLevel']),
+        [0, 1, 2],
+      );
+      expect(
+        blocks.last['block'],
+        2000,
+      ); // A table is not a body-text paragraph.
+      await present(
+        tester,
+        NativeWordScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: original, name: 'Long.docx'),
+        ),
+      );
+      await tester.tap(find.text('Первый раздел'));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('word-inline-input')),
+        'Первый раздел изменён',
+      );
+      await tool(tester, 'Вид', 'Навигация');
+      await tester.enterText(
+        find.byKey(const Key('word-heading-filter')),
+        'последний',
+      );
+      await tester.pump();
+      await tester.ensureVisible(find.text('Последний раздел 😀'));
+      await tester.tap(find.text('Последний раздел 😀'));
+      await until(
+        tester,
+        () =>
+            panel(tester).undo != null &&
+            find
+                .byKey(const ValueKey(('word-paragraph', 2000)))
+                .evaluate()
+                .isNotEmpty,
+        'far heading and draft commit',
+      );
+      expect(find.byKey(const Key('word-inline-input')), findsNothing);
+      expect(
+        find
+            .byWidgetPredicate(
+              (w) =>
+                  w.key is ValueKey &&
+                  switch ((w.key as ValueKey).value) {
+                    ('word-paragraph', int _) => true,
+                    _ => false,
+                  },
+            )
+            .evaluate()
+            .length,
+        lessThan(20),
+      );
+      final exported = await save(tester, 'Сохранить как DOCX');
+      final reopened = await backend.inspect(exported);
+      expect((reopened['paragraphs'] as List).first, 'Первый раздел изменён');
+      expect((reopened['paragraphs'] as List).last, 'Последний раздел 😀');
+      await tool(tester, 'Вид', 'Навигация');
+      await tester.enterText(find.byKey(const Key('word-jump-number')), '1000');
+      await tester.ensureVisible(find.byTooltip('Перейти к абзацу'));
+      await tester.tap(find.byTooltip('Перейти к абзацу'));
+      await until(
+        tester,
+        () => find
+            .byKey(const ValueKey(('word-paragraph', 1000)))
+            .evaluate()
+            .isNotEmpty,
+        'paragraph navigation across table block',
+      );
+      expect(find.text('Средний раздел'), findsOneWidget);
+      await tool(tester, 'Вид', 'Навигация');
+      await capture(tester, 'word-long-navigation-045');
+      await tester.ensureVisible(find.byKey(const Key('word-heading-list')));
+      await capture(tester, 'word-heading-list-045');
+      await tester.ensureVisible(find.byTooltip('Очистить поиск'));
+      await tester.tap(find.byTooltip('Очистить поиск'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey(('word-heading', 0))), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('word-heading-list')));
+      await capture(tester, 'word-heading-cleared-045');
+      await press(tester, 'В начало документа');
+      await until(
+        tester,
+        () => find.text('Первый раздел изменён').evaluate().isNotEmpty,
+        'start',
+      );
+      await history(tester, true);
+      expect(
+        (await backend.inspect(
+          await save(tester, 'Сохранить как DOCX'),
+        ))['paragraphs'],
+        contains('Первый раздел'),
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

@@ -59,6 +59,8 @@ jobs:
           mkdir -p build/host-smoke/lib
           cp native/artoffice_core/target/release/libartoffice_core.so build/host-smoke/lib/
           dart compile exe tools/smoke_native_workers.dart -o build/host-smoke/native-workers
+          dart compile exe tools/benchmark_word_index.dart -o build/host-smoke/word-index
+          build/host-smoke/word-index build/native-candidate/word-index-benchmark.json
           cd /tmp
           "$GITHUB_WORKSPACE/build/host-smoke/native-workers"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

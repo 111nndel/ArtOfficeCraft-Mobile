@@ -127,6 +127,7 @@ pub extern "C" fn ac_docx_edit(data:*const u8,len:usize,req:*const u8,req_len:us
 }
 
 pub fn preview(doc:&wordcraft_doc::Document)->Vec<J>{
+    let mut outlines=std::collections::HashMap::new();
     doc.body.iter().enumerate().filter_map(|(index,b)|{
         let Block::Para(p)=b.as_ref() else {return None};
         let mut off=0usize;
@@ -136,7 +137,13 @@ pub fn preview(doc:&wordcraft_doc::Document)->Vec<J>{
                 "color":match r.props.color {Some(TextColor::Rgb(rgb))=>Some(format!("#{}",rgb.hex())),_=>None}})}).collect();
         let editable=p.objects.is_empty() && !doc.settings.track_changes && doc.settings.protection.is_none() && !doc.settings.protect_formatting
             && !p.runs.iter().any(|r|r.props.ins.is_some()||r.props.del.is_some()||r.props.fmt_change.is_some());
-        Some(json!({"block":index,"text":p.plain_text(),"editable":editable,"runs":runs,
+        // Direct outline level 9 suppresses an inherited heading. Resolve each
+        // style chain once, including localized/custom styles and defaults.
+        let outline=p.props.outline_level.or_else(|| {
+            let style=p.props.style.as_deref().unwrap_or("Normal");
+            *outlines.entry(style).or_insert_with(||doc.styles.para_style_props(style).0.outline_level)
+        }).filter(|level|*level<9);
+        Some(json!({"block":index,"outlineLevel":outline,"text":p.plain_text(),"editable":editable,"runs":runs,
             "align":p.props.align.unwrap_or(Align::Left),"indentLeft":p.props.indent_left.unwrap_or(0.0),
             "indentFirst":p.props.indent_first.unwrap_or(0.0),"spaceAfter":p.props.space_after.unwrap_or(12.0),
             "lineSpacing":match p.props.line_spacing {Some(LineSpacing::Multiple(v))=>Some(v),_=>None}}))
@@ -194,6 +201,24 @@ mod tests{
   assert_eq!(preview(&wordcraft_docx::read(&original).unwrap())[0]["text"],text);
  }
 
+ #[test]fn heading_levels_follow_custom_style_chains_and_body_override() {
+  let mut doc=wordcraft_doc::Document::new();doc.body.clear();
+  Arc::make_mut(&mut doc.styles).styles.push(wordcraft_doc::styles::Style {
+   id:"LocalHeading".into(),based_on:Some("Heading2".into()),..Default::default()
+  });
+  for (text,style,level) in [("Inherited","LocalHeading",None),("Body override","Heading1",Some(9)),
+   ("Direct","Normal",Some(2)),("Bold is not a heading","Normal",None)] {
+   let mut p=Paragraph::with_text(text,CharProps::default()).styled(style);
+   p.props.outline_level=level;
+   doc.body.push(Arc::new(Block::Para(p)));
+  }
+  let serialized=wordcraft_docx::write(&doc).unwrap();
+  let view=preview(&wordcraft_docx::read(&serialized).unwrap());
+  assert_eq!(view[0]["outlineLevel"],1);
+  assert!(view[1]["outlineLevel"].is_null());
+  assert_eq!(view[2]["outlineLevel"],2);
+  assert!(view[3]["outlineLevel"].is_null());
+ }
  #[test]fn selected_color_indent_and_line_spacing_reopen_and_preview_consistently(){
   let text="До 😀 после";let original=bytes(super::super::ac_docx_create(text.as_ptr(),text.len())).unwrap();
   let out=edit(&original,json!({"action":"paragraph","block":0,"start":3,"end":5,"char":{"color":"#3565CA"},"indentLeft":24,"lineSpacing":2.0})).unwrap();
