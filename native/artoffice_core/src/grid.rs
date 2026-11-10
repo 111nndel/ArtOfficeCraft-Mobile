@@ -6,6 +6,7 @@ use gridcraft_engine::display::formula_hidden;
 use gridcraft_model::style::{Color, Fill, HAlign, NumFmt, PatternType, Underline, Borders, BorderLine, VAlign};
 use gridcraft_numfmt::{NumberFormat, format_value};
 use std::collections::HashMap;
+mod reader;
 use serde_json::{json, Value as Json};
 use super::{AcResult, decode, protect, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
 
@@ -310,96 +311,98 @@ fn axis_runs(lines:&std::collections::BTreeMap<u32,gridcraft_model::features::Li
 pub extern "C" fn ac_xlsx_inspect_window(data:*const u8,n:usize,request:*const u8,req_len:usize)->AcResult {
     protect(|| {
         let req:Json=serde_json::from_str(input(request,req_len)?).map_err(|e|e.to_string())?;
-        if let Some(query) = req.get("find") {
-            let wb = workbook(decode(data,n,MAX_INPUT_BYTES)?)?;
-            return serde_json::to_vec(&super::grid_find::find(&wb, query)?).map_err(|e|e.to_string());
-        }
-        if let Some(filter) = req.get("filterValues") {
-            let bytes = decode(data,n,MAX_INPUT_BYTES)?;
-            let wb = workbook(bytes)?;
-            let idx = filter["sheet"].as_u64().and_then(|i| usize::try_from(i).ok()).ok_or("Invalid sheet index")?;
-            return serde_json::to_vec(&super::grid_filter::options(&wb, idx, filter)?).map_err(|e|e.to_string());
-        }
-        let field=|name:&str| req.get(name).and_then(Json::as_u64).ok_or_else(||format!("Missing integer {name}"));
-        let idx=field("sheet")?;
-        let row=field("row")?; let col=field("column")?;
-        let rows=field("rows")?; let cols=field("columns")?;
-        let indices=|name:&str,start:u64,count:u64,max:u32,cap:usize| -> Result<Vec<u32>,String> {
-            if let Some(array)=req.get(name) {
-                let values=array.as_array().ok_or("Indices must be an array")?;
-                if values.is_empty() || values.len()>cap {return Err("Oversized index list".into())}
-                let mut result=Vec::with_capacity(values.len());
-                for v in values {
-                    let i=v.as_u64().filter(|i|*i<max as u64).ok_or("Invalid visible index")? as u32;
-                    if result.last().is_some_and(|previous|*previous>=i) {return Err("Indices must be sorted and unique".into())}
-                    result.push(i);
-                }
-                Ok(result)
-            } else {
-                if count==0 || count>cap as u64 || start>=max as u64 || count>max as u64-start {return Err("Invalid window bounds".into())}
-                Ok((start as u32..(start+count) as u32).collect())
-            }
-        };
-        let row_indices=indices("rowIndices",row,rows,gridcraft_core::MAX_ROWS,8192)?;
-        let col_indices=indices("columnIndices",col,cols,gridcraft_core::MAX_COLS,2048)?;
-        if rows==0 || cols==0 || row_indices.len()*col_indices.len()>262144 ||
-            row>=gridcraft_core::MAX_ROWS as u64 || col>=gridcraft_core::MAX_COLS as u64 ||
-            rows>gridcraft_core::MAX_ROWS as u64-row || cols>gridcraft_core::MAX_COLS as u64-col {
-            return Err("Invalid or oversized sheet window".into())
-        }
-        let mut selected=CellRef::parse(req.get("selected").and_then(Json::as_str).ok_or("Missing selected cell")?)
-            .ok_or("Invalid selected cell")?;
-        let bytes=decode(data,n,MAX_INPUT_BYTES)?;
-        let (wb,report)=gridcraft_xlsx::read_xlsx(bytes).map_err(|e|format!("GridCraft XLSX read: {e}"))?;
-        let sh=wb.sheets.get(usize::try_from(idx).map_err(|_|"Invalid sheet index")?).ok_or("Sheet index out of bounds")?;
-        selected=sh.merge_at(selected).map_or(selected,|m|m.start);
-        let mut formats=HashMap::new();
-        let mut inspect=|loc:CellRef| {
-            let style=sh.style_id(loc);
-            let fmt=formats.entry(style).or_insert_with(||NumberFormat::parse(wb.styles.get(style).num_fmt.as_str()));
-            let displayed=format_value(&sh.value(loc),fmt,wb.date_system);
-            let input = if formula_hidden(&wb, sh, loc) { displayed.text.clone() } else { sh.input_text(loc) };
-            json!({"address":loc.a1(),"input":input,"display":displayed.text,"numeric":displayed.numeric,
-                "formula":sh.cell(loc).is_some_and(|c|c.formula.is_some()),"style":style_json(&wb,style)})
-        };
-        let mut cells=serde_json::Map::new();
-        for &r in &row_indices {
-            for &c in &col_indices {
-                let loc=CellRef::new(r,c);
-                if sh.cell(loc).is_some() || sh.spill.contains_key(&loc) || sh.style_id(loc)!=Default::default() {
-                    cells.insert(loc.a1(),inspect(loc));
-                }
-            }
-        }
-        // Include anchors even when the visible portion starts inside a merge.
-        for merge in &sh.merges {
-            let intersects=
-                row_indices.iter().any(|r|*r>=merge.start.row && *r<=merge.end.row) &&
-                col_indices.iter().any(|c|*c>=merge.start.col && *c<=merge.end.col);
-            if intersects {
-                let cell=inspect(merge.start);
-                cells.insert(merge.start.a1(),cell);
-            }
-        }
-        let selection=inspect(selected);
-        let mut used=sh.used_range().map(|r|[r.start.row,r.start.col,r.end.row,r.end.col]).unwrap_or([0,0,0,0]);
-        for m in &sh.merges {
-            used[0]=used[0].min(m.start.row);used[1]=used[1].min(m.start.col);
-            used[2]=used[2].max(m.end.row);used[3]=used[3].max(m.end.col);
-        }
-        let sheets:Vec<_>=wb.sheets.iter().enumerate().map(|(i,s)|json!({"index":i,"name":s.name,
-            "cells":if i as u64==idx {Json::Object(cells.clone())} else {json!({})},
-            "protected":s.protection.is_some() || wb.protected_structure})).collect();
-        let layout=json!({"defaultRowHeight":valid_extent(sh.default_row_height,20.0),
-            "defaultColumnWidth":valid_extent(sh.default_col_width,64.0),
-            "rows":axis_runs(&sh.rows,sh.default_row_height),"columns":axis_runs(&sh.cols,sh.default_col_width),
-            "merges":sh.merges.iter().map(|m|[m.start.row,m.start.col,m.end.row,m.end.col]).collect::<Vec<_>>(),
-            "showGridlines":sh.show_gridlines,"usedRange":used});
-        serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
-            "selection":selection,"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":report.warnings,
-            "filterRange":sh.autofilter.as_ref().map(|f|f.range.a1()),
-            "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
+        let bytes = decode(data,n,MAX_INPUT_BYTES)?;
+        if req.get("reader").is_some() { return reader::command(bytes, &req); }
+        let parsed = reader::Document::read(bytes)?;
+        inspect_window(&parsed.workbook, &parsed.warnings, &req)
     })
+}
+
+fn inspect_window(wb: &Workbook, warnings: &Json, req: &Json) -> Result<Vec<u8>, String> {
+    if let Some(query) = req.get("find") {
+        return serde_json::to_vec(&super::grid_find::find(wb, query)?).map_err(|e|e.to_string());
+    }
+    if let Some(filter) = req.get("filterValues") {
+        let idx = filter["sheet"].as_u64().and_then(|i| usize::try_from(i).ok()).ok_or("Invalid sheet index")?;
+        return serde_json::to_vec(&super::grid_filter::options(wb, idx, filter)?).map_err(|e|e.to_string());
+    }
+    let field=|name:&str| req.get(name).and_then(Json::as_u64).ok_or_else(||format!("Missing integer {name}"));
+    let idx=field("sheet")?;
+    let row=field("row")?; let col=field("column")?;
+    let rows=field("rows")?; let cols=field("columns")?;
+    let indices=|name:&str,start:u64,count:u64,max:u32,cap:usize| -> Result<Vec<u32>,String> {
+        if let Some(array)=req.get(name) {
+            let values=array.as_array().ok_or("Indices must be an array")?;
+            if values.is_empty() || values.len()>cap {return Err("Oversized index list".into())}
+            let mut result=Vec::with_capacity(values.len());
+            for v in values {
+                let i=v.as_u64().filter(|i|*i<max as u64).ok_or("Invalid visible index")? as u32;
+                if result.last().is_some_and(|previous|*previous>=i) {return Err("Indices must be sorted and unique".into())}
+                result.push(i);
+            }
+            Ok(result)
+        } else {
+            if count==0 || count>cap as u64 || start>=max as u64 || count>max as u64-start {return Err("Invalid window bounds".into())}
+            Ok((start as u32..(start+count) as u32).collect())
+        }
+    };
+    let row_indices=indices("rowIndices",row,rows,gridcraft_core::MAX_ROWS,8192)?;
+    let col_indices=indices("columnIndices",col,cols,gridcraft_core::MAX_COLS,2048)?;
+    if rows==0 || cols==0 || row_indices.len()*col_indices.len()>262144 ||
+        row>=gridcraft_core::MAX_ROWS as u64 || col>=gridcraft_core::MAX_COLS as u64 ||
+        rows>gridcraft_core::MAX_ROWS as u64-row || cols>gridcraft_core::MAX_COLS as u64-col {
+        return Err("Invalid or oversized sheet window".into())
+    }
+    let mut selected=CellRef::parse(req.get("selected").and_then(Json::as_str).ok_or("Missing selected cell")?)
+        .ok_or("Invalid selected cell")?;
+    let sh=wb.sheets.get(usize::try_from(idx).map_err(|_|"Invalid sheet index")?).ok_or("Sheet index out of bounds")?;
+    selected=sh.merge_at(selected).map_or(selected,|m|m.start);
+    let mut formats=HashMap::new();
+    let mut inspect=|loc:CellRef| {
+        let style=sh.style_id(loc);
+        let fmt=formats.entry(style).or_insert_with(||NumberFormat::parse(wb.styles.get(style).num_fmt.as_str()));
+        let displayed=format_value(&sh.value(loc),fmt,wb.date_system);
+        let input = if formula_hidden(wb, sh, loc) { displayed.text.clone() } else { sh.input_text(loc) };
+        json!({"address":loc.a1(),"input":input,"display":displayed.text,"numeric":displayed.numeric,
+            "formula":sh.cell(loc).is_some_and(|c|c.formula.is_some()),"style":style_json(wb,style)})
+    };
+    let mut cells=serde_json::Map::new();
+    for &r in &row_indices {
+        for &c in &col_indices {
+            let loc=CellRef::new(r,c);
+            if sh.cell(loc).is_some() || sh.spill.contains_key(&loc) || sh.style_id(loc)!=Default::default() {
+                cells.insert(loc.a1(),inspect(loc));
+            }
+        }
+    }
+    // Include anchors even when the visible portion starts inside a merge.
+    for merge in &sh.merges {
+        let intersects=
+            row_indices.iter().any(|r|*r>=merge.start.row && *r<=merge.end.row) &&
+            col_indices.iter().any(|c|*c>=merge.start.col && *c<=merge.end.col);
+        if intersects {
+            let cell=inspect(merge.start);
+            cells.insert(merge.start.a1(),cell);
+        }
+    }
+    let selection=inspect(selected);
+    let mut used=sh.used_range().map(|r|[r.start.row,r.start.col,r.end.row,r.end.col]).unwrap_or([0,0,0,0]);
+    for m in &sh.merges {
+        used[0]=used[0].min(m.start.row);used[1]=used[1].min(m.start.col);
+        used[2]=used[2].max(m.end.row);used[3]=used[3].max(m.end.col);
+    }
+    let sheets:Vec<_>=wb.sheets.iter().enumerate().map(|(i,s)|json!({"index":i,"name":s.name,
+        "cells":if i as u64==idx {Json::Object(cells.clone())} else {json!({})},
+        "protected":s.protection.is_some() || wb.protected_structure})).collect();
+    let layout=json!({"defaultRowHeight":valid_extent(sh.default_row_height,20.0),
+        "defaultColumnWidth":valid_extent(sh.default_col_width,64.0),
+        "rows":axis_runs(&sh.rows,sh.default_row_height),"columns":axis_runs(&sh.cols,sh.default_col_width),
+        "merges":sh.merges.iter().map(|m|[m.start.row,m.start.col,m.end.row,m.end.col]).collect::<Vec<_>>(),
+        "showGridlines":sh.show_gridlines,"usedRange":used});
+    serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
+        "selection":selection,"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":warnings,
+        "filterRange":sh.autofilter.as_ref().map(|f|f.range.a1()),
+        "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
 }
 
 #[cfg(test)]
@@ -411,6 +414,53 @@ mod window_tests {
         let data=unsafe{std::slice::from_raw_parts(r.ptr,r.len)}.to_vec();
         let status=r.status; super::super::ac_result_free(r);
         if status==0 {Ok(serde_json::from_slice(&data).unwrap())} else {Err(String::from_utf8_lossy(&data).into_owned())}
+    }
+    #[test]
+    fn owned_readers_match_stateless_views_and_release_without_stale_data() {
+        let mut wb = Workbook::new();
+        put(&mut wb, 0, "A1", "Header").unwrap();
+        put(&mut wb, 0, "A2", "Before").unwrap();
+        let mut bytes = write(&wb).unwrap();
+        let window = json!({"sheet":0,"row":0,"column":0,"rows":4,"columns":3,"selected":"A2"});
+        let open = |bytes: &[u8]| view(bytes, json!({"reader":"open"})).unwrap()["session"].as_u64();
+        let close = |id| view(&[], json!({"reader":"close","session":id})).unwrap();
+        assert!(view(b"invalid", json!({"reader":"open"})).is_err());
+        let first = open(&bytes).unwrap();
+        for request in [window.clone(),
+            json!({"find":{"sheet":0,"query":"before","lookIn":"values","workbook":true,"limit":32}}),
+            json!({"filterValues":{"sheet":0,"range":"A1:A2","column":"A"}})] {
+            assert_eq!(view(&[], json!({"reader":"view","session":first,"view":request})).unwrap(),
+                view(&bytes, request).unwrap());
+        }
+        put(&mut wb, 0, "A2", "After").unwrap();
+        bytes = write(&wb).unwrap();
+        let second = open(&bytes).unwrap();
+        // A full registry declines caching without parsing or evicting either model.
+        assert!(open(b"invalid but not parsed at capacity").is_none());
+        assert_eq!(view(&bytes, window.clone()).unwrap()["selection"]["input"], "After");
+        assert!(view(&[], json!({"reader":"view","session":first,"view":{"rows":0}})).is_err());
+        assert!(view(&[], json!({"reader":"view","session":0,"view":window})).is_err());
+        assert!(view(&bytes, json!({"reader":"view","session":first,"view":window})).is_err());
+        assert!(view(&[], json!({"reader":"unknown"})).is_err());
+        // Borrowed input can be dropped; the model remains usable on another OS thread.
+        drop(bytes);
+        let request = window.clone();
+        let old = std::thread::spawn(move || view(&[], json!({"reader":"view","session":first,"view":request})).unwrap())
+            .join().unwrap();
+        assert_eq!(old["selection"]["input"], "Before");
+        assert_eq!(view(&[], json!({"reader":"view","session":second,"view":window})).unwrap()["selection"]["input"], "After");
+        close(first); close(first);
+        assert!(view(&[], json!({"reader":"view","session":first,"view":window})).is_err());
+        close(second);
+        let third = open(include_bytes!("../../../test/fixtures/formatted-grid.xlsx")).unwrap();
+        assert!(third > second);
+        for request in [json!({"sheet":0,"row":1,"column":1,"rows":4,"columns":4,"selected":"B2"}),
+            json!({"sheet":0,"row":0,"column":0,"rows":1048576,"columns":16384,
+                "rowIndices":[0,1048575],"columnIndices":[0,16383],"selected":"XFD1048576"})] {
+            assert_eq!(view(&[], json!({"reader":"view","session":third,"view":request})).unwrap(),
+                view(include_bytes!("../../../test/fixtures/formatted-grid.xlsx"), request).unwrap());
+        }
+        close(third);
     }
     #[test]
     fn reduced_zoom_window_returns_every_cell_without_sampling() {

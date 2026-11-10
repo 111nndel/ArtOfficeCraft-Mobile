@@ -405,7 +405,8 @@ final class NativeDocumentBackend
           ),
       ],
       next: next == null
-          ? null : (sheet: next['sheet'] as int, after: next['after'] as String?),
+          ? null
+          : (sheet: next['sheet'] as int, after: next['after'] as String?),
       scanned: result['scanned'] as int,
     );
   }
@@ -533,7 +534,7 @@ void _documentWorkerMain((SendPort, Map<String, Object?>) bootstrap) {
     return result is Uint8List
         ? TransferableTypedData.fromList([result])
         : result;
-  });
+  }).whenComplete(engine.close);
 }
 
 class _NativeEngine {
@@ -541,6 +542,32 @@ class _NativeEngine {
   final NativeDocumentKind kind;
   final String? library;
   Object? _bridge;
+  int? _gridReader;
+  WeakReference<Uint8List>? _gridInput;
+
+  void close() {
+    final reader = _gridReader;
+    _gridReader = null;
+    _gridInput = null;
+    if (reader != null) (_bridge as GridCraftBridge).closeReader(reader);
+  }
+
+  Map<String, dynamic> _gridView(
+    GridCraftBridge engine,
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  ) {
+    if (!identical(_gridInput?.target, bytes)) {
+      close(); // Release the old model before parsing its replacement.
+      _gridReader = engine.openReader(bytes);
+      _gridInput = WeakReference(bytes);
+    }
+    final reader = _gridReader;
+    return reader == null
+        ? engine.inspectWindow(bytes, request)
+        : engine.readWindow(reader, request);
+  }
+
   Object _open() => switch (kind) {
     NativeDocumentKind.word =>
       library == null
@@ -567,6 +594,7 @@ class _NativeEngine {
     if (kind != NativeDocumentKind.grid) {
       throw StateError('Not a workbook backend');
     }
+    close();
     return ((_bridge ??= _open()) as GridCraftBridge).pasteRange(
       bytes,
       source,
@@ -593,12 +621,13 @@ class _NativeEngine {
         return engine.edit(bytes!, request);
       case NativeDocumentKind.grid:
         final engine = bridge as GridCraftBridge;
+        if (operation == 'gridInspect') {
+          return _gridView(engine, bytes!, request);
+        }
+        close(); // Stateless writes/copies must not keep a second parsed model.
         if (operation == 'create') return engine.create();
         if (operation == 'inspect') return engine.inspect(bytes!);
         if (operation == 'gridCopy') return engine.copyRange(bytes!, request);
-        if (operation == 'gridInspect') {
-          return engine.inspectWindow(bytes!, request);
-        }
         return engine.edit(bytes!, request);
       case NativeDocumentKind.deck:
         final engine = bridge as DeckCraftBridge;

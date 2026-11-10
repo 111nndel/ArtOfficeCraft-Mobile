@@ -49,6 +49,37 @@ Future<void> main() async {
           case NativeDocumentKind.grid:
             final cells = (preview['sheets'] as List).first['cells'] as Map;
             check(cells['B2']['display'] == '20', 'Grid formula lost');
+            const window = GridWindow(0, 0, 0, rows: 4, columns: 4);
+            for (var i = 0; i < 3; i++) {
+              final view = await backend.inspectGrid(
+                edited.bytes,
+                window,
+                'B2',
+              );
+              check(
+                view['selection']['display'] == '20',
+                'Cached Grid formula lost',
+              );
+            }
+            final changed = await backend.editAndInspectGrid(
+              edited.bytes,
+              {'sheet': 0, 'address': 'B2', 'value': 'Changed'},
+              window,
+              'B2',
+            );
+            check(
+              changed.preview['selection']['input'] == 'Changed',
+              'Grid reader edit is stale',
+            );
+            check(
+              (await backend.inspectGrid(
+                    edited.bytes,
+                    window,
+                    'B2',
+                  ))['selection']['display'] ==
+                  '20',
+              'Grid reader undo is stale',
+            );
             final clipboard = GridClipboard(_HostClipboard());
             final copied = await backend.copyGrid(edited.bytes, {
               'sheet': 0, 'range': 'B2',

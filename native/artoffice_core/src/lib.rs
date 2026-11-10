@@ -57,7 +57,7 @@ pub extern "C" fn ac_engine_info()->AcResult {
     protect(||{
         let sources:serde_json::Value=serde_json::from_str(include_str!("../../../upstream/engines.lock.json")).map_err(|e|e.to_string())?;
         serde_json::to_vec(&json!({"abi":1,"coreVersion":env!("CARGO_PKG_VERSION"),"engines":sources["engines"],
-            "capabilities":["docx.paragraph.edit","docx.character.format","docx.paragraph.format","xlsx.cell.formula","xlsx.cell.style","xlsx.clipboard","xlsx.find","xlsx.window.view","xlsx.layout.geometry","xlsx.line.resize","xlsx.line.structure","pptx.slide.text","pdf.page.organize","pdf.page.text","pdf.page.text.insert","pdf.page.ocr.layer","pdf.document.find","pdf.page.render"]})).map_err(|e|e.to_string())
+            "capabilities":["docx.paragraph.edit","docx.character.format","docx.paragraph.format","xlsx.cell.formula","xlsx.cell.style","xlsx.clipboard","xlsx.find","xlsx.window.view","xlsx.reader.session","xlsx.layout.geometry","xlsx.line.resize","xlsx.line.structure","pptx.slide.text","pdf.page.organize","pdf.page.text","pdf.page.text.insert","pdf.page.ocr.layer","pdf.document.find","pdf.page.render"]})).map_err(|e|e.to_string())
     })
 }
 
