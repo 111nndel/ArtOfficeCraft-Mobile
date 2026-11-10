@@ -4,6 +4,7 @@
 
 ## What's New
 
+- The heading list shrinks for short results and includes a clear-search button. Long outlines retain a bounded lazy viewport.
 - Word View / Navigation now provides a filtered heading list, a body-text paragraph number, and beginning/end controls. A far target mounts immediately in the existing lazy document viewport and receives a subtle highlight.
 - Heading levels follow the imported DOCX outline properties, document defaults and style inheritance, including custom/localized style names. Direct body-text level 9 suppresses an inherited heading. Style outline resolution is reused per style during preview generation.
 - Navigation commits pending paragraph text before moving. Failed commits keep the draft and current editor available; successful changes remain undoable and saveable.

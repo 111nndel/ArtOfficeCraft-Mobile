@@ -406,6 +406,12 @@ void main() {
       await capture(tester, 'word-long-navigation-045');
       await tester.ensureVisible(find.byKey(const Key('word-heading-list')));
       await capture(tester, 'word-heading-list-045');
+      await tester.ensureVisible(find.byTooltip('Очистить поиск'));
+      await tester.tap(find.byTooltip('Очистить поиск'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey(('word-heading', 0))), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('word-heading-list')));
+      await capture(tester, 'word-heading-cleared-045');
       await press(tester, 'В начало документа');
       await until(
         tester,

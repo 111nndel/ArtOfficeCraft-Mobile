@@ -24,6 +24,11 @@ void main() {
       );
       await tester.pumpWidget(
         MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.6)),
+            child: child!,
+          ),
           home: Scaffold(
             body: SingleChildScrollView(
               child: WordNavigationPanel(
@@ -37,11 +42,13 @@ void main() {
       );
       expect(find.byType(ListTile).evaluate().length, lessThan(20));
       await tester.enterText(find.byKey(const Key('word-jump-number')), '0');
+      await tester.ensureVisible(find.byTooltip('Перейти к абзацу'));
       await tester.tap(find.byTooltip('Перейти к абзацу'));
       await tester.pump();
       expect(jumps, isEmpty);
       expect(find.text('Введите номер от 1 до 2000'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('word-jump-number')), '2000');
+      await tester.ensureVisible(find.byTooltip('Перейти к абзацу'));
       await tester.tap(find.byTooltip('Перейти к абзацу'));
       expect(jumps, [1999]);
       await tester.enterText(
@@ -54,6 +61,22 @@ void main() {
       );
       await tester.tap(find.byKey(const ValueKey(('word-heading', 1999))));
       expect(jumps, [1999, 1999]);
+      expect(
+        tester.getSize(find.byKey(const Key('word-heading-list'))).height,
+        lessThan(140),
+      );
+      await tester.ensureVisible(find.byTooltip('Очистить поиск'));
+      await tester.tap(find.byTooltip('Очистить поиск'));
+      await tester.pump();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('word-heading-filter')))
+            .controller!
+            .text,
+        isEmpty,
+      );
+      expect(find.byType(ListTile).evaluate().length, lessThan(20));
+
       expect(tester.takeException(), isNull);
     },
   );

@@ -19,11 +19,12 @@ class WordNavigationPanel extends StatefulWidget {
 
 class _WordNavigationPanelState extends State<WordNavigationPanel> {
   final number = TextEditingController();
-  String query = '';
+  final headingQuery = TextEditingController();
   bool invalidNumber = false;
   @override
   void dispose() {
     number.dispose();
+    headingQuery.dispose();
     super.dispose();
   }
 
@@ -40,8 +41,9 @@ class _WordNavigationPanelState extends State<WordNavigationPanel> {
   Widget build(BuildContext context) {
     final count = widget.index.blocks.length;
     final enabled = widget.enabled && count > 0;
+    final query = headingQuery.text.toLowerCase();
     final headings = widget.index.headings
-        .where((h) => h.text.toLowerCase().contains(query.toLowerCase()))
+        .where((h) => h.text.toLowerCase().contains(query))
         .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -80,7 +82,7 @@ class _WordNavigationPanelState extends State<WordNavigationPanel> {
           },
           decoration: InputDecoration(
             labelText: tr(context, 'Номер абзаца'),
-            helperText: tr(context, 'От 1 до $count'),
+            helperText: count > 0 ? tr(context, 'От 1 до $count') : null,
             errorText: invalidNumber
                 ? tr(context, 'Введите номер от 1 до $count')
                 : null,
@@ -94,10 +96,18 @@ class _WordNavigationPanelState extends State<WordNavigationPanel> {
         const SizedBox(height: 12),
         TextField(
           key: const Key('word-heading-filter'),
-          onChanged: (value) => setState(() => query = value),
+          controller: headingQuery,
+          onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             labelText: tr(context, 'Найти заголовок'),
             prefixIcon: const Icon(Icons.search),
+            suffixIcon: headingQuery.text.isEmpty
+                ? null
+                : IconButton(
+                    tooltip: tr(context, 'Очистить поиск'),
+                    onPressed: () => setState(headingQuery.clear),
+                    icon: const Icon(Icons.clear),
+                  ),
           ),
         ),
         const SizedBox(height: 8),
@@ -106,9 +116,11 @@ class _WordNavigationPanelState extends State<WordNavigationPanel> {
         else if (headings.isEmpty)
           const UiText('Заголовки не найдены')
         else
-          SizedBox(
-            height: 220,
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
             child: ListView.builder(
+              // Only short result sets shrink; large outlines stay lazy.
+              shrinkWrap: headings.length <= 4,
               key: const Key('word-heading-list'),
               itemCount: headings.length,
               itemBuilder: (_, i) {
@@ -119,7 +131,6 @@ class _WordNavigationPanelState extends State<WordNavigationPanel> {
                     left: heading.level.clamp(0, 4) * 12.0,
                     right: 8,
                   ),
-                  leading: Text('${heading.level + 1}'),
                   title: Text(
                     heading.text,
                     maxLines: 2,

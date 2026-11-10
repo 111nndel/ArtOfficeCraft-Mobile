@@ -28,7 +28,7 @@ Pending paragraph text is committed before a jump; a failed commit retains the d
 Repeated exact-search queries reuse the current paragraph snapshot results.
 Spreadsheet reading windows, search batches and filter choices reuse the current
 parsed Rust workbook; edits and closing release that read model.
-See the [0.45.0 release notes and limits](docs/release-0.45.0-alpha.1.md).
+See the [0.45.0 release notes and limits](docs/release-0.45.0-alpha.2.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
