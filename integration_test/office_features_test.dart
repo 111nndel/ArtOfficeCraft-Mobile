@@ -10,6 +10,8 @@ import 'package:artofficecraft_mobile/native/native_word_screen.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
+import 'package:artofficecraft_mobile/native/native_pdf_page_renderer.dart';
+import 'package:artofficecraft_mobile/platform/android_pdf_image_ocr.dart';
 import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'package:artofficecraft_mobile/ui/editor_tools.dart';
 import 'package:artofficecraft_mobile/ui/office_theme.dart';
@@ -1029,18 +1031,39 @@ void main() {
     expect(panel(tester).undo, isNull);
   });
 
+  testWidgets('Image OCR rejects invalid and oversized images without a PDF', (
+    tester,
+  ) async {
+    const channel = MethodChannel('artofficecraft/pdf_ocr');
+    // Valid IHDR checksum: reject its width before allocating the raster.
+    final huge = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgABhqAAAAABCAQAAAD3d95eAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    for (final png in [Uint8List(24), huge, Uint8List(24 * 1024 * 1024 + 1)]) {
+      await expectLater(
+        channel.invokeMethod<Object?>('recognizeImage', {'png': png}),
+        throwsA(isA<PlatformException>()),
+      );
+    }
+  });
+
   testWidgets(
-    'Offline OCR copies and saves searchable text over the same image',
+    'Rust-only page OCR copies and saves searchable text over the same image',
     (tester) async {
       final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
       addTearDown(backend.close);
       final bytes = await scanFixture();
+      // No Android PDF fallback: both viewing and OCR must use real Rust rasters.
+      final renderer = NativePdfPageRenderer(
+        recognizeImage: recognizeAndroidPdfImage,
+      );
       expect((await backend.pdfTextBlocks(bytes, 0)).blocks, isEmpty);
       await present(
         tester,
         NativePdfScreen(
           backend: backend,
           launch: EditorLaunch(bytes: bytes, name: 'Scan.pdf'),
+          renderer: renderer,
         ),
       );
       await readingMode(tester, 'Чтение', 'По одной, горизонтально');
@@ -1062,6 +1085,8 @@ void main() {
       final text = tester.widget<SelectableText>(output).data!;
       expect(text, contains('ПРОВЕРКА ТЕКСТА'));
       expect(text, contains('OFFLINE TEST'));
+      expect(renderer.nativeRenders, greaterThanOrEqualTo(2));
+      expect(renderer.fallbackRenders, 0);
       expect(panel(tester).undo, isNull);
       await capture(tester, 'pdf-ocr-033');
       await press(tester, 'Скопировать распознанный текст');

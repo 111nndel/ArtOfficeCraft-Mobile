@@ -3,6 +3,9 @@ import 'dart:typed_data';
 typedef PdfOcrWord = ({String text, List<double> rect});
 typedef PdfOcrResult = ({String text, List<PdfOcrWord> words});
 
+/// Recognizes a bounded page PNG without opening or parsing a PDF.
+typedef PdfImageOcr = Future<PdfOcrResult> Function(Uint8List png);
+
 /// Page rasterization and offline OCR are independent of PDFCraft editing.
 /// The owner closes every opened session, including replaced documents.
 abstract interface class PdfPageRenderer {

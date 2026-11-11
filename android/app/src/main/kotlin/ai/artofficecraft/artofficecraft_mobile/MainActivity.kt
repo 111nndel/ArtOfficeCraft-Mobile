@@ -19,8 +19,8 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
- * Android compatibility PDF rasterization and offline OCR. Rust PDFCraft owns
- * primary rasterization and document edits.
+ * Android compatibility PDF rasterization and a separate page-image OCR adapter.
+ * Rust PDFCraft owns primary rasterization and document edits.
  *
  * A single worker serializes all open/render/close operations. Only one
  * document is resident per FlutterActivity, with an opaque session token.
@@ -108,6 +108,28 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/pdf_ocr")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "recognizeImage") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val png = call.argument<ByteArray>("png")
+                if (png == null || png.size !in 24..24 * 1024 * 1024) {
+                    result.error("BAD_ARGS", "Invalid OCR image", null)
+                    return@setMethodCallHandler
+                }
+                worker.execute {
+                    try {
+                        val output = pdfOcr.recognize(png)
+                        runOnUiThread { result.success(output) }
+                    } catch (error: Throwable) {
+                        if (error !is Exception && error !is LinkageError) throw error
+                        runOnUiThread { result.error("PDF_OCR", "Cannot recognize this image", null) }
+                    }
+                }
+            }
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "artofficecraft/pdf_renderer",
@@ -136,11 +158,10 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
-                "renderPage", "recognizePage" -> {
-                    val recognize = call.method == "recognizePage"
+                "renderPage" -> {
                     val id = call.argument<Int>("session")
                     val pageIndex = call.argument<Int>("page")
-                    val width = if (recognize) 1440 else call.argument<Int>("width")
+                    val width = call.argument<Int>("width")
                     if (id == null || id <= 0 ||
                         pageIndex == null || pageIndex < 0 ||
                         width == null || width !in 96..1600
@@ -156,8 +177,7 @@ class MainActivity : FlutterActivity() {
                             }
                             val bitmap = renderPage(session, pageIndex, width)
                             val output = try {
-                                if (recognize) pdfOcr.recognize(bitmap)
-                                else encodePng(bitmap)
+                                encodePng(bitmap)
                             } finally {
                                 bitmap.recycle()
                             }
@@ -166,9 +186,8 @@ class MainActivity : FlutterActivity() {
                             if (error !is Exception && error !is LinkageError) throw error
                             runOnUiThread {
                                 result.error(
-                                    if (recognize) "PDF_OCR" else "PDF_RENDER",
-                                    if (recognize) "Cannot recognize this page"
-                                    else "Cannot render this page or the PDF session is closed",
+                                    "PDF_RENDER",
+                                    "Cannot render this page or the PDF session is closed",
                                     null,
                                 )
                             }
