@@ -144,8 +144,9 @@ final class NativePdfPageRenderer implements PdfPageRenderer {
     if (page < 0) throw RangeError.value(page, 'page');
     final state = _get(session);
     final recognize = recognizeImage;
-    if (recognize == null)
+    if (recognize == null) {
       throw UnsupportedError('Page image OCR is unavailable');
+    }
     final png = await render(session, page, width: 1440);
     if (state.closed) throw StateError('PDF raster session is closed');
     final result = await recognize(png);

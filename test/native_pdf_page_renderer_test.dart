@@ -25,16 +25,20 @@ void worker((SendPort, Map<String, Object?>) args) {
           utf8.encode(jsonEncode({'session': next, 'pageCount': 4})),
         );
       case 'close':
-        if (!sessions.remove(request['session']))
+        if (!sessions.remove(request['session'])) {
           throw StateError('Double close');
+        }
         return Uint8List(0);
       case 'page':
-        if (!sessions.contains(request['session']))
+        if (!sessions.contains(request['session'])) {
           throw StateError('Closed native session');
-        if (request['page'] == 3)
+        }
+        if (request['page'] == 3) {
           throw const FormatException('Unsupported PDF feature');
-        if (request['page'] == 2)
+        }
+        if (request['page'] == 2) {
           await Future<void>.delayed(const Duration(milliseconds: 40));
+        }
         return image();
       default:
         throw StateError('Unexpected operation');
