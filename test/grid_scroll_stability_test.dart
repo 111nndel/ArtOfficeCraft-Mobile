@@ -186,6 +186,8 @@ void main() {
       final v = viewport(tester);
       for (final at in [(200, 30), (0, 30), (200, 0)]) {
         v.goToCell(at.$1, at.$2);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 80));
         await tester.pumpAndSettle();
         expect(
           find.descendant(
@@ -230,6 +232,8 @@ void main() {
       expect(backend.reads, reads + 1);
       expect(backend.maxInFlight, 1);
       gate.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
       await tester.pumpAndSettle();
       expect(find.text('S0-R1100C20'), findsOneWidget);
       expect(backend.reads, lessThanOrEqualTo(reads + 3));
