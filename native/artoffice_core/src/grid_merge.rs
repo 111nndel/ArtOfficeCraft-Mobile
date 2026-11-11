@@ -107,7 +107,7 @@ mod tests {
             assert!(invoke(&initial,json!({"range":"A1:B2","mode":"merge","allowContentLoss":consent,"value":"draft"})).is_err());
         }
         let merged=invoke(&initial,json!({"range":"A1:B2","mode":"merge","allowContentLoss":true})).unwrap();
-        assert!(workbook(&merged).unwrap().sheet(0).unwrap().cell(at("B1")).unwrap().formula.is_none());
+        assert!(!workbook(&merged).unwrap().sheet(0).unwrap().cell(at("B1")).is_some_and(|c|c.formula.is_some()));
         assert!(workbook(&initial).unwrap().sheet(0).unwrap().cell(at("B1")).unwrap().formula.is_some());
     }
 
