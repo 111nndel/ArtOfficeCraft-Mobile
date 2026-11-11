@@ -15,6 +15,7 @@ import 'package:artofficecraft_mobile/ui/editor_tools.dart';
 import 'package:artofficecraft_mobile/ui/office_theme.dart';
 import 'package:artofficecraft_mobile/ui/page_reading.dart';
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
+import 'package:artofficecraft_mobile/ui/sheet_viewport.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +25,37 @@ import 'package:integration_test/integration_test.dart';
 import 'grid_layout_fixture.dart';
 import 'worker_media_fixture.dart';
 import 'word_navigation_fixture.dart';
+
+class CountingGrid implements DocumentBackend, GridDocuments {
+  CountingGrid(this.native);
+  final NativeDocumentBackend native;
+  int reads = 0;
+  @override
+  Future<Uint8List> create([String text = '']) => native.create(text);
+  @override
+  Future<Map<String, dynamic>> inspect(Uint8List bytes) =>
+      native.inspect(bytes);
+  @override
+  Future<Uint8List> edit(Uint8List bytes, Map<String, dynamic> request) =>
+      native.edit(bytes, request);
+  @override
+  Future<Map<String, dynamic>> gridView(
+    Uint8List bytes,
+    GridWindow window,
+    String selected,
+  ) {
+    reads++;
+    return native.gridView(bytes, window, selected);
+  }
+
+  @override
+  Future<DocumentSnapshot> editGridView(
+    Uint8List bytes,
+    Map<String, dynamic> edit,
+    GridWindow window,
+    String selected,
+  ) => native.editGridView(bytes, edit, window, selected);
+}
 
 Uint8List pdfTextFixture({int secondPageHeight = 842}) {
   const stream =
@@ -285,6 +317,78 @@ void main() {
       addTearDown(reopened.close);
       expect(await reopened.inspectGrid(original, window, 'A1'), before);
       await reopened.close();
+    },
+  );
+
+  testWidgets(
+    'XLSX loaded cell taps stay fixed and return trips paint without native reloads',
+    (tester) async {
+      final native = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(native.close);
+      final backend = CountingGrid(native);
+      final bytes = await native.edit(await native.create(), {
+        'action': 'paste_text',
+        'sheet': 0,
+        'address': 'A1',
+        'text': List.generate(
+          100,
+          (r) => List.generate(
+            32,
+            (c) => r == 1 && c == 1 ? '' : 'R${r}C$c',
+          ).join('\t'),
+        ).join('\n'),
+      });
+      await present(
+        tester,
+        NativeGridScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: bytes, name: 'Scroll stability.xlsx'),
+        ),
+      );
+      List<Rect> positions() => [
+        tester.getRect(find.byKey(const Key('grid-formula-bar'))),
+        tester.getRect(find.byKey(const Key('grid-sheet-tabs'))),
+        tester.getRect(find.byType(EditorToolPanel)),
+        tester.getRect(find.byType(SheetViewport)),
+      ];
+      final fixed = positions(), initialReads = backend.reads;
+      for (final address in ['B2', 'C1', 'D3', 'A1']) {
+        await tester.tap(find.byKey(ValueKey('grid-cell-$address')));
+        await tester.pump();
+        expect(positions(), fixed);
+        expect(backend.reads, initialReads);
+      }
+      final viewport = tester.state<SheetViewportState>(
+        find.byType(SheetViewport),
+      );
+      Finder value(int row, int col) => find.descendant(
+        of: find.byKey(ValueKey('grid-cell-${gridColumnName(col)}${row + 1}')),
+        matching: find.text('R${row}C$col'),
+      );
+      for (final at in [(70, 20), (0, 20), (70, 0)]) {
+        viewport.goToCell(at.$1, at.$2);
+        await until(
+          tester,
+          () => value(at.$1, at.$2).evaluate().isNotEmpty,
+          'first visit to $at',
+        );
+        await tester.pumpAndSettle();
+      }
+      final reads = backend.reads;
+      for (final at in [(0, 0), (70, 20), (0, 20), (70, 0), (0, 0)]) {
+        viewport.goToCell(at.$1, at.$2);
+        await tester.pump();
+        expect(value(at.$1, at.$2), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 80));
+        expect(backend.reads, reads);
+        expect(positions(), fixed);
+      }
+      debugPrint(
+        'GRID_SCROLL_STABILITY panelDelta=0 returnReads=${backend.reads - reads}',
+      );
+      await capture(tester, 'grid-scroll-return-046');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     },
   );
 

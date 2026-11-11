@@ -414,7 +414,13 @@ class SheetViewportState extends State<SheetViewport>
     final rowList = rowAxis.visible(top, bottom),
         colList = colAxis.visible(left, right);
     if (rowList.isNotEmpty && colList.isNotEmpty && _resizingRow == null) {
-      _report(GridWindow.visible(0, rowList, colList));
+      _report(
+        GridWindow.visible(
+          0,
+          rowAxis.visible(top, bottom, buffer: 6),
+          colAxis.visible(left, right, buffer: 4),
+        ),
+      );
     }
 
     if (zoom < .5 && widget.compactCellsBuilder != null) {
