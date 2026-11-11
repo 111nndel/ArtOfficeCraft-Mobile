@@ -47,26 +47,35 @@ class GridWindow {
       rowIndices ?? List.generate(rows, (i) => row + i);
   Iterable<int> get requestedColumns =>
       columnIndices ?? List.generate(columns, (i) => column + i);
+  static bool _includes(List<int>? indices, int value) {
+    if (indices == null) return true;
+    var lo = 0, hi = indices.length;
+    while (lo < hi) {
+      final mid = (lo + hi) ~/ 2;
+      if (indices[mid] < value) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo < indices.length && indices[lo] == value;
+  }
+
   bool contains(int r, int c) =>
       r >= row &&
       r < row + rows &&
       c >= column &&
       c < column + columns &&
-      (rowIndices == null || rowIndices!.contains(r)) &&
-      (columnIndices == null || columnIndices!.contains(c));
+      _includes(rowIndices, r) &&
+      _includes(columnIndices, c);
   bool covers(GridWindow other) =>
       sheet == other.sheet &&
       other.requestedRows.every(
-        (r) =>
-            r >= row &&
-            r < row + rows &&
-            (rowIndices == null || rowIndices!.contains(r)),
+        (r) => r >= row && r < row + rows && _includes(rowIndices, r),
       ) &&
       other.requestedColumns.every(
         (c) =>
-            c >= column &&
-            c < column + columns &&
-            (columnIndices == null || columnIndices!.contains(c)),
+            c >= column && c < column + columns && _includes(columnIndices, c),
       );
   GridWindow get buffered {
     if (rowIndices != null) return this;

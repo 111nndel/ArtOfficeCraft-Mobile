@@ -400,7 +400,7 @@ fn inspect_window(wb: &Workbook, warnings: &Json, req: &Json) -> Result<Vec<u8>,
         "merges":sh.merges.iter().map(|m|[m.start.row,m.start.col,m.end.row,m.end.col]).collect::<Vec<_>>(),
         "showGridlines":sh.show_gridlines,"usedRange":used});
     serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
-        "selection":selection,"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":warnings,
+        "selection":selection,"defaultCellStyle":style_json(wb,Default::default()),"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":warnings,
         "filterRange":sh.autofilter.as_ref().map(|f|f.range.a1()),
         "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
 }
@@ -522,6 +522,15 @@ mod window_tests {
         assert_eq!(sh.row_height(2),0.0);assert_eq!(sh.col_width(3),0.0);
         assert_eq!(sh.input_text(CellRef::parse("B5").unwrap()),"=A5+22");
         assert_eq!(view(original,json!({"sheet":0,"row":0,"column":0,"rows":1,"columns":1,"selected":"A1"})).unwrap()["selection"]["input"],"Imported merged title");
+    }
+    #[test]
+    fn omitted_empty_cells_supply_the_exact_native_default_style() {
+        let bytes=write(&Workbook::new()).unwrap();
+        let result=view(&bytes,json!({"sheet":0,"row":0,"column":0,"rows":4,"columns":4,"selected":"B2"})).unwrap();
+        assert!(result["sheets"][0]["cells"].get("B2").is_none());
+        assert_eq!(result["selection"]["input"],"");
+        assert!(result["defaultCellStyle"].is_object());
+        assert_eq!(result["selection"]["style"],result["defaultCellStyle"]);
     }
     #[test]
     fn sparse_window_spans_hidden_rows_without_unbounded_cell_work() {

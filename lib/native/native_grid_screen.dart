@@ -15,6 +15,7 @@ import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import 'document_backend.dart';
 import 'grid_window.dart';
+import 'grid_view_cache.dart';
 import 'grid_selection.dart';
 import 'grid_clipboard.dart';
 import 'grid_filter_panel.dart';
@@ -198,6 +199,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     setState(() {
       _findIndex = index;
+      if (sheetIndex != hit.sheet) visibleRegion = null;
       sheetIndex = hit.sheet;
       selected = hit.address;
       rangeSelection = null;
@@ -340,7 +342,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   GridLayout layout = GridLayout.fromJson(null);
   GridSelection? installedFilter;
   GridWindow loadedWindow = const GridWindow(0, 0, 0);
-  GridWindow? wantedWindow;
+  GridWindow? wantedWindow, visibleRegion;
+  final viewCache = GridViewCache();
   Timer? viewTimer;
   bool loadingView = false, viewFailed = false;
   bool get inputDirty => input.text != currentInput;
@@ -417,6 +420,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     setState(() {
       book = data;
+      visibleRegion = null;
       _clearFind();
       _findText.clear();
       rangeSelection = null;
@@ -539,17 +543,37 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     return list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
   }
 
-  void acceptView(Map<String, dynamic> parsed, GridWindow window) {
+  void acceptView(
+    Map<String, dynamic> parsed,
+    GridWindow window, {
+    bool selection = true,
+  }) {
     sheets = parsedSheets(parsed);
     refreshCells();
-    selectedCell = Map<String, dynamic>.from(parsed['selection'] as Map? ?? {});
+    final selectedRecord = Map<String, dynamic>.from(
+      parsed['selection'] as Map? ?? {},
+    );
+    viewCache.bind(book!, window.sheet);
+    viewCache.put(
+      window,
+      cells,
+      selectedRecord,
+      emptyStyle: (parsed['defaultCellStyle'] as Map?)?.cast<String, dynamic>(),
+    );
+    _sheetCells = viewCache.cells;
+    if (selection) {
+      selectedCell = selectedRecord;
+      selected = selectedCell['address'] as String? ?? selected;
+    }
     layout = GridLayout.fromJson(parsed['layout'] as Map?);
     installedFilter = switch (parsed['filterRange']) {
       final String range => GridSelection.parse(range),
       _ => null,
     };
-    selected = selectedCell['address'] as String? ?? selected;
-    loadedWindow = window;
+    final visible = visibleRegion;
+    loadedWindow = visible != null && visible.sheet == window.sheet
+        ? viewCache.coveringWindow(visible) ?? window
+        : window;
     viewFailed = false;
   }
 
@@ -567,30 +591,36 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             rows: region.rows,
             columns: region.columns,
           );
-    if (loadedWindow.covers(visible)) {
-      wantedWindow = loadedWindow;
+    visibleRegion = visible;
+    final cached = viewCache.coveringWindow(visible);
+    if (cached != null) {
+      loadedWindow = wantedWindow = cached;
       viewTimer?.cancel();
       if (viewFailed) setState(() => viewFailed = false);
       return;
     }
-    wantedWindow = visible.buffered;
+    wantedWindow = prefetchGridWindow(visible, layout);
     viewFailed = false;
     scheduleView();
   }
 
   void scheduleView() {
-    viewTimer?.cancel();
-    final wanted = wantedWindow;
-    if (!mounted ||
-        busy ||
-        loadingView ||
-        viewFailed ||
-        book == null ||
-        wanted == null ||
-        loadedWindow.covers(wanted)) {
-      return;
+    if (!mounted || busy || loadingView || viewFailed || book == null) return;
+    final visible = visibleRegion;
+    if (visible != null && visible.sheet == sheetIndex) {
+      final cached = viewCache.coveringWindow(visible);
+      if (cached != null) {
+        loadedWindow = wantedWindow = cached;
+        return;
+      }
+      wantedWindow = prefetchGridWindow(visible, layout);
     }
-    viewTimer = Timer(const Duration(milliseconds: 160), loadVisibleWindow);
+    final wanted = wantedWindow;
+    if (wanted == null || viewCache.coveringWindow(wanted) != null) return;
+    // Throttle/coalesce during a gesture; never postpone every read until the
+    // user stops moving. Only one native request is allowed in flight.
+    if (viewTimer?.isActive == true) return;
+    viewTimer = Timer(const Duration(milliseconds: 32), loadVisibleWindow);
   }
 
   Future<void> loadVisibleWindow() async {
@@ -602,7 +632,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         loadingView ||
         bytes == null ||
         window == null ||
-        loadedWindow.covers(window)) {
+        viewCache.coveringWindow(visibleRegion ?? window) != null) {
       return;
     }
     setState(() => loadingView = true);
@@ -611,12 +641,17 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       if (mounted &&
           !busy &&
           identical(bytes, book) &&
-          address == selected &&
           window.sheet == sheetIndex) {
-        setState(() => acceptView(parsed, window));
+        setState(
+          () => acceptView(parsed, window, selection: address == selected),
+        );
       }
     } catch (_) {
-      if (mounted && identical(bytes, book) && window.sheet == sheetIndex) {
+      if (mounted &&
+          identical(bytes, book) &&
+          window.sheet == sheetIndex &&
+          (visibleRegion == null || window.covers(visibleRegion!)) &&
+          viewCache.coveringWindow(visibleRegion ?? window) == null) {
         setState(() => viewFailed = true);
       }
     } finally {
@@ -636,6 +671,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       book = bytes;
       _clearFind();
       if (sheetIndex != window.sheet) {
+        visibleRegion = null;
         rangeSelection = null;
         rangeInput.clear();
       }
@@ -707,11 +743,22 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     inputFocus.unfocus();
     tip('Формулы пересчитаны');
   });
+  void selectKnownCell(Map<String, dynamic> record, {required bool keepRange}) {
+    selectedCell = record;
+    selected = record['address'] as String;
+    if (!keepRange) {
+      rangeSelection = null;
+      rangeInput.clear();
+    }
+    input.text = currentInput;
+  }
+
   Future<void> selectCell(
     String address, {
     bool reveal = false,
     bool keepRange = false,
-  }) => run(() async {
+  }) async {
+    if (busy || bridge == null) return;
     if (address == selected && !reveal) {
       if (!keepRange) {
         setState(() {
@@ -721,36 +768,50 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       }
       return;
     }
-    await flushInput();
-    final position = gridAddress(address);
-    if (position == null) {
-      throw const FormatException('Введите адрес от A1 до XFD1048576');
-    }
-    final window = loadedWindow.contains(position.row, position.column)
-        ? loadedWindow
-        : GridWindow(
-            sheetIndex,
-            position.row,
-            position.column,
-            rows: 1,
-            columns: 1,
-          ).buffered;
-    final parsed = await bridge!.inspectGrid(book!, window, address);
-    if (!mounted) return;
-    setState(() {
-      selected = address;
-      if (!keepRange) {
-        rangeSelection = null;
-        rangeInput.clear();
+    final cached = inputDirty ? null : viewCache.selectionAt(address, layout);
+    if (cached != null) {
+      setState(() => selectKnownCell(cached, keepRange: keepRange));
+      if (reveal) {
+        final at = gridAddress(address)!;
+        gridViewport.currentState?.goToCell(at.row, at.column);
+        FocusManager.instance.primaryFocus?.unfocus();
       }
-      acceptView(parsed, window);
-      input.text = currentInput;
-    });
-    if (reveal) {
-      gridViewport.currentState?.goToCell(position.row, position.column);
+      queueDraft();
+      return;
     }
-    if (reveal) FocusManager.instance.primaryFocus?.unfocus();
-  });
+    await run(() async {
+      await flushInput();
+      final position = gridAddress(address);
+      if (position == null) {
+        throw const FormatException('Введите адрес от A1 до XFD1048576');
+      }
+      final window = loadedWindow.contains(position.row, position.column)
+          ? loadedWindow
+          : GridWindow(
+              sheetIndex,
+              position.row,
+              position.column,
+              rows: 1,
+              columns: 1,
+            ).buffered;
+      final parsed = await bridge!.inspectGrid(book!, window, address);
+      if (!mounted) return;
+      setState(() {
+        selected = address;
+        if (!keepRange) {
+          rangeSelection = null;
+          rangeInput.clear();
+        }
+        acceptView(parsed, window);
+        input.text = currentInput;
+      });
+      if (reveal) {
+        gridViewport.currentState?.goToCell(position.row, position.column);
+      }
+      if (reveal) FocusManager.instance.primaryFocus?.unfocus();
+    });
+  }
+
   Future<void> chooseSheet(int idx) => run(() async {
     if (idx == sheetIndex) return;
     await flushInput();
@@ -758,6 +819,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     final parsed = await bridge!.inspectGrid(book!, window, 'A1');
     if (!mounted) return;
     setState(() {
+      visibleRegion = null;
       sheetIndex = idx;
       rangeSelection = null;
       rangeInput.clear();
@@ -1344,7 +1406,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     final item = address == selected ? selectedCell : cells[address];
     final position = gridAddress(address)!;
     final known =
-        item is Map || loadedWindow.contains(position.row, position.column);
+        item is Map || viewCache.contains(position.row, position.column);
     final value = !known
         ? '…'
         : item is Map
@@ -1454,6 +1516,18 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   }
 
   final gridViewport = GlobalKey<SheetViewportState>();
+  Map<String, dynamic> compactCells(
+    Rect rect,
+    GridAxis rows,
+    GridAxis columns,
+  ) {
+    final r = rows.visible(rect.top, rect.bottom, buffer: 0);
+    final c = columns.visible(rect.left, rect.right, buffer: 0);
+    return r.isEmpty || c.isEmpty
+        ? const {}
+        : viewCache.cellsFor(GridWindow.visible(sheetIndex, r, c));
+  }
+
   Widget grid() => Stack(
     children: [
       SheetViewport.cells(
@@ -1479,7 +1553,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                 layout.merges,
                 showGridlines: layout.showGridlines,
               ),
-              cells,
+              compactCells(rect, rows, columns),
               selected,
               viewport: rect,
               scale: gridViewport.currentState?.zoom ?? 1,
@@ -1497,7 +1571,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             cell('${gridColumnName(col)}${row + 1}'),
         onWindowChanged: visibleWindow,
       ),
-      if (loadingView)
+      if (loadingView || busy)
         const Positioned(
           top: 0,
           left: 0,
@@ -1599,6 +1673,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     ).buffered;
     final parsed = await bridge!.inspectGrid(book!, window, address);
     if (!mounted) return;
+    if (sheetIndex != sheet) visibleRegion = null;
     sheetIndex = sheet;
     selected = address;
     acceptView(parsed, window);
@@ -1816,8 +1891,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   FilledButton.tonalIcon(
                     onPressed:
                         busy ||
-                            (choice.$2 != 'all' &&
-                                clipboard.current == null)
+                            (choice.$2 != 'all' && clipboard.current == null)
                         ? null
                         : () => pasteClipboard(choice.$2),
                     icon: Icon(
@@ -2099,6 +2173,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     if (_finding && !toolsExpanded) _findProgress(),
                     if (_findIndex >= 0 && !toolsExpanded) _findBar(),
                     Material(
+                      key: const Key('grid-formula-bar'),
                       color: Theme.of(context).colorScheme.surface,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
@@ -2187,6 +2262,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     ),
                     if (!toolsExpanded)
                       SingleChildScrollView(
+                        key: const Key('grid-sheet-tabs'),
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
@@ -2206,7 +2282,6 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                           ],
                         ),
                       ),
-                    if (busy) const LinearProgressIndicator(),
                   ],
                 ),
         ),
