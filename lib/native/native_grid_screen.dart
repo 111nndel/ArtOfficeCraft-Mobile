@@ -1740,7 +1740,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             cell('${gridColumnName(col)}${row + 1}'),
         onWindowChanged: visibleWindow,
       ),
-      if (loadingView || busy)
+      if ((loadingView || busy) && (ModalRoute.of(context)?.isCurrent ?? true))
         const Positioned(
           top: 0,
           left: 0,
@@ -2175,11 +2175,6 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             Icons.numbers,
             children: [
               EditorTool(
-                'Объединение ячеек',
-                Icons.call_merge,
-                builder: (_) => mergePanel(),
-              ),
-              EditorTool(
                 'Числовой формат',
                 Icons.numbers,
                 children: [
@@ -2235,6 +2230,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     : 'Уменьшить текст по ширине',
                 Icons.fit_screen,
                 {'shrink': cellStyle['shrink'] != true},
+              ),
+              EditorTool(
+                'Объединение ячеек',
+                Icons.call_merge,
+                builder: (_) => mergePanel(),
               ),
             ],
           ),

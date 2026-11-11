@@ -33,7 +33,7 @@ pub(super) fn edit(mut wb:Workbook, sheet:usize, address:&str, request:&Json)->R
     session.execute(if mode=="unmerge" {"home.unmergeCells"} else {"home.mergeCells"},params.clone()).map_err(|e|e.to_string())?;
     if mode=="center" {session.execute("home.alignCenter",params).map_err(|e|e.to_string())?;}
     let doc=session.doc_mut().map_err(|e|e.to_string())?;
-    if pending.is_some() {gridcraft_calc::Calc::new().recalc_all(&mut doc.wb);}
+    if pending.is_some() {gridcraft_calc::Calc::new().recalc_all(std::sync::Arc::make_mut(&mut doc.wb));}
     write(&doc.wb)
 }
 
