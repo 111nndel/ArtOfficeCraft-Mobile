@@ -10,6 +10,7 @@ mod grid;
 mod grid_clipboard;
 mod grid_filter;
 mod grid_find;
+mod grid_merge;
 mod grid_sort;
 mod grid_structure;
 mod deck;

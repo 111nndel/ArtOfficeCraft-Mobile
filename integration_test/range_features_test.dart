@@ -185,6 +185,166 @@ void main() {
           as Map<String, dynamic>;
 
   testWidgets(
+    'Excel merge confirmation, atomic draft undo, saved geometry and unmerge run through Rust',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(backend.close);
+      var bytes = await backend.edit(await backend.create(), {
+        'action': 'paste_text',
+        'sheet': 0,
+        'address': 'A1',
+        'text': 'Header\tOther\n\t',
+      });
+      bytes = await backend.edit(bytes, {
+        'sheet': 0,
+        'address': 'F1',
+        'value': '=COUNTA(A1:B2)',
+      });
+      bytes = await backend.edit(bytes, {
+        'action': 'format',
+        'sheet': 0,
+        'address': 'A1',
+        'style': {'bold': true, 'fill': '#E2F0D9'},
+      });
+      final remembered = <Uint8List>[];
+      NativeGridScreen screen(Uint8List source) => NativeGridScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: source, name: 'Merge and undo.xlsx'),
+        onRemember: (data, name) async {
+          remembered.add(data);
+        },
+      );
+      Future<void> openMerge() async {
+        await tool(tester, 'Главная', 'Формат ячейки');
+        final p = panel(tester),
+            section = p.sections.indexWhere((s) => s.label == 'Главная');
+        final format = p.sections[section].tools.indexWhere(
+          (t) => t.label == 'Формат ячейки',
+        );
+        final child = p.sections[section].tools[format].children!.indexWhere(
+          (t) => t.label == 'Объединение ячеек',
+        );
+        tester
+            .state<EditorToolPanelState>(find.byType(EditorToolPanel))
+            .openTool(section, [format, child]);
+        await tester.pumpAndSettle();
+      }
+
+      await present(tester, screen(bytes));
+      await selectRange(tester, 'A1:B2', 'Header');
+      final formula = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(formula, 'Changed header');
+      await openMerge();
+      final before = remembered.length;
+      await press(tester, 'Объединить и выровнять по центру');
+      await until(
+        tester,
+        () => find.byType(AlertDialog).evaluate().isNotEmpty,
+        'merge confirmation',
+      );
+      expect(
+        find.text('Останется содержимое ячейки A1. Будет очищено ячеек: 1.'),
+        findsOneWidget,
+      );
+      await press(tester, 'Отмена');
+      await tester.pumpAndSettle();
+      expect(remembered.length, before);
+      expect(cellInput(tester), 'Changed header');
+      await press(tester, 'Объединить и выровнять по центру');
+      await until(
+        tester,
+        () => find.byType(AlertDialog).evaluate().isNotEmpty,
+        'merge confirmation again',
+      );
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Объединить'),
+        ),
+      );
+      await until(
+        tester,
+        () => remembered.length == before + 1,
+        'one combined merge transaction',
+      );
+      await tester.pumpAndSettle();
+      final view = await backend.inspectGrid(
+        remembered.last,
+        const GridWindow(0, 0, 0),
+        'A1',
+      );
+      expect(view['layout']['merges'], [
+        [0, 0, 1, 1],
+      ]);
+      expect(view['selection']['input'], 'Changed header');
+      expect(view['selection']['style']['align'], 'center');
+      expect(view['selection']['style']['bold'], true);
+      expect(view['selection']['style']['fill'], '#E2F0D9');
+      final cleared = (view['sheets'][0]['cells'] as Map)['B1'] as Map?;
+      expect(cleared?['input'] ?? '', '');
+      expect(cleared?['hasContent'] ?? false, false);
+      expect((await inspectCell(backend, remembered.last, 'B1'))['address'], 'A1');
+      expect(
+        (await inspectCell(backend, remembered.last, 'F1'))['input'],
+        '=COUNTA(A1:B2)',
+      );
+      expect(
+        (await inspectCell(backend, remembered.last, 'F1'))['display'],
+        '1',
+      );
+      await history(tester, true);
+      expect(cellInput(tester), 'Header');
+      expect(
+        (await inspectCell(backend, remembered.last, 'B1'))['input'],
+        'Other',
+      );
+      await history(tester, false);
+      expect(cellInput(tester), 'Changed header');
+      await collapse(tester);
+      await capture(tester, 'grid-merge-center-047');
+      final saved = await save(tester, 'Сохранить копию');
+      await present(tester, screen(saved));
+      final rect = tester.getRect(find.byKey(const ValueKey('grid-cell-A1')));
+      await tester.tapAt(rect.bottomRight - const Offset(4, 4));
+      await tester.pumpAndSettle();
+      expect(cellInput(tester), 'Changed header');
+      await openMerge();
+      final count = remembered.length;
+      await press(tester, 'Разъединить');
+      await until(
+        tester,
+        () => remembered.length == count + 1,
+        'unmerged workbook',
+      );
+      await tester.pumpAndSettle();
+      final unmerged = await backend.inspectGrid(
+        remembered.last,
+        const GridWindow(0, 0, 0),
+        'A1',
+      );
+      expect(unmerged['layout']['merges'], isEmpty);
+      expect(unmerged['selection']['input'], 'Changed header');
+      expect((await inspectCell(backend, remembered.last, 'B1'))['input'], '');
+      await history(tester, true);
+      expect(
+        (await backend.inspectGrid(
+          remembered.last,
+          const GridWindow(0, 0, 0),
+          'A1',
+        ))['layout']['merges'],
+        [
+          [0, 0, 1, 1],
+        ],
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'Excel finds distant cells and formulas across sheets without losing pending input',
     (tester) async {
       final backend = NativeDocumentBackend(NativeDocumentKind.grid);

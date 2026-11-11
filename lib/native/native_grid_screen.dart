@@ -978,8 +978,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   Future<bool> applyUndoableEdit(
     Map<String, dynamic> request, {
     String? focus,
+    bool flushPending = true,
   }) async {
-    await flushInput();
+    if (flushPending) await flushInput();
     if (!mounted) return false;
     final previous = book!, window = loadedWindow;
     if (previous.length > history.byteBudget) {
@@ -1261,7 +1262,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     },
   );
 
-  GridSelection get clipboardSelection {
+  GridSelection get selectedRange {
     final cell = gridAddress(selected)!;
     return rangeSelection ??
         GridSelection(
@@ -1279,7 +1280,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       return;
     }
     await flushInput();
-    final area = clipboardSelection;
+    final area = selectedRange;
     final info = await bridge!.copyGrid(book!, {
       'sheet': sheetIndex,
       'range': area.address,
@@ -1379,6 +1380,189 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await rememberCurrent();
     tip('Лист создан');
   });
+  String? mergeBlockReason(GridSelection range) =>
+      undoableEditBlocked ??
+      (layout.tables.any(
+            (t) =>
+                t.row <= range.endRow &&
+                t.endRow >= range.row &&
+                t.column <= range.endColumn &&
+                t.endColumn >= range.column,
+          )
+          ? 'Объединение и разъединение недоступны внутри таблицы Excel'
+          : null);
+
+  Future<void> mergeCells(String mode) => run(() async {
+    if (book == null) return;
+    final range = selectedRange, blocked = mergeBlockReason(selectedRange);
+    if (blocked != null || range.cellCount > GridSelection.maxCells) {
+      tip(blocked ?? 'Выберите не более 4096 ячеек за одну операцию');
+      return;
+    }
+    final anchor = '${gridColumnName(range.column)}${range.row + 1}';
+    final bytes = book!, draft = input.text, pending = inputDirty;
+    var confirmed = false;
+    if (mode != 'unmerge') {
+      final window = GridWindow(
+        sheetIndex,
+        range.row,
+        range.column,
+        rows: range.endRow - range.row + 1,
+        columns: range.endColumn - range.column + 1,
+      );
+      Map records = cells;
+      if (viewCache.coveringWindow(window) == null) {
+        records = {};
+        // A 4096-cell selection can be wider than one native window (2048
+        // columns). Inspect it in at most two bounded reads, including hidden cells.
+        for (var col = range.column; col <= range.endColumn; col += 2048) {
+          final part = GridWindow(
+            sheetIndex,
+            range.row,
+            col,
+            rows: window.rows,
+            columns: (range.endColumn - col + 1).clamp(1, 2048),
+          );
+          final parsed = await bridge!.inspectGrid(bytes, part, selected);
+          records.addAll(parsedSheets(parsed)[sheetIndex]['cells'] as Map);
+        }
+      }
+      var removed = 0;
+      for (final entry in records.entries) {
+        final at = gridAddress(entry.key as String), record = entry.value;
+        if (at == null ||
+            !window.contains(at.row, at.column) ||
+            entry.key == anchor ||
+            pending && entry.key == selected ||
+            record is! Map) {
+          continue;
+        }
+        final occupied =
+            record['hasContent'] as bool? ??
+            (record['formula'] == true ||
+                (record['input']?.toString() ?? '').isNotEmpty ||
+                (record['display']?.toString() ?? '').isNotEmpty);
+        if (occupied) removed++;
+      }
+      final at = gridAddress(selected)!;
+      if (pending &&
+          selected != anchor &&
+          window.contains(at.row, at.column) &&
+          draft.isNotEmpty) {
+        removed++;
+      }
+      if (!mounted || !identical(bytes, book) || input.text != draft) return;
+      if (removed > 0) {
+        confirmed =
+            await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const UiText('Объединить ячейки?'),
+                content: UiText(
+                  'Останется содержимое ячейки $anchor. Будет очищено ячеек: $removed.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const UiText('Отмена'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const UiText('Объединить'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+        if (!confirmed) return;
+      }
+    }
+    if (!mounted || !identical(bytes, book) || input.text != draft) return;
+    if (await applyUndoableEdit(
+      {
+        'action': 'merge_range',
+        'mode': mode,
+        'range': range.address,
+        'allowContentLoss': confirmed,
+        if (pending) 'value': draft,
+      },
+      focus: anchor,
+      flushPending: false,
+    )) {
+      setState(() {
+        rangeSelection = range;
+        rangeInput.text = range.address;
+      });
+      inputFocus.unfocus();
+    }
+  });
+
+  Widget mergePanel() {
+    final range = selectedRange;
+    final reason =
+        mergeBlockReason(range) ??
+        (range.cellCount > GridSelection.maxCells
+            ? 'Выберите не более 4096 ячеек за одну операцию'
+            : null);
+    final hasMerge = layout.merges.any(
+      (m) =>
+          m.row <= range.endRow &&
+          m.endRow >= range.row &&
+          m.column <= range.endColumn &&
+          m.endColumn >= range.column,
+    );
+    final exact = layout.merges.any(
+      (m) =>
+          (m.row, m.column, m.endRow, m.endColumn) ==
+          (range.row, range.column, range.endRow, range.endColumn),
+    );
+    final enabled =
+        !busy && reason == null && range.cellCount <= GridSelection.maxCells;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (reason != null) UiText(reason),
+        if (reason == null && range.cellCount == 1)
+          const UiText('Выделите минимум две ячейки для объединения.'),
+        TextField(
+          key: const Key('grid-merge-range'),
+          controller: rangeInput,
+          readOnly: busy,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            labelText: tr(context, 'Диапазон'),
+            hintText: range.address,
+          ),
+          onSubmitted: (_) {
+            if (!busy) chooseRange();
+          },
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton(
+          onPressed: busy ? null : chooseRange,
+          child: const UiText('Выделить ячейки'),
+        ),
+        const SizedBox(height: 8),
+        const UiText('Объединение сохраняет содержимое верхней левой ячейки.'),
+        const SizedBox(height: 8),
+        for (final choice in [
+          ('Объединить', 'merge', range.cellCount > 1 && !exact),
+          ('Объединить и выровнять по центру', 'center', range.cellCount > 1),
+          ('Разъединить', 'unmerge', hasMerge),
+        ])
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: FilledButton.tonal(
+              onPressed: enabled && choice.$3
+                  ? () => mergeCells(choice.$2)
+                  : null,
+              child: UiText(choice.$1),
+            ),
+          ),
+      ],
+    );
+  }
+
   final inputFocus = FocusNode();
   Widget header(String text) => Container(
     alignment: Alignment.center,
@@ -1571,7 +1755,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             cell('${gridColumnName(col)}${row + 1}'),
         onWindowChanged: visibleWindow,
       ),
-      if (loadingView || busy)
+      if ((loadingView || busy) && (ModalRoute.of(context)?.isCurrent ?? true))
         const Positioned(
           top: 0,
           left: 0,
@@ -2061,6 +2245,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     : 'Уменьшить текст по ширине',
                 Icons.fit_screen,
                 {'shrink': cellStyle['shrink'] != true},
+              ),
+              EditorTool(
+                'Объединение ячеек',
+                Icons.call_merge,
+                builder: (_) => mergePanel(),
               ),
             ],
           ),
