@@ -283,7 +283,10 @@ void main() {
       expect(view['selection']['style']['align'], 'center');
       expect(view['selection']['style']['bold'], true);
       expect(view['selection']['style']['fill'], '#E2F0D9');
-      expect((await inspectCell(backend, remembered.last, 'B1'))['input'], '');
+      final cleared = (view['sheets'][0]['cells'] as Map)['B1'] as Map?;
+      expect(cleared?['input'] ?? '', '');
+      expect(cleared?['hasContent'] ?? false, false);
+      expect((await inspectCell(backend, remembered.last, 'B1'))['address'], 'A1');
       expect(
         (await inspectCell(backend, remembered.last, 'F1'))['input'],
         '=COUNTA(A1:B2)',
