@@ -11,7 +11,7 @@ operations do not establish that the entire UI works on another OS.
 | Native core | `openNativeCore`, `DocumentBackend` | Bundled Rust library, ABI 1; ordered Dart isolates |
 | Open/export | `DocumentFiles` | Existing Android/iOS file-dialog plugin, isolated in `lib/platform/document_files.dart` |
 | Storage | `ApplicationStorage` | Shared Dart files; Android supplies its private directory and reads legacy preferences |
-| PDF display/OCR | `PdfPageRenderer` | Rust worker renderer; lazy Android compatibility and offline OCR channel |
+| PDF display/OCR | `PdfPageRenderer`, `PdfImageOcr` | Rust worker renderer; lazy Android compatibility; independent page-image OCR channel |
 | Spreadsheet clipboard | `SystemClipboard`, `GridClipboard` | Android identity-bearing clipboard; Flutter text-only fallback |
 
 `ArtOfficeCraftApp` accepts storage, file, PDF-renderer and clipboard services and passes
@@ -27,6 +27,16 @@ ordered Dart writer, including calls from separate adapter instances. Android
 reads the old PDF/Deck SharedPreferences only when no new preference file exists;
 new choices use Dart files and take precedence. The legacy preferences remain
 untouched for upgrades. Invalid modes and path-like format identifiers are rejected.
+
+`NativePdfPageRenderer` passes a bounded 1440-pixel-wide page PNG to an injectable
+`PdfImageOcr` function. A successful Rust raster does not open an Android PDF
+session for OCR. The Android image adapter decodes only bounded PNGs and invokes
+the bundled Tesseract runtime and Russian/English models on the existing worker.
+Unsupported Rust pages can still use the optional compatibility renderer before
+image recognition. Closing a document discards late raster/OCR results. A target
+can supply its own image recognizer without implementing an OS PDF renderer;
+the current packaged Tesseract adapter remains Android-specific. This step does
+not replace the C/C++ OCR runtime or establish desktop OCR support.
 
 `GridClipboard` owns an immutable, bounded workbook snapshot in Dart and orders
 reads/writes through an injectable `SystemClipboard`. Android exports selected

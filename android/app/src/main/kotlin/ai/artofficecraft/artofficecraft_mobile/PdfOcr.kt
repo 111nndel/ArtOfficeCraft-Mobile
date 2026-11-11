@@ -2,13 +2,29 @@ package ai.artofficecraft.artofficecraft_mobile
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import com.googlecode.tesseract.android.TessBaseAPI
 import com.googlecode.tesseract.android.TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE
 import com.googlecode.tesseract.android.TessBaseAPI.PageIteratorLevel.RIL_WORD
 import java.io.File
 
 internal class PdfOcr(private val context: Context) {
-    fun recognize(bitmap: Bitmap): Map<String, Any> {
+    fun recognize(png: ByteArray): Map<String, Any> {
+        require(png.size in 24..24 * 1024 * 1024 &&
+            png.take(8) == listOf<Byte>(-119, 80, 78, 71, 13, 10, 26, 10)) { "Invalid OCR PNG" }
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(png, 0, png.size, bounds)
+        require(bounds.outWidth in 1..2880 && bounds.outHeight in 1..2880 &&
+            bounds.outWidth.toLong() * bounds.outHeight <= 4_200_000L) { "OCR image exceeds memory limit" }
+        val bitmap = requireNotNull(BitmapFactory.decodeByteArray(png, 0, png.size)) { "Cannot decode OCR image" }
+        try {
+            return recognizeBitmap(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    private fun recognizeBitmap(bitmap: Bitmap): Map<String, Any> {
         val directory = File(context.cacheDir, "pdf-ocr-65727574")
         val tessdata = File(directory, "tessdata")
         check(tessdata.isDirectory || tessdata.mkdirs()) { "Cannot prepare OCR models" }
