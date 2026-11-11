@@ -1486,7 +1486,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
 
   Widget mergePanel() {
-    final range = selectedRange, reason = undoableEditBlocked;
+    final range = selectedRange;
+    final reason = undoableEditBlocked ?? (range.cellCount > GridSelection.maxCells
+        ? 'Выберите не более 4096 ячеек за одну операцию' : null);
     final hasMerge = layout.merges.any(
       (m) =>
           m.row <= range.endRow &&
@@ -1505,6 +1507,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (reason != null) UiText(reason),
+        if (reason == null && range.cellCount == 1)
+          const UiText('Выделите минимум две ячейки для объединения.'),
         TextField(
           key: const Key('grid-merge-range'),
           controller: rangeInput,
