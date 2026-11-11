@@ -1,6 +1,9 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
-  "Выделите минимум две ячейки для объединения.": "Select at least two cells to merge.",
+  "Объединение и разъединение недоступны внутри таблицы Excel":
+      "Merge and unmerge are unavailable inside an Excel table",
+  "Выделите минимум две ячейки для объединения.":
+      "Select at least two cells to merge.",
   "Объединение ячеек": "Merge cells",
   "Объединить ячейки?": "Merge cells?",
   "Объединить": "Merge",

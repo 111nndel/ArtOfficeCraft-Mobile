@@ -16,28 +16,36 @@ import 'office_features_test.dart' show tool, press, historyAction;
 import 'localization_test.dart' show englishApp;
 
 class MergeBackend extends FeaturesBackend implements GridDocuments {
-  MergeBackend({Map<String, dynamic> other = const {}, bool protected = false})
-    : super({
-        'sheets': [
-          {
-            'name': 'Data',
-            'protected': protected,
-            'cells': {
-              'A1': {
-                'input': 'original',
-                'display': 'original',
-                'style': {'bold': true},
-              },
-              ...other,
-            },
-          },
-        ],
-        'layout': {
-          'defaultRowHeight': 20,
-          'defaultColumnWidth': 64,
-          'merges': [],
-        },
-      });
+  MergeBackend({
+    Map<String, dynamic> other = const {},
+    bool protected = false,
+    bool table = false,
+  }) : super({
+         'sheets': [
+           {
+             'name': 'Data',
+             'protected': protected,
+             'cells': {
+               'A1': {
+                 'input': 'original',
+                 'display': 'original',
+                 'style': {'bold': true},
+               },
+               ...other,
+             },
+           },
+         ],
+         'layout': {
+           'defaultRowHeight': 20,
+           'defaultColumnWidth': 64,
+           'merges': [],
+           'tables': table
+               ? [
+                   [0, 0, 2, 1],
+                 ]
+               : [],
+         },
+       });
   final windows = <GridWindow>[];
   bool rejectPreview = false;
   @override
@@ -299,12 +307,28 @@ void main() {
     },
   );
   testWidgets(
-    'Protected sheets disable merge actions and English confirmation keeps cell addresses',
+    'Protected sheets and Excel tables disable merge actions; English confirmation keeps addresses',
     (tester) async {
       final locked = MergeBackend(protected: true);
       await open(tester, locked);
       await select(tester, 'A1:B2');
       expect(find.text('Лист защищён'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Объединить'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      final table = MergeBackend(table: true);
+      await open(tester, table);
+      await select(tester, 'A1:B2');
+      expect(
+        find.text('Объединение и разъединение недоступны внутри таблицы Excel'),
+        findsOneWidget,
+      );
       expect(
         tester
             .widget<FilledButton>(

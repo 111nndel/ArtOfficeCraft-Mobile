@@ -10,10 +10,14 @@ pub(super) fn edit(mut wb:Workbook, sheet:usize, address:&str, request:&Json)->R
     let mode=request["mode"].as_str().ok_or("Missing merge mode")?;
     if !matches!(mode,"merge"|"center"|"unmerge") {return Err("Unknown merge mode".into())}
     let sh=wb.sheet(sheet).unwrap();
+    if sh.tables.iter().any(|table|table.range.intersects(&range)) {
+        return Err("Merge/unmerge is not available inside Excel tables".into())
+    }
     let affected=|r:&RangeRef| r.intersects(&range) ||
         request.get("value").is_some() && r.intersects(&RangeRef::cell(active));
     if sh.spill_ranges.values().any(affected) ||
-        sh.cells.iter().any(|(_,c)|c.formula.as_ref().and_then(|f|f.array).is_some_and(|r|affected(&r))) {
+        sh.cells.iter().any(|(at,c)|c.formula.as_ref().is_some_and(|f|
+            f.array.is_some_and(|r|affected(&r)) || f.dynamic && affected(&RangeRef::cell(at)))) {
         return Err("Array and spilled formula ranges cannot be merged or unmerged in this preview".into())
     }
     if mode=="unmerge" {
@@ -146,5 +150,18 @@ mod tests {
         let mut wb=source();let mut formula=Formula::new("=1");formula.array=Some(area);
         wb.sheet_mut(0).unwrap().set_cell(at("J1"),Cell::formula(formula));
         assert!(invoke(&write(&wb).unwrap(),json!({"range":"J1:K2","mode":"merge","allowContentLoss":true})).is_err());
+        let mut wb=source();let mut formula=Formula::new("=SEQUENCE(2,2)");formula.dynamic=true;
+        wb.sheet_mut(0).unwrap().set_cell(at("J1"),Cell::formula(formula));
+        assert!(edit(wb,0,"A1",&json!({"range":"J1:K2","mode":"center","allowContentLoss":true})).is_err());
+        let mut session=command_session(source(),0,at("A1")).unwrap();
+        session.execute("insert.table",json!({"range":"A1:B3","header":true,"name":"Data"})).unwrap();
+        let bytes=write(&session.doc().unwrap().wb).unwrap();
+        for mode in ["merge","center","unmerge"] {
+            assert!(invoke(&bytes,json!({"range":"A1:B2","mode":mode,"allowContentLoss":true})).unwrap_err().contains("Excel tables"));
+        }
+        let req=json!({"sheet":0,"row":0,"column":0,"rows":4,"columns":3,"selected":"A1"}).to_string();
+        let r=ac_xlsx_inspect_window(bytes.as_ptr(),bytes.len(),req.as_ptr(),req.len());assert_eq!(r.status,0);
+        let view:Json=serde_json::from_slice(unsafe{std::slice::from_raw_parts(r.ptr,r.len)}).unwrap();crate::ac_result_free(r);
+        assert_eq!(view["layout"]["tables"],json!([[0,0,2,1]]));
     }
 }

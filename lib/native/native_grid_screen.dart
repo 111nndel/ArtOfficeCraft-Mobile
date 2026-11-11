@@ -1380,9 +1380,21 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await rememberCurrent();
     tip('Лист создан');
   });
+  String? mergeBlockReason(GridSelection range) =>
+      undoableEditBlocked ??
+      (layout.tables.any(
+            (t) =>
+                t.row <= range.endRow &&
+                t.endRow >= range.row &&
+                t.column <= range.endColumn &&
+                t.endColumn >= range.column,
+          )
+          ? 'Объединение и разъединение недоступны внутри таблицы Excel'
+          : null);
+
   Future<void> mergeCells(String mode) => run(() async {
     if (book == null) return;
-    final range = selectedRange, blocked = undoableEditBlocked;
+    final range = selectedRange, blocked = mergeBlockReason(selectedRange);
     if (blocked != null || range.cellCount > GridSelection.maxCells) {
       tip(blocked ?? 'Выберите не более 4096 ячеек за одну операцию');
       return;
@@ -1487,8 +1499,11 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
 
   Widget mergePanel() {
     final range = selectedRange;
-    final reason = undoableEditBlocked ?? (range.cellCount > GridSelection.maxCells
-        ? 'Выберите не более 4096 ячеек за одну операцию' : null);
+    final reason =
+        mergeBlockReason(range) ??
+        (range.cellCount > GridSelection.maxCells
+            ? 'Выберите не более 4096 ячеек за одну операцию'
+            : null);
     final hasMerge = layout.merges.any(
       (m) =>
           m.row <= range.endRow &&

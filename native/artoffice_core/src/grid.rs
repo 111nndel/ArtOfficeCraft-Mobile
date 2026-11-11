@@ -406,6 +406,7 @@ fn inspect_window(wb: &Workbook, warnings: &Json, req: &Json) -> Result<Vec<u8>,
         "defaultColumnWidth":valid_extent(sh.default_col_width,64.0),
         "rows":axis_runs(&sh.rows,sh.default_row_height),"columns":axis_runs(&sh.cols,sh.default_col_width),
         "merges":sh.merges.iter().map(|m|[m.start.row,m.start.col,m.end.row,m.end.col]).collect::<Vec<_>>(),
+        "tables":sh.tables.iter().map(|t|[t.range.start.row,t.range.start.col,t.range.end.row,t.range.end.col]).collect::<Vec<_>>(),
         "showGridlines":sh.show_gridlines,"usedRange":used});
     serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
         "selection":selection,"defaultCellStyle":style_json(wb,Default::default()),"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":warnings,

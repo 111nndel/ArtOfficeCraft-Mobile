@@ -141,6 +141,7 @@ class GridLayout {
     this.merges, {
     this.showGridlines = true,
     this.usedBounds,
+    this.tables = const [],
   });
   factory GridLayout.fromJson(Map? json) {
     List<List<num>> runs(String key) => (json?[key] as List? ?? [])
@@ -164,6 +165,12 @@ class GridLayout {
           )
           .toList(),
       showGridlines: json?['showGridlines'] != false,
+      tables: (json?['tables'] as List? ?? [])
+          .map(
+            (v) =>
+                GridBounds(v[0] as int, v[1] as int, v[2] as int, v[3] as int),
+          )
+          .toList(),
       usedBounds:
           json?['usedRange'] is List && (json!['usedRange'] as List).length == 4
           ? GridBounds(
@@ -177,6 +184,7 @@ class GridLayout {
   }
   final GridAxis rows, columns;
   final List<GridMerge> merges;
+  final List<GridBounds> tables;
   final bool showGridlines;
   final GridBounds? usedBounds;
   GridMerge? mergeAt(int row, int column) {

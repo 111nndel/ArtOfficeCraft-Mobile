@@ -13,6 +13,6 @@
 ## Known Limitations
 
 - At most 4096 cells per operation. Only complete existing merged regions may be changed; touch/range selection expands to include intersecting merges.
-- Protected sheets/workbooks and array/spill ranges are excluded. Merge/unmerge requires the input and result to fit the existing 24 MiB undo budget.
+- Protected sheets/workbooks, structured Excel tables and array/spill ranges are excluded. Merge/unmerge requires the input and result to fit the existing 24 MiB undo budget.
 - Unmerge restores cell boundaries, not contents cleared by a confirmed merge. Use Undo to restore the previous contents. Merging does not concatenate text.
 - Imported layout remains approximate. Edits still serialize/reparse the workbook; emulator checks do not establish physical-phone FPS.
