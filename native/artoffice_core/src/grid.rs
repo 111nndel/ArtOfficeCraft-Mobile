@@ -38,7 +38,7 @@ pub(super) fn command_session(
         gridcraft_engine::Selection::at(active);
     Ok(session)
 }
-fn put(w: &mut Workbook, sheet_index: usize, a1: &str, value: &str) -> Result<(),String> {
+pub(super) fn put(w: &mut Workbook, sheet_index: usize, a1: &str, value: &str) -> Result<(),String> {
     if w.protected_structure {return Err("Workbook structure is protected".into());}
     let reference=CellRef::parse(a1).ok_or("Invalid A1 reference")?;
     let reference=w.sheet(sheet_index).and_then(|s|s.merge_at(reference)).map_or(reference,|m|m.start);
@@ -144,7 +144,7 @@ fn format_cell(w:&mut Workbook, idx:usize, a1:&str, patch:&Json)->Result<(),Stri
     Ok(())
 }
 /// Bulk edits are atomic: validate the full range and merges before changing cells.
-fn edit_range(w:&mut Workbook, idx:usize, request:&Json, clear:bool)->Result<(),String> {
+pub(super) fn checked_edit_range(w:&Workbook, idx:usize, request:&Json)->Result<RangeRef,String> {
     if w.protected_structure {return Err("Workbook is protected".into())}
     let text=request.get("range").and_then(Json::as_str).ok_or("Missing cell range")?;
     let range=RangeRef::parse(text).ok_or("Invalid A1 cell range")?;
@@ -154,6 +154,10 @@ fn edit_range(w:&mut Workbook, idx:usize, request:&Json, clear:bool)->Result<(),
     for merge in &sh.merges {
         if merge.intersects(&range) && !range.contains_range(merge) {return Err("Select complete merged cells".into())}
     }
+    Ok(range)
+}
+fn edit_range(w:&mut Workbook, idx:usize, request:&Json, clear:bool)->Result<(),String> {
+    let range=checked_edit_range(w,idx,request)?;
     if request.get("value").is_some() {return Err("Range actions do not accept a cell value".into())}
     if clear {
         let sh=w.sheet_mut(idx).unwrap();
@@ -227,6 +231,9 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
+        if action == "merge_range" {
+            return super::grid_merge::edit(wb, idx, address, &req);
+        }
         if action == "line_structure" {
             return super::grid_structure::edit(wb, idx, address, &req);
         }
@@ -364,6 +371,7 @@ fn inspect_window(wb: &Workbook, warnings: &Json, req: &Json) -> Result<Vec<u8>,
         let displayed=format_value(&sh.value(loc),fmt,wb.date_system);
         let input = if formula_hidden(wb, sh, loc) { displayed.text.clone() } else { sh.input_text(loc) };
         json!({"address":loc.a1(),"input":input,"display":displayed.text,"numeric":displayed.numeric,
+            "hasContent":sh.cell(loc).is_some_and(|c|c.formula.is_some() || c.py.is_some() || c.value!=Value::Empty) || sh.spill.contains_key(&loc),
             "formula":sh.cell(loc).is_some_and(|c|c.formula.is_some()),"style":style_json(wb,style)})
     };
     let mut cells=serde_json::Map::new();

@@ -1,5 +1,14 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
+  "Объединение ячеек": "Merge cells",
+  "Объединить ячейки?": "Merge cells?",
+  "Объединить": "Merge",
+  "Объединить и выровнять по центру": "Merge and center",
+  "Разъединить": "Unmerge",
+  "Объединение сохраняет содержимое верхней левой ячейки.":
+      "Merging keeps the contents of the top-left cell.",
+  "Останется содержимое ячейки {0}. Будет очищено ячеек: {1}.":
+      "Only the contents of {0} will remain. Cells to clear: {1}.",
   "Абзацев основного текста: {0}": "Body text paragraphs: {0}",
   "Таблицы и колонтитулы не включены":
       "Tables, headers and footers are excluded",
