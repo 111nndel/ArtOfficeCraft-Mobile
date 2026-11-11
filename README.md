@@ -30,7 +30,7 @@ Spreadsheet reading windows, search batches and filter choices reuse the current
 parsed Rust workbook; edits and closing release that read model. Recent spreadsheet
 regions stay available on return trips, with read-ahead during movement and local
 selection of loaded cells. Progress overlays the grid without moving the lower controls.
-See the [0.46.0 release notes and limits](docs/release-0.46.0-alpha.1.md).
+See the [0.46.0 release notes and limits](docs/release-0.46.0-alpha.2.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

@@ -31,6 +31,8 @@ void main() {
         'style': style,
       });
       expect(cache.selectionAt('E5', layout), isNull);
+      expect(cache.contains(1, 1), isTrue);
+      expect(cache.contains(4, 4), isFalse);
       expect(cache.cellsFor(first).containsKey('AE101'), isFalse);
     },
   );

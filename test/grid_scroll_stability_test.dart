@@ -212,6 +212,15 @@ void main() {
           ),
           findsOneWidget,
         );
+        if (at == (0, 0)) {
+          expect(
+            find.descendant(
+              of: find.byKey(const ValueKey('grid-cell-B2')),
+              matching: find.text('…'),
+            ),
+            findsNothing,
+          );
+        }
         await tester.pump(const Duration(milliseconds: 80));
         expect(backend.reads, reads);
       }

@@ -1406,7 +1406,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     final item = address == selected ? selectedCell : cells[address];
     final position = gridAddress(address)!;
     final known =
-        item is Map || loadedWindow.contains(position.row, position.column);
+        item is Map || viewCache.contains(position.row, position.column);
     final value = !known
         ? '…'
         : item is Map

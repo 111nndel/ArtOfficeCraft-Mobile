@@ -379,6 +379,15 @@ void main() {
         viewport.goToCell(at.$1, at.$2);
         await tester.pump();
         expect(value(at.$1, at.$2), findsOneWidget);
+        if (at == (0, 0)) {
+          expect(
+            find.descendant(
+              of: find.byKey(const ValueKey('grid-cell-B2')),
+              matching: find.text('…'),
+            ),
+            findsNothing,
+          );
+        }
         await tester.pump(const Duration(milliseconds: 80));
         expect(backend.reads, reads);
         expect(positions(), fixed);

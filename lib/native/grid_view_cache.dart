@@ -66,6 +66,9 @@ class GridViewCache {
 
   GridWindow? coveringWindow(GridWindow window) => _cover(window)?.window;
 
+  bool contains(int row, int column) =>
+      _entries.any((entry) => entry.window.contains(row, column));
+
   /// Compact painting normally needs one prefetched region, not every region
   /// retained for returning to earlier rows/columns.
   Map<String, dynamic> cellsFor(GridWindow window) {
@@ -99,8 +102,7 @@ class GridViewCache {
     }
     // The native window omits only genuinely empty style-0 cells. Its exact
     // default style is supplied once, so local selection preserves formatting.
-    if (_emptyStyle == null ||
-        !_entries.any((e) => e.window.contains(row, column))) {
+    if (_emptyStyle == null || !contains(row, column)) {
       return null;
     }
     return {
