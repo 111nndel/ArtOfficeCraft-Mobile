@@ -76,6 +76,16 @@ def stage():
             os.replace(pending, path)
         finally:
             pending.unlink(missing_ok=True)
+    # Remove only obsolete generated model copies from pre-Flutter-asset builds.
+    for name, _, _, _ in FILES:
+        if name.startswith('assets/ocr/tessdata/'):
+            (OUTPUT / name).unlink(missing_ok=True)
+    # Keep this owned generated folder free of stale/extra libraries.
+    native = OUTPUT / 'jni'
+    allowed = {native / abi / library for abi in ABIS for library in LIBRARIES}
+    for path in native.rglob('*'):
+        if path.is_file() and path not in allowed:
+            path.unlink()
     # Reuse only the hash-checked native binaries, without the Java/JNI wrapper classes.
     with zipfile.ZipFile(OUTPUT / "tesseract4android-4.9.0.aar") as archive:
         for abi in ABIS:
@@ -94,6 +104,8 @@ def verify_apk(apk):
         for name, _, size, digest in FILES:
             if name.startswith("assets/"):
                 packaged = 'assets/flutter_assets/' + name if name.startswith('assets/ocr/tessdata/') else name
+                if name.startswith('assets/ocr/tessdata/') and name in archive.namelist():
+                    raise ValueError('Duplicate legacy OCR model in APK')
                 if not checked(archive.read(packaged), size, digest):
                     raise ValueError(f"Unexpected OCR asset in APK: {name}")
         for library in LIBRARIES:
