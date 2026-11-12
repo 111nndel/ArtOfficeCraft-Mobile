@@ -452,18 +452,18 @@ class SheetViewportState extends State<SheetViewport>
       );
     }
 
-    // Filter once per frame instead of scanning every imported merge per cell.
+    // Query the shared layout index once for this frame's visible candidates.
     final candidates = rowList.isEmpty || colList.isEmpty
         ? <GridMerge>[]
-        : (widget.layout?.merges ?? <GridMerge>[])
-              .where(
-                (m) =>
-                    m.row <= rowList.last &&
-                    m.endRow >= rowList.first &&
-                    m.column <= colList.last &&
-                    m.endColumn >= colList.first,
-              )
-              .toList();
+        : widget.layout?.mergesIn(
+                GridBounds(
+                  rowList.first,
+                  colList.first,
+                  rowList.last,
+                  colList.last,
+                ),
+              ) ??
+              <GridMerge>[];
     final merges = <GridMerge>{}, children = <Widget>[];
     for (final row in rowList) {
       for (final col in colList) {

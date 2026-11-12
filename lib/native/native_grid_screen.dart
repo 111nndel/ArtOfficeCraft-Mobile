@@ -548,6 +548,9 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     GridWindow window, {
     bool selection = true,
   }) {
+    final nextLayout = viewCache.isBoundTo(book!, window.sheet)
+        ? layout
+        : GridLayout.fromJson(parsed['layout'] as Map?);
     sheets = parsedSheets(parsed);
     refreshCells();
     final selectedRecord = Map<String, dynamic>.from(
@@ -565,7 +568,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       selectedCell = selectedRecord;
       selected = selectedCell['address'] as String? ?? selected;
     }
-    layout = GridLayout.fromJson(parsed['layout'] as Map?);
+    layout = nextLayout;
     installedFilter = switch (parsed['filterRange']) {
       final String range => GridSelection.parse(range),
       _ => null,
@@ -1731,16 +1734,13 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
           child: CustomPaint(
             key: const Key('grid-cells-canvas'),
             painter: GridCellsPainter(
-              GridLayout(
-                rows,
-                columns,
-                layout.merges,
-                showGridlines: layout.showGridlines,
-              ),
+              layout,
               compactCells(rect, rows, columns),
               selected,
               viewport: rect,
               scale: gridViewport.currentState?.zoom ?? 1,
+              rows: rows,
+              columns: columns,
             ),
           ),
         ),

@@ -17,8 +17,11 @@ class GridViewCache {
   Map<String, dynamic>? _emptyStyle;
   Map<String, dynamic> get cells => _cells;
 
+  bool isBoundTo(Object document, int sheet) =>
+      identical(_document, document) && _sheet == sheet;
+
   void bind(Object document, int sheet) {
-    if (!identical(_document, document) || _sheet != sheet) {
+    if (!isBoundTo(document, sheet)) {
       _entries.clear();
       _cells = const {};
       _emptyStyle = null;

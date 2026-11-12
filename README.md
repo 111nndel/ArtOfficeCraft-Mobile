@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.49.0.**
+**Current preview — alpha 0.50.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -32,7 +32,7 @@ Spreadsheet reading windows, search batches and filter choices reuse the current
 parsed Rust workbook; edits and closing release that read model. Recent spreadsheet
 regions stay available on return trips, with read-ahead during movement and local
 selection of loaded cells. Progress overlays the grid without moving the lower controls.
-See the [0.49.0 release notes and limits](docs/release-0.49.0-alpha.1.md).
+See the [0.50.0 release notes and limits](docs/release-0.50.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'grid_window.dart';
 
 /// Sparse axis geometry in document pixels (96 dpi), including hidden lines.
@@ -138,11 +140,11 @@ class GridLayout {
   GridLayout(
     this.rows,
     this.columns,
-    this.merges, {
+    List<GridMerge> merges, {
     this.showGridlines = true,
     this.usedBounds,
     this.tables = const [],
-  });
+  }) : merges = List.unmodifiable(merges);
   factory GridLayout.fromJson(Map? json) {
     List<List<num>> runs(String key) => (json?[key] as List? ?? [])
         .map((v) => List<num>.from(v as List))
@@ -187,10 +189,57 @@ class GridLayout {
   final List<GridBounds> tables;
   final bool showGridlines;
   final GridBounds? usedBounds;
-  GridMerge? mergeAt(int row, int column) {
-    for (final merge in merges) {
-      if (merge.contains(row, column)) return merge;
+
+  // A balanced interval tree stored in two arrays. Build once per immutable
+  // layout; subtree end rows prune distant merges without expanding cells.
+  late final _mergeOrder = List.generate(merges.length, (i) => i)
+    ..sort((a, b) {
+      final order = merges[a].row.compareTo(merges[b].row);
+      return order == 0 ? a.compareTo(b) : order;
+    });
+  late final _mergeEnds = _indexMerges();
+  List<int> _indexMerges() {
+    final ends = List.filled(merges.length, -1);
+    int build(int lo, int hi) {
+      if (lo >= hi) return -1;
+      final mid = (lo + hi) ~/ 2;
+      return ends[mid] = math.max(
+        merges[_mergeOrder[mid]].endRow,
+        math.max(build(lo, mid), build(mid + 1, hi)),
+      );
     }
-    return null;
+
+    build(0, merges.length);
+    return ends;
+  }
+
+  /// Inclusive bounds, in original document order. Preserve first-match
+  /// behavior even for overlapping imported merges and anchors outside view.
+  List<GridMerge> mergesIn(GridBounds bounds) {
+    final found = <int>[];
+    void visit(int lo, int hi) {
+      if (lo >= hi) return;
+      final mid = (lo + hi) ~/ 2;
+      if (_mergeEnds[mid] < bounds.row) return;
+      final id = _mergeOrder[mid], merge = merges[id];
+      visit(lo, mid);
+      if (merge.row > bounds.endRow) return;
+      if (merge.endRow >= bounds.row &&
+          merge.column <= bounds.endColumn &&
+          merge.endColumn >= bounds.column) {
+        found.add(id);
+      }
+      visit(mid + 1, hi);
+    }
+
+    visit(0, merges.length);
+    found.sort();
+    return [for (final id in found) merges[id]];
+  }
+
+  GridMerge? mergeAt(int row, int column) {
+    if (merges.isEmpty) return null;
+    if (merges.first.contains(row, column)) return merges.first;
+    return mergesIn(GridBounds(row, column, row, column)).firstOrNull;
   }
 }

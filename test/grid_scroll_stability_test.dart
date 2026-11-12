@@ -184,11 +184,17 @@ void main() {
       final backend = WindowGrid();
       await grid.open(tester, backend);
       final v = viewport(tester);
+      final layout = v.widget.layout;
       for (final at in [(200, 30), (0, 30), (200, 0)]) {
         v.goToCell(at.$1, at.$2);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 80));
         await tester.pumpAndSettle();
+        expect(
+          v.widget.layout,
+          same(layout),
+          reason: 'Read windows retain immutable geometry and its merge index',
+        );
         expect(
           find.descendant(
             of: find.byKey(
@@ -293,6 +299,7 @@ void main() {
       final gate = Completer<void>();
       backend.nextRead = gate;
       final v = viewport(tester);
+      final beforeLayout = v.widget.layout;
       v.goToCell(400, 30);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 80));
@@ -303,6 +310,11 @@ void main() {
       await tester.pump();
       gate.complete();
       await tester.pumpAndSettle();
+      expect(
+        v.widget.layout,
+        isNot(same(beforeLayout)),
+        reason: 'Edits invalidate geometry before late old reads arrive',
+      );
       final cell = find.byKey(const ValueKey('grid-cell-A1'));
       expect(
         find.descendant(of: cell, matching: find.text('updated A1')),
