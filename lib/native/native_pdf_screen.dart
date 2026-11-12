@@ -293,7 +293,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   int selected = 0;
   bool busy = false, changed = false;
   late final PdfPageRenderer _pageRenderer =
-      widget.renderer ?? createPdfPageRenderer();
+      widget.renderer ?? createPdfPageRenderer(storage: widget.storage);
   int? _session;
   final Map<int, Future<Uint8List>> _thumbnailImages = {};
   final Map<int, Future<Uint8List>> _pageImages = {};

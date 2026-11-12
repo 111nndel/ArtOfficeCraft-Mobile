@@ -48,3 +48,6 @@ tools/engine_api_report.txt
 # Private workbook QA must never enter the public source or APK workflow.
 integration_test/private_*.dart
 test/private_*.dart
+
+# Immutable OCR model inputs are staged and hash-checked before Flutter builds.
+assets/ocr/tessdata/

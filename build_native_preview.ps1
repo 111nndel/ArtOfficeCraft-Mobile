@@ -6,6 +6,8 @@ Push-Location $root
 try{
 & python tools/collect_rust_licenses.py
 if($LASTEXITCODE -ne 0){throw 'Rust license collection failed'}
+& python tools/stage_pdf_ocr.py
+if($LASTEXITCODE -ne 0){throw 'OCR staging failed'}
 & flutter pub get
 if($LASTEXITCODE -ne 0){throw 'pub get failed'}
 & flutter analyze

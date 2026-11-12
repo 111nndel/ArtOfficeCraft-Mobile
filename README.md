@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.48.0.**
+**Current preview — alpha 0.49.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -32,7 +32,7 @@ Spreadsheet reading windows, search batches and filter choices reuse the current
 parsed Rust workbook; edits and closing release that read model. Recent spreadsheet
 regions stay available on return trips, with read-ahead during movement and local
 selection of loaded cells. Progress overlays the grid without moving the lower controls.
-See the [0.48.0 release notes and limits](docs/release-0.48.0-alpha.1.md).
+See the [0.49.0 release notes and limits](docs/release-0.49.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
@@ -42,7 +42,7 @@ future tagged publication requires that job to pass. See
 | DOCX / WordCraft | Create/read DOCX, edit plain paragraphs directly on the page with cursor/selection, selected bold/italic/underline/font size/color and paragraph alignment/spacing/left indent; undo/redo; exact case-sensitive find/replace in text paragraphs, with run preservation; save a new copy. Tables are excluded from search. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
 | XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; edge headings with optional pinning and Go to cell inside View. Imported dimensions/hidden rows and columns/merged regions; finger-driven row/column resizing with undo/redo and saved XLSX sizes. Compact edge headings, imported shrink-to-fit and AutoSum/recalculate commands. Continuous 10–500% zoom, surrounding empty cells, exact visible-cell queries and touch inertia; no thumbnail/overview mode. Touch range handles with edge scrolling, range style/clear operations (4096 cells), named new sheets, positional undo/redo and reopening the saved active sheet are connected. Copy/paste ranges across files/sheets with rebased formulas and styles; values/formulas/formats-only modes and external TSV. Insert/delete whole rows and columns from the selected range, with adjusted references across sheets and undo/redo. Merge, merge-and-center and unmerge preserve styles and saved geometry; clearing other occupied cells requires confirmation. Structured Excel tables and array/spill ranges are excluded from merging. Charts and complex styles remain incomplete. |
 | PPTX / DeckCraft | Create/import PPTX, add/delete/reorder slides, add/edit text, undo/redo and Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
-| PDF / PDFCraft | Rust page rendering through a background worker; independent image OCR with on-device Tesseract and an Android rendering compatibility fallback; thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page or adding a searchable text layer to the saved PDF. Document-wide text search supports embedded text and OCR layers, with match navigation and a highlighted region. Forms and digital signing remain in progress. |
+| PDF / PDFCraft | Rust page rendering through a background worker; independent Rust image OCR adapter using the bundled Tesseract C API and an Android rendering compatibility fallback; thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page or adding a searchable text layer to the saved PDF. Document-wide text search supports embedded text and OCR layers, with match navigation and a highlighted region. Forms and digital signing remain in progress. |
 
 ### Architecture and current limits
 
@@ -115,6 +115,8 @@ Then from a PowerShell prompt in this repository:
     flutter build apk --debug --target-platform android-arm64
 
 The native build verifies locked source commits and refuses modified upstream checkouts. ANDROID_HOME should point to Android SDK; ANDROID_NDK_HOME is optional if Android NDK is installed under SDK/ndk.
+
+Before a manual Flutter build, run `python tools/stage_pdf_ocr.py` to prepare the pinned OCR assets and native libraries.
 
 For one-command Windows debug build: run build_native_preview.ps1. Debug APK is a development preview, not for production release. Release signing is deliberately not configured.
 

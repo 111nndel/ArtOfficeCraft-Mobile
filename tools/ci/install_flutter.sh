@@ -10,4 +10,5 @@ export PATH="$sdk/bin:$PATH"
 flutter config --no-analytics
 dart --disable-analytics
 flutter --version
+python tools/stage_pdf_ocr.py
 flutter pub get --enforce-lockfile

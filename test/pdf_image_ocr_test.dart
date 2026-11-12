@@ -1,43 +1,24 @@
-import 'dart:convert';
-
-import 'package:artofficecraft_mobile/platform/android_pdf_image_ocr.dart';
-import 'package:flutter/services.dart';
+import 'package:artofficecraft_mobile/native/pdf_page_renderer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  const channel = MethodChannel('artofficecraft/pdf_ocr');
-  final png = base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-  );
-  tearDown(
-    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null),
-  );
-
   test(
-    'OCR sends only the page PNG and preserves normalized word boxes',
-    () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            expect(call.method, 'recognizeImage');
-            expect((call.arguments as Map).keys, ['png']);
-            expect((call.arguments as Map)['png'], png);
-            return {
-              'text': ' Русский English ',
-              'words': [
-                {
-                  'text': 'Русский',
-                  'rect': [0.1, 0.2, 0.4, 0.3],
-                },
-                {
-                  'text': 'English',
-                  'rect': [0.5, 0.2, 0.9, 0.3],
-                },
-              ],
-            };
-          });
-      final result = await recognizeAndroidPdfImage(png);
+    'shared OCR result preserves Russian/English and normalized word boxes',
+    () {
+      final result = parsePdfOcrResult({
+        'text': ' Русский English ',
+        'words': [
+          {
+            'text': 'Русский',
+            'rect': [0.1, 0.2, 0.4, 0.3],
+          },
+          {
+            'text': 'English',
+            'rect': [0.5, 0.2, 0.9, 0.3],
+          },
+        ],
+      });
       expect(result.text, 'Русский English');
       expect(result.words.first.text, 'Русский');
       expect(result.words.first.rect, [0.1, 0.2, 0.4, 0.3]);
@@ -78,9 +59,7 @@ void main() {
         ],
       },
     ]) {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (_) async => response);
-      await expectLater(recognizeAndroidPdfImage(png), throwsFormatException);
+      expect(() => parsePdfOcrResult(response), throwsFormatException);
     }
   });
 }

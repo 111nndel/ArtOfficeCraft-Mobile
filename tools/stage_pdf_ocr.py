@@ -10,6 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "android" / "app" / "ocr_runtime"
+LIBRARIES = ("libtesseract.so", "libleptonica.so", "libjpeg.so", "libpngx.so")
+ABIS = ("arm64-v8a", "x86_64")
 MODELS = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/65727574dfcd264acbb0c3e07860e4e9e9b22185"
 WRAPPER = "https://raw.githubusercontent.com/adaptech-cz/Tesseract4Android/15c534717b1cb58261b58d4e4c1200c7f81f668c"
 CPP = f"{WRAPPER}/tesseract4android/src/main/cpp"
@@ -55,9 +57,13 @@ def fetch(name, url, size, digest):
     raise ValueError(f"OCR input failed hash or size verification: {name}")
 
 
+def destination(name):
+    return ROOT / name if name.startswith('assets/ocr/tessdata/') else OUTPUT / name
+
+
 def stage():
     for name, url, size, digest in FILES:
-        path = OUTPUT / name
+        path = destination(name)
         if path.is_file() and path.stat().st_size == size:
             if checked(path.read_bytes(), size, digest):
                 continue
@@ -70,16 +76,31 @@ def stage():
             os.replace(pending, path)
         finally:
             pending.unlink(missing_ok=True)
-    print("Pinned offline PDF OCR files verified")
+    # Reuse only the hash-checked native binaries, without the Java/JNI wrapper classes.
+    with zipfile.ZipFile(OUTPUT / "tesseract4android-4.9.0.aar") as archive:
+        for abi in ABIS:
+            folder = OUTPUT / "jni" / abi
+            folder.mkdir(parents=True, exist_ok=True)
+            for library in LIBRARIES:
+                data = archive.read(f"jni/{abi}/{library}")
+                target = folder / library
+                if not target.is_file() or target.read_bytes() != data:
+                    target.write_bytes(data)
+    print("Pinned native OCR libraries and Flutter model assets verified")
 
 
 def verify_apk(apk):
     with zipfile.ZipFile(apk) as archive:
         for name, _, size, digest in FILES:
-            if name.startswith("assets/") and not checked(archive.read(name), size, digest):
-                raise ValueError(f"Unexpected OCR asset in APK: {name}")
-        if "lib/arm64-v8a/libtesseract.so" not in archive.namelist():
-            raise ValueError("APK is missing the ARM64 OCR engine")
+            if name.startswith("assets/"):
+                packaged = 'assets/flutter_assets/' + name if name.startswith('assets/ocr/tessdata/') else name
+                if not checked(archive.read(packaged), size, digest):
+                    raise ValueError(f"Unexpected OCR asset in APK: {name}")
+        for library in LIBRARIES:
+            if f"lib/arm64-v8a/{library}" not in archive.namelist():
+                raise ValueError(f"APK is missing ARM64 OCR library: {library}")
+        if b'TessBaseAPI' in archive.read('classes.dex'):
+            raise ValueError('APK still includes the legacy Java OCR wrapper')
 
 
 if __name__ == "__main__":

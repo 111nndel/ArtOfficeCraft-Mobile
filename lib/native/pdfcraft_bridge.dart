@@ -76,8 +76,11 @@ final class PdfCraftBridge {
   late final _DartEdit _find = _library.lookupFunction<_NativeEdit, _DartEdit>(
     'ac_pdf_find',
   );
-  late final _DartEdit _raster = _library.lookupFunction<_NativeEdit, _DartEdit>(
-    'ac_pdf_render',
+  late final _DartEdit _raster = _library
+      .lookupFunction<_NativeEdit, _DartEdit>('ac_pdf_render');
+
+  late final _DartEdit _ocr = _library.lookupFunction<_NativeEdit, _DartEdit>(
+    'ac_image_ocr',
   );
 
   static PdfCraftBridge? tryOpen() {
@@ -155,6 +158,9 @@ final class PdfCraftBridge {
 
   Uint8List raster(Uint8List bytes, Map<String, dynamic> request) =>
       _request(bytes, request, _raster);
+
+  Uint8List recognizeImage(Uint8List png, Map<String, dynamic> options) =>
+      _request(png, options, _ocr);
 
   Uint8List _request(
     Uint8List bytes,
