@@ -176,7 +176,7 @@ fn recognize(bytes: &[u8], request: &Value) -> Result<Vec<u8>, String> {
     let api = &loaded.api;
     let handle = unsafe { (api.create)() };
     if handle.is_null() { return Err("Cannot create OCR engine".into()); }
-    let engine = Engine { handle, api };
+    let _engine = Engine { handle, api };
     // OEM_LSTM_ONLY=1; PSM_AUTO=3. Models, mode and languages match the old adapter.
     if unsafe { (api.init)(handle, models.as_ptr(), c"rus+eng".as_ptr(), 1) } != 0 { return Err("Cannot initialize offline OCR".into()); }
     unsafe {
