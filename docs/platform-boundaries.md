@@ -11,7 +11,7 @@ operations do not establish that the entire UI works on another OS.
 | Native core | `openNativeCore`, `DocumentBackend` | Bundled Rust library, ABI 1; ordered Dart isolates |
 | Open/export | `DocumentFiles` | Existing Android/iOS file-dialog plugin, isolated in `lib/platform/document_files.dart` |
 | Storage | `ApplicationStorage` | Shared Dart files; Android supplies its private directory and reads legacy preferences |
-| PDF display/OCR | `PdfPageRenderer`, `PdfImageOcr` | Rust worker renderer; lazy Android compatibility; independent page-image OCR channel |
+| PDF display/OCR | `PdfPageRenderer`, `PdfImageOcr` | Rust worker renderer; lazy Android compatibility; Rust/C API image OCR worker |
 | Spreadsheet clipboard | `SystemClipboard`, `GridClipboard` | Android identity-bearing clipboard; Flutter text-only fallback |
 
 `ArtOfficeCraftApp` accepts storage, file, PDF-renderer and clipboard services and passes
@@ -29,14 +29,29 @@ new choices use Dart files and take precedence. The legacy preferences remain
 untouched for upgrades. Invalid modes and path-like format identifiers are rejected.
 
 `NativePdfPageRenderer` passes a bounded 1440-pixel-wide page PNG to an injectable
-`PdfImageOcr` function. A successful Rust raster does not open an Android PDF
-session for OCR. The Android image adapter decodes only bounded PNGs and invokes
-the bundled Tesseract runtime and Russian/English models on the existing worker.
-Unsupported Rust pages can still use the optional compatibility renderer before
-image recognition. Closing a document discards late raster/OCR results. A target
-can supply its own image recognizer without implementing an OS PDF renderer;
-the current packaged Tesseract adapter remains Android-specific. This step does
-not replace the C/C++ OCR runtime or establish desktop OCR support.
+`PdfImageOcr` function. The shared Dart OCR service starts an owned worker; Rust
+decodes PNGs, composites transparency on white and calls Tesseract's C API.
+A process-wide mutex bounds recognition to one native OCR engine at a time.
+The native code module remains mapped for the process lifetime so runtime-owned
+threads cannot return into unloaded code. Engine/model, text, iterator and decoder
+allocations are released on each request;
+the OCR worker drains before termination. Rendering runs on its separate worker.
+Closing a document discards late recognition results.
+
+Dart copies the pinned Russian/English Flutter model assets atomically into an
+application-owned tessdata folder, serializes concurrent preparations and repairs
+incomplete files. Android packaging includes only native binaries from the
+hash-checked OCR AAR, with no Java OCR wrapper or Kotlin OCR channel. The native
+binaries remain the Tesseract4Android build and retain their attribution and JNI
+exports; no JNI OCR entry point or Android Bitmap API is used by the new adapter.
+
+Linux CI exercises the same Rust/Dart OCR path through an AOT executable from a
+changed working directory using system Tesseract and the app's exact model files.
+It requires Russian/English text and word bounds across repeated recognition.
+Android uses the bundled Tesseract 5.5.1 runtime. The Unix and Windows loaders
+resolve only configured bundle/absolute paths; desktop/iOS OCR packaging and
+end-to-end UI remain future work. This is a portable adapter to a C/C++ OCR engine,
+not a Rust replacement for Tesseract.
 
 `GridClipboard` owns an immutable, bounded workbook snapshot in Dart and orders
 reads/writes through an injectable `SystemClipboard`. Android exports selected
@@ -73,8 +88,8 @@ FFI/worker layer, including PDF rasterization; it does not launch a Linux Flutte
 - Supply each target's application support directory and native file dialogs.
 - Implement identity-bearing desktop clipboards if rich cross-file paste is needed;
   validate them on actual desktop runners. Portable text paste is already isolated.
-- Extend Rust PDF fidelity coverage to representative files; portable OCR remains
-  platform work. Keep measuring peak memory and latency before adding dependencies.
+- Extend Rust PDF fidelity coverage to representative files and package the OCR
+  runtime/models for other targets. Keep measuring peak memory and latency.
 - Exercise desktop text input, windows, keyboard shortcuts and large-screen UI.
 
 Keep document engines pinned to reviewed source commits. Updating their source

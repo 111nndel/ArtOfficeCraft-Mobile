@@ -15,6 +15,7 @@ android {
     ndkVersion = flutter.ndkVersion
     sourceSets.named("main") {
         assets.srcDir(ocrRuntime.dir("assets"))
+        jniLibs.srcDir(ocrRuntime.dir("jni"))
     }
 
     compileOptions {
@@ -42,9 +43,6 @@ tasks.named("preBuild") {
     dependsOn(stagePdfOcr)
 }
 
-dependencies {
-    implementation(files(ocrRuntime.file("tesseract4android-4.9.0.aar")).builtBy(stagePdfOcr))
-}
 
 kotlin {
     compilerOptions {

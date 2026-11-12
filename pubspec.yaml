@@ -1,7 +1,7 @@
 name: artofficecraft_mobile
 description: "ArtOfficeCraft Mobile - offline office editors powered by Rust engines."
 publish_to: 'none'
-version: 0.48.0+55
+version: 0.49.0+56
 
 environment:
   sdk: ^3.13.7
@@ -25,3 +25,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/legal/rust-licenses.json
+    - assets/ocr/tessdata/

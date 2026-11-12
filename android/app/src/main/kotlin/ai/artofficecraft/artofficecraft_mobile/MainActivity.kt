@@ -19,7 +19,7 @@ import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
- * Android compatibility PDF rasterization and a separate page-image OCR adapter.
+ * Android compatibility PDF rasterization and thin system adapters.
  * Rust PDFCraft owns primary rasterization and document edits.
  *
  * A single worker serializes all open/render/close operations. Only one
@@ -42,7 +42,6 @@ class MainActivity : FlutterActivity() {
     }
 
     private val worker = Executors.newSingleThreadExecutor()
-    private val pdfOcr by lazy { PdfOcr(applicationContext) }
     private var active: PdfSession? = null
     private var nextId = 0
 
@@ -105,28 +104,6 @@ class MainActivity : FlutterActivity() {
                     }
                 } catch (_: Exception) {
                     result.error("CLIPBOARD_UNAVAILABLE", "Cannot access Android clipboard", null)
-                }
-            }
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/pdf_ocr")
-            .setMethodCallHandler { call, result ->
-                if (call.method != "recognizeImage") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
-                }
-                val png = call.argument<ByteArray>("png")
-                if (png == null || png.size !in 24..24 * 1024 * 1024) {
-                    result.error("BAD_ARGS", "Invalid OCR image", null)
-                    return@setMethodCallHandler
-                }
-                worker.execute {
-                    try {
-                        val output = pdfOcr.recognize(png)
-                        runOnUiThread { result.success(output) }
-                    } catch (error: Throwable) {
-                        if (error !is Exception && error !is LinkageError) throw error
-                        runOnUiThread { result.error("PDF_OCR", "Cannot recognize this image", null) }
-                    }
                 }
             }
 

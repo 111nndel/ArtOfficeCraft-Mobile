@@ -11,7 +11,7 @@ import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_page_renderer.dart';
-import 'package:artofficecraft_mobile/platform/android_pdf_image_ocr.dart';
+import 'package:artofficecraft_mobile/platform/bundled_pdf_image_ocr.dart';
 import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'package:artofficecraft_mobile/ui/editor_tools.dart';
 import 'package:artofficecraft_mobile/ui/office_theme.dart';
@@ -1031,21 +1031,34 @@ void main() {
     expect(panel(tester).undo, isNull);
   });
 
-  testWidgets('Image OCR rejects invalid and oversized images without a PDF', (
-    tester,
-  ) async {
-    const channel = MethodChannel('artofficecraft/pdf_ocr');
-    // Valid IHDR checksum: reject its width before allocating the raster.
-    final huge = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgABhqAAAAABCAQAAAD3d95eAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    );
-    for (final png in [Uint8List(24), huge, Uint8List(24 * 1024 * 1024 + 1)]) {
-      await expectLater(
-        channel.invokeMethod<Object?>('recognizeImage', {'png': png}),
-        throwsA(isA<PlatformException>()),
+  testWidgets(
+    'Rust image OCR rejects unsafe images and recognizes a blank page',
+    (tester) async {
+      final ocr = bundledPdfImageOcr(const AndroidApplicationStorage());
+      // Valid IHDR checksum: reject its width before allocating the raster.
+      final huge = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgABhqAAAAABCAQAAAD3d95eAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
       );
-    }
-  });
+      for (final png in [
+        Uint8List(24),
+        huge,
+        Uint8List(24 * 1024 * 1024 + 1),
+      ]) {
+        await expectLater(ocr.recognize(png), throwsFormatException);
+      }
+      final backend = NativeDocumentBackend(NativeDocumentKind.pdf);
+      addTearDown(backend.close);
+      final renderer = NativePdfPageRenderer(recognizeImage: ocr.recognize);
+      final session = await renderer.open(await backend.create());
+      try {
+        final empty = await renderer.recognize(session, 0);
+        expect(empty.text, isEmpty);
+        expect(empty.words, isEmpty);
+      } finally {
+        await renderer.close(session);
+      }
+    },
+  );
 
   testWidgets(
     'Rust-only page OCR copies and saves searchable text over the same image',
@@ -1055,7 +1068,8 @@ void main() {
       final bytes = await scanFixture();
       // No Android PDF fallback: both viewing and OCR must use real Rust rasters.
       final renderer = NativePdfPageRenderer(
-        recognizeImage: recognizeAndroidPdfImage,
+        recognizeImage: bundledPdfImageOcr(const AndroidApplicationStorage())
+            .recognize,
       );
       expect((await backend.pdfTextBlocks(bytes, 0)).blocks, isEmpty);
       await present(
