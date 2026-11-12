@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import '../lib/native/grid_layout.dart';
+import 'package:artofficecraft_mobile/native/grid_layout.dart';
 
 // Compare the previous linear scan with the exact same merge snapshot/queries.
 // Timings are evidence, never a threshold or a claim about phone frame time.
