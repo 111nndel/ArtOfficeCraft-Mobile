@@ -32,7 +32,9 @@ untouched for upgrades. Invalid modes and path-like format identifiers are rejec
 `PdfImageOcr` function. The shared Dart OCR service starts an owned worker; Rust
 decodes PNGs, composites transparency on white and calls Tesseract's C API.
 A process-wide mutex bounds recognition to one native OCR engine at a time.
-Engine/model, text, iterator and decoder allocations are released on each request;
+The native code module remains mapped for the process lifetime so runtime-owned
+threads cannot return into unloaded code. Engine/model, text, iterator and decoder
+allocations are released on each request;
 the OCR worker drains before termination. Rendering runs on its separate worker.
 Closing a document discards late recognition results.
 

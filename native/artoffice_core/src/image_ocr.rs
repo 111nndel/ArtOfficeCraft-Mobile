@@ -6,10 +6,16 @@ use super::{AcResult, decode, protect};
 
 const MAX_IMAGE: usize = 24 * 1024 * 1024;
 const MAX_TEXT: usize = 64 * 1024;
-static OCR: Mutex<()> = Mutex::new(());
+// Tesseract/OpenMP may retain runtime threads beyond an engine's destruction.
+// Keep one code module resident; release every per-request engine and image.
+struct Runtime { path: String, api: Api }
+static OCR: Mutex<Option<Runtime>> = Mutex::new(None);
 type Handle = *mut c_void;
 
 struct Library(Handle);
+// OS loader handles can move between threads; all API use is serialized by OCR.
+// No per-engine state is stored in this handle or shared across calls.
+unsafe impl Send for Library {}
 impl Library {
     fn open(path: &str) -> Result<Self, String> {
         if !Path::new(path).is_absolute() && !(cfg!(target_os="android") && path == "libtesseract.so") {
@@ -91,9 +97,9 @@ api! {
     word: "TessResultIteratorGetUTF8Text" => unsafe extern "C" fn(Handle, c_int) -> *mut c_char,
     bounds: "TessPageIteratorBoundingBox" => unsafe extern "C" fn(Handle, c_int, *mut c_int, *mut c_int, *mut c_int, *mut c_int) -> c_int,
 }
-struct Engine { handle: Handle, api: Api }
-impl Drop for Engine {
-    // Delete the engine before dropping the library containing its destructor.
+struct Engine<'a> { handle: Handle, api: &'a Api }
+impl Drop for Engine<'_> {
+    // The pinned module outlives every engine and its runtime-owned worker threads.
     fn drop(&mut self) { unsafe { (self.api.delete)(self.handle); } }
 }
 struct Iterator<'a> { handle: Handle, api: &'a Api }
@@ -152,7 +158,7 @@ fn pixels(bytes: &[u8]) -> Result<(Vec<u8>, i32, i32, i32), String> {
 }
 
 fn recognize(bytes: &[u8], request: &Value) -> Result<Vec<u8>, String> {
-    let _serial = OCR.lock().unwrap_or_else(|p| p.into_inner());
+    let mut runtime = OCR.lock().unwrap_or_else(|p| p.into_inner());
     // Decode and validate before loading native code or initializing OCR models.
     let (image,w,h,channels) = pixels(bytes)?;
     let path = request["models"].as_str().ok_or("Missing OCR model directory")?;
@@ -163,11 +169,14 @@ fn recognize(bytes: &[u8], request: &Value) -> Result<Vec<u8>, String> {
         }
     }
     let models = CString::new(path).map_err(|_| "Invalid OCR model directory")?;
-    let api = Api::load(request["library"].as_str().ok_or("Missing bundled OCR library")?)?;
+    let library = request["library"].as_str().ok_or("Missing bundled OCR library")?;
+    if runtime.is_none() { *runtime = Some(Runtime { path: library.to_owned(), api: Api::load(library)? }); }
+    let loaded = runtime.as_ref().unwrap();
+    if loaded.path != library { return Err("OCR runtime is already configured for another library".into()); }
+    let api = &loaded.api;
     let handle = unsafe { (api.create)() };
     if handle.is_null() { return Err("Cannot create OCR engine".into()); }
     let engine = Engine { handle, api };
-    let api = &engine.api;
     // OEM_LSTM_ONLY=1; PSM_AUTO=3. Models, mode and languages match the old adapter.
     if unsafe { (api.init)(handle, models.as_ptr(), c"rus+eng".as_ptr(), 1) } != 0 { return Err("Cannot initialize offline OCR".into()); }
     unsafe {
@@ -197,7 +206,7 @@ fn recognize(bytes: &[u8], request: &Value) -> Result<Vec<u8>, String> {
             if unsafe { (api.next)(iterator.handle,3) } == 0 { break; }
         }
     }
-    // Engine, iterator, text, image and library ownership all end within this call.
+    // Engine/model, iterator, text and image ownership end here. Code stays mapped.
     serde_json::to_vec(&json!({"text":text,"words":words})).map_err(|e|e.to_string())
 }
 

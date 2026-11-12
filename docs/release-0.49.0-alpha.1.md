@@ -8,7 +8,8 @@
 - Rust owns bounded PNG decoding, white transparency compositing, Russian/English
   recognition and normalized word/line bounds. A separate OCR worker keeps PDF
   rendering independent and drains native calls before termination.
-- Tesseract engines, iterators, result strings and image memory are released after
+- The native code module stays loaded for runtime thread safety. Tesseract engines,
+  iterators, result strings and image memory are released after
   every request. Concurrent calls are serialized to bound native OCR memory.
 - Dart stages the same offline model assets into app-owned storage, reuses valid
   copies and repairs incomplete files with ordered atomic writes.

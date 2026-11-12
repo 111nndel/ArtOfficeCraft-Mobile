@@ -25,7 +25,7 @@ Future<void> main(List<String> args) async {
       library: args[0],
       models: () async => args[1],
     );
-    for (var i = 0; i < 2; i++) {
+    for (var i = 0; i < 6; i++) {
       final result = await ocr.recognize(png);
       if (!result.text.contains('ПРОВЕРКА ТЕКСТА') ||
           !result.text.contains('OFFLINE TEST') ||
