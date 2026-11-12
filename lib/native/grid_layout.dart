@@ -237,6 +237,9 @@ class GridLayout {
     return [for (final id in found) merges[id]];
   }
 
-  GridMerge? mergeAt(int row, int column) =>
-      mergesIn(GridBounds(row, column, row, column)).firstOrNull;
+  GridMerge? mergeAt(int row, int column) {
+    if (merges.isEmpty) return null;
+    if (merges.first.contains(row, column)) return merges.first;
+    return mergesIn(GridBounds(row, column, row, column)).firstOrNull;
+  }
 }
