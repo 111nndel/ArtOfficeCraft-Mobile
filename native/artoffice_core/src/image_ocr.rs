@@ -136,6 +136,9 @@ fn pixels(bytes: &[u8]) -> Result<(Vec<u8>, i32, i32, i32), String> {
     let info = reader.next_frame(&mut buffer).map_err(|e| format!("Invalid OCR pixels: {e}"))?;
     buffer.truncate(info.buffer_size());
     let channels = match info.color_type { png::ColorType::Grayscale => 1, png::ColorType::Rgb => 3, png::ColorType::GrayscaleAlpha => 2, png::ColorType::Rgba => 4, _ => return Err("Unsupported OCR PNG colour".into()) };
+    if info.width != w || info.height != h || info.bit_depth != png::BitDepth::Eight || buffer.len() != w as usize*h as usize*channels {
+        return Err("OCR PNG frame geometry does not match its pixel buffer".into());
+    }
     if channels == 1 || channels == 3 { return Ok((buffer,w as i32,h as i32,channels as i32)); }
     let mut rgb = Vec::with_capacity(w as usize*h as usize*3);
     for p in buffer.chunks_exact(channels) {
