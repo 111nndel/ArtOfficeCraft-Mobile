@@ -12,10 +12,14 @@ class GridCellsPainter extends CustomPainter {
     this.selected, {
     required this.viewport,
     required this.scale,
-  });
+    GridAxis? rows,
+    GridAxis? columns,
+  }) : rows = rows ?? layout.rows,
+       columns = columns ?? layout.columns;
   final Rect viewport;
   final double scale;
   final GridLayout layout;
+  final GridAxis rows, columns;
   final Map<String, dynamic> cells;
   final String selected;
 
@@ -26,13 +30,15 @@ class GridCellsPainter extends CustomPainter {
     return Color(0xff000000 | int.parse(value.substring(1), radix: 16));
   }
 
-  Rect cellRect(int row, int column) {
-    final merge = layout.mergeAt(row, column);
+  Rect cellRect(int row, int column) =>
+      _cellRect(row, column, layout.mergeAt(row, column));
+
+  Rect _cellRect(int row, int column, GridMerge? merge) {
     return Rect.fromLTRB(
-      layout.columns.offset(merge?.column ?? column),
-      layout.rows.offset(merge?.row ?? row),
-      layout.columns.offset((merge?.endColumn ?? column) + 1),
-      layout.rows.offset((merge?.endRow ?? row) + 1),
+      columns.offset(merge?.column ?? column),
+      rows.offset(merge?.row ?? row),
+      columns.offset((merge?.endColumn ?? column) + 1),
+      rows.offset((merge?.endRow ?? row) + 1),
     );
   }
 
@@ -48,24 +54,24 @@ class GridCellsPainter extends CustomPainter {
       final grid = Paint()
         ..color = const Color(0xffe5e9ef)
         ..strokeWidth = .7 / scale;
-      for (final row in layout.rows.visible(
+      for (final row in rows.visible(
         viewport.top,
         viewport.bottom,
         buffer: 0,
       )) {
-        final y = layout.rows.offset(row);
+        final y = rows.offset(row);
         canvas.drawLine(
           Offset(viewport.left, y),
           Offset(viewport.right, y),
           grid,
         );
       }
-      for (final column in layout.columns.visible(
+      for (final column in columns.visible(
         viewport.left,
         viewport.right,
         buffer: 0,
       )) {
-        final x = layout.columns.offset(column);
+        final x = columns.offset(column);
         canvas.drawLine(
           Offset(x, viewport.top),
           Offset(x, viewport.bottom),
@@ -74,8 +80,16 @@ class GridCellsPainter extends CustomPainter {
       }
     }
     // Clear interior gridlines of merges, including empty merge anchors.
-    for (final merge in layout.merges) {
-      final rect = cellRect(merge.row, merge.column);
+    final visibleMerges = layout.mergesIn(
+      GridBounds(
+        rows.indexAt(viewport.top),
+        columns.indexAt(viewport.left),
+        rows.indexAt(viewport.bottom),
+        columns.indexAt(viewport.right),
+      ),
+    );
+    for (final merge in visibleMerges) {
+      final rect = _cellRect(merge.row, merge.column, merge);
       if (!rect.overlaps(viewport)) continue;
       canvas.drawRect(rect, Paint()..color = Colors.white);
       if (layout.showGridlines) {
@@ -98,7 +112,7 @@ class GridCellsPainter extends CustomPainter {
           continue;
         }
         final item = entry.value as Map;
-        final rect = cellRect(at.row, at.column);
+        final rect = _cellRect(at.row, at.column, merge);
         if (rect.isEmpty || !rect.overlaps(viewport)) continue;
         final style = item['style'] as Map? ?? const {};
         fill.color = rgb(style['fill']) ?? Colors.white;
@@ -202,6 +216,8 @@ class GridCellsPainter extends CustomPainter {
   @override
   bool shouldRepaint(GridCellsPainter old) =>
       !identical(layout, old.layout) ||
+      !identical(rows, old.rows) ||
+      !identical(columns, old.columns) ||
       !identical(cells, old.cells) ||
       selected != old.selected ||
       viewport != old.viewport ||

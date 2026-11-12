@@ -61,6 +61,8 @@ jobs:
           dart compile exe tools/smoke_native_workers.dart -o build/host-smoke/native-workers
           dart compile exe tools/benchmark_word_index.dart -o build/host-smoke/word-index
           build/host-smoke/word-index build/native-candidate/word-index-benchmark.json
+          dart compile exe tools/benchmark_grid_merges.dart -o build/host-smoke/grid-merges
+          build/host-smoke/grid-merges build/native-candidate/grid-merge-benchmark.json
           sudo apt-get update -qq
           sudo apt-get install -y libtesseract5
           ocr_library="$(ldconfig -p | awk '/libtesseract.so.5 / && !found {print $NF; found=1}')"

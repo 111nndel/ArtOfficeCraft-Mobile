@@ -70,6 +70,83 @@ void main() {
     },
   );
   testWidgets(
+    'Compact merge anchors survive clipping, hidden rows and resize preview axes',
+    (tester) async {
+      final boundary = GlobalKey();
+      final layout = GridLayout(
+        GridAxis(1048576, 20, [
+          [0, 0, 0],
+        ]),
+        GridAxis(16384, 40),
+        [
+          for (var i = 0; i < 2000; i++)
+            GridMerge(100 + i * 5, 3, 101 + i * 5, 4),
+          const GridMerge(0, 0, 2, 2),
+        ],
+        showGridlines: false,
+      );
+      const cells = {
+        'A1': {
+          'display': '',
+          'style': {'fill': '#225599'},
+        },
+        'B2': {
+          'display': '',
+          'style': {'fill': '#FFFFFF'},
+        },
+      };
+      const viewport = Rect.fromLTWH(40, 20, 60, 20);
+      final before = GridCellsPainter(
+        layout,
+        cells,
+        '',
+        viewport: viewport,
+        scale: .25,
+      );
+      final preview = GridCellsPainter(
+        layout,
+        cells,
+        '',
+        viewport: viewport,
+        scale: .25,
+        rows: layout.rows.resized(1, 30),
+        columns: layout.columns.resized(0, 60),
+      );
+      expect(before.cellRect(2, 2), const Rect.fromLTWH(0, 0, 120, 40));
+      expect(preview.cellRect(2, 2), const Rect.fromLTWH(0, 0, 140, 50));
+      expect(preview.shouldRepaint(before), isTrue);
+      expect(preview.layout, same(before.layout));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: RepaintBoundary(
+              key: boundary,
+              child: CustomPaint(size: viewport.size, painter: preview),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        final image =
+            await (boundary.currentContext!.findRenderObject()
+                    as RenderRepaintBoundary)
+                .toImage();
+        final pixels = (await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        ))!;
+        final offset = (10 * 60 + 30) * 4;
+        expect(List.generate(3, (i) => pixels.getUint8(offset + i)), [
+          0x22,
+          0x55,
+          0x99,
+        ]);
+        image.dispose();
+      });
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
     'Reduced zoom keeps empty grid editable and never centers or changes zoom on tap',
     (tester) async {
       tester.view.physicalSize = const Size(393, 700);

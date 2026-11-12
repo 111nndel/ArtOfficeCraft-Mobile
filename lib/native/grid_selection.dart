@@ -39,10 +39,7 @@ class GridSelection extends GridBounds {
     var changed = true;
     while (changed) {
       changed = false;
-      for (final m in layout.merges) {
-        if (m.row > c || m.endRow < a || m.column > d || m.endColumn < b) {
-          continue;
-        }
+      for (final m in layout.mergesIn(GridBounds(a, b, c, d))) {
         final na = math.min(a, m.row),
             nb = math.min(b, m.column),
             nc = math.max(c, m.endRow),
