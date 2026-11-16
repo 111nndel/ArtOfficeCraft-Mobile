@@ -41,10 +41,15 @@ class IncomingDocuments(private val activity: Activity, messenger: BinaryMesseng
 
     @Suppress("DEPRECATION")
     fun accept(intent: Intent?) {
-        val uri: Uri? = when (intent?.action) {
-            Intent.ACTION_VIEW -> intent.data
-            Intent.ACTION_SEND -> intent.getParcelableExtra(Intent.EXTRA_STREAM)
-            else -> null
+        val uri: Uri? = try {
+            when (intent?.action) {
+                Intent.ACTION_VIEW -> intent.data
+                Intent.ACTION_SEND -> intent.getParcelableExtra<android.os.Parcelable>(Intent.EXTRA_STREAM) as? Uri
+                else -> null
+            }
+        } catch (_: Exception) {
+            channel.invokeMethod("error", "Invalid incoming document URI")
+            return
         }
         if (uri == null) return
         if (pending.size >= 8) {
