@@ -488,32 +488,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
         ],
       ),
-      if (_selecting) ...[
-        const SizedBox(height: 8),
-        UiText('Выбрано: ${_selected.length}'),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            TextButton(
-              onPressed: _historyBusy ? null : () => setState(_endSelection),
-              child: const UiText('Отмена выбора'),
-            ),
-            TextButton(
-              onPressed: _historyBusy ? null : () => setState(() {
-                _selected.addAll(_visibleFiles.map((f) => f.id));
-              }),
-              child: const UiText('Выбрать все'),
-            ),
-            TextButton.icon(
-              onPressed: _historyBusy || _selected.isEmpty
-                  ? null : () => _removeRecents(_selected),
-              icon: const Icon(Icons.playlist_remove),
-              label: const UiText('Убрать из недавних'),
-            ),
-          ],
-        ),
-      ],
     ],
   );
 
@@ -525,7 +499,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,
-        title: Row(
+        title: _selecting
+            ? Semantics(
+                label: tr(context, 'Выбрано: ${_selected.length}'),
+                excludeSemantics: true,
+                child: Text(
+                  '${_selected.length}',
+                  key: const ValueKey('recent-selection-count'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              )
+            : Row(
           children: [
             Container(
               width: 36,
@@ -560,6 +545,26 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          if (_selecting) ...[
+            IconButton(
+              tooltip: tr(context, 'Отмена выбора'),
+              onPressed: _historyBusy ? null : () => setState(_endSelection),
+              icon: const Icon(Icons.close),
+            ),
+            IconButton(
+              tooltip: tr(context, 'Выбрать все'),
+              onPressed: _historyBusy ? null : () => setState(() {
+                _selected.addAll(_visibleFiles.map((f) => f.id));
+              }),
+              icon: const Icon(Icons.select_all),
+            ),
+            IconButton(
+              tooltip: tr(context, 'Убрать из недавних'),
+              onPressed: _historyBusy || _selected.isEmpty
+                  ? null : () => _removeRecents(_selected),
+              icon: const Icon(Icons.playlist_remove),
+            ),
+          ] else ...[
           IconButton(
             tooltip: tr(context, 'О проекте и лицензиях'),
             icon: const Icon(Icons.info_outline),
@@ -578,6 +583,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   : Icons.dark_mode_outlined,
             ),
           ),
+          ],
           const SizedBox(width: 8),
         ],
       ),

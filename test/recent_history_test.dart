@@ -146,11 +146,11 @@ void main() {
       await tester.tap(find.widgetWithText(ChoiceChip, 'Документ'));
       await tester.pumpAndSettle();
       await historyAction(tester, 'Выбрать документы');
-      await reveal(tester, find.text('Выбрать все'));
-      await tester.tap(find.text('Выбрать все'));
+      await reveal(tester, find.byTooltip('Выбрать все'));
+      await tester.tap(find.byTooltip('Выбрать все'));
       await tester.pumpAndSettle();
-      expect(find.text('Выбрано: 1'), findsOneWidget);
-      await historyTap(tester, store, find.text('Убрать из недавних'));
+      expect(tester.widget<Text>(find.byKey(const ValueKey('recent-selection-count'))).data, '1');
+      await historyTap(tester, store, find.byTooltip('Убрать из недавних'));
       await tester.pumpAndSettle();
       expect(store.files.singleWhere((f) => f.id == word.id).recent, isFalse);
       expect(store.files.singleWhere((f) => f.id == grid.id).recent, isTrue);
@@ -183,11 +183,11 @@ void main() {
           await tester.tap(find.text(language == 'en'
               ? 'Select documents' : 'Выбрать документы'));
           await tester.pumpAndSettle();
-          final all = find.text(language == 'en' ? 'Select all' : 'Выбрать все');
+          final all = find.byTooltip(language == 'en' ? 'Select all' : 'Выбрать все');
           await reveal(tester, all);
           await tester.tap(all);
           await tester.pumpAndSettle();
-          expect(find.text(language == 'en' ? 'Selected: 2' : 'Выбрано: 2'), findsOneWidget);
+          expect(tester.widget<Text>(find.byKey(const ValueKey('recent-selection-count'))).data, '2');
           expect(tester.takeException(), isNull);
         },
       );
