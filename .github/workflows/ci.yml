@@ -79,7 +79,7 @@ jobs:
           retention-days: 7
 
   android:
-    name: Offline ARM64 APK
+    name: ARM64 release APK
     needs: [flutter, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -177,6 +177,7 @@ jobs:
             build/android-qa/
             build/grid-touch-import-018/
             build/recents-021/
+            build/app-update-qa/
           if-no-files-found: warn
           retention-days: 7
 
@@ -278,7 +279,13 @@ jobs:
             echo 'Public APK allows Android debugging'; exit 1
           fi
           "$bt/aapt" dump permissions "$apk" > deliver/permissions.txt
-          if grep -Eq 'android.permission.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)' deliver/permissions.txt; then exit 1; fi
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          permissions = Path('deliver/permissions.txt').read_text()
+          names = set(re.findall(r"uses-permission(?:-sdk-23)?: name='(android\.permission\.[^']+)'", permissions))
+          assert names == {'android.permission.INTERNET', 'android.permission.REQUEST_INSTALL_PACKAGES'}
+          PY
           python - <<'PY'
           import hashlib, json, os, zipfile
           from pathlib import Path

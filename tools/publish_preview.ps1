@@ -24,8 +24,10 @@ try {
         Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
     $permissions = & (Join-Path $buildTools 'aapt.exe') dump permissions $apk
     if ($LASTEXITCODE -ne 0) {throw 'Could not inspect Android permissions'}
-    if (($permissions -join "`n") -match 'android.permission.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)') {
-        throw 'Offline policy violated: network permission in final APK'
+    $androidPermissions = [regex]::Matches(($permissions -join "`n"), "uses-permission(?:-sdk-23)?: name='(android\.permission\.[^']+)'") |
+        ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+    if (($androidPermissions -join ',') -ne 'android.permission.INTERNET,android.permission.REQUEST_INSTALL_PACKAGES') {
+        throw 'Only updater Internet and package-installer permissions are allowed'
     }
     $badging = & (Join-Path $buildTools 'aapt.exe') dump badging $apk
     if ($LASTEXITCODE -ne 0 -or $badging -contains 'application-debuggable') {
@@ -59,7 +61,10 @@ try {
     $manifest = Join-Path $folder 'build-info.json'
     @{
         sourceCommit=$Commit; tag=$Tag; apk=(Split-Path $apk -Leaf); sha256=$hash;
-        signing='development debug certificate'; offlinePermissionsVerified=$true;
+        signing='existing development certificate'; updatePermissionsVerified=$true; documentProcessing='local';
+        signingCertificateSha256='4e16cc21d19cdcde840361cd34fbdcfbf901b48c6f8ff66ef473e7ddf4a05005';
+        version=([regex]::Match(($badging -join "`n"), "versionName='([^']+)'").Groups[1].Value);
+        versionCode=[int]([regex]::Match(($badging -join "`n"), "versionCode='([0-9]+)'").Groups[1].Value);
         engines=(Get-Content upstream/engines.lock.json -Raw | ConvertFrom-Json).engines
     } | ConvertTo-Json -Depth 8 | Set-Content $manifest -Encoding UTF8
     & $Gh release create $Tag --repo $repo --target $Commit --draft --prerelease `

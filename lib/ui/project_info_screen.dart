@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../native/native_build_info.dart';
+import '../updates/app_updates.dart';
+import 'update_panel.dart';
 
 void registerRustLicenses() {
   LicenseRegistry.addLicense(() async* {
@@ -25,13 +27,27 @@ void registerRustLicenses() {
 }
 
 class ProjectInfoScreen extends StatefulWidget {
-  const ProjectInfoScreen({super.key});
+  const ProjectInfoScreen({super.key, this.updates});
+  final AppUpdates? updates;
   @override
   State<ProjectInfoScreen> createState() => _ProjectInfoScreenState();
 }
 
 class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
   late final Future<Map<String, dynamic>?> info = readNativeBuildInfo();
+  late final updates = widget.updates ?? AppUpdates();
+  @override
+  void initState() {
+    super.initState();
+    if (widget.updates == null) updates.load();
+  }
+
+  @override
+  void dispose() {
+    if (widget.updates == null) updates.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const UiText('О проекте и движках')),
@@ -43,7 +59,7 @@ class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        const UiText('0.40.0 · тестовая версия'),
+        Text('${appBuildName ?? 'dev'} · ${tr(context, 'Тестовая версия')}'),
         const SizedBox(height: 20),
         if (LanguageScope.maybeOf(context) case final settings?)
           DropdownButtonFormField<String>(
@@ -75,9 +91,11 @@ class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
             },
           ),
         const UiText(
-          'Независимый Android-порт с использованием четырёх открытых движков. '
-          'Возможности мобильных редакторов пока ограничены. Полная совместимость с настольными приложениями не заявляется.',
+          'Независимый офисный редактор на Flutter и Rust: DOCX, XLSX, PPTX и PDF. '
+          'Редактирование, поиск, локальный OCR и открытие файлов из других приложений. '
+          'Полная совместимость со всеми возможностями настольных редакторов пока не заявляется.',
         ),
+        UpdatePanel(updates: updates),
         const SizedBox(height: 20),
         const UiSelectableText(
           'Исходники:\nhttps://github.com/111nndel/ArtOfficeCraft-Mobile',
@@ -122,7 +140,7 @@ class _ProjectInfoScreenState extends State<ProjectInfoScreen> {
           onPressed: () => showLicensePage(
             context: context,
             applicationName: 'ArtOfficeCraft Mobile',
-            applicationVersion: '0.40.0',
+            applicationVersion: appBuildName,
           ),
           icon: const Icon(Icons.description_outlined),
           label: const UiText('Лицензии и авторские права'),

@@ -49,10 +49,14 @@ class AndroidChecksTests(unittest.TestCase):
             logcat.terminate.assert_called_once()
 
     def test_bad_permissions_and_fake_images_cannot_be_reported_as_verified(self):
-        for name in ['INTERNET', 'ACCESS_WIFI_STATE', 'ACCESS_NETWORK_STATE']:
-            with self.assertRaises(RuntimeError):
-                qa.verify_offline(f"uses-permission: name='android.permission.{name}'")
-        qa.verify_offline("uses-permission: name='app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'")
+        allowed = "uses-permission: name='android.permission.INTERNET'\nuses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'\n"
+        for name in ['ACCESS_WIFI_STATE', 'ACCESS_NETWORK_STATE', 'MANAGE_EXTERNAL_STORAGE']:
+            with self.assertRaises(ValueError):
+                qa.verify_update_permissions(allowed + f"uses-permission: name='android.permission.{name}'")
+        for missing in ['INTERNET', 'REQUEST_INSTALL_PACKAGES']:
+            with self.assertRaises(ValueError):
+                qa.verify_update_permissions(f"uses-permission: name='android.permission.{missing}'")
+        qa.verify_update_permissions(allowed + "uses-permission: name='app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'")
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             with self.assertRaises(RuntimeError):

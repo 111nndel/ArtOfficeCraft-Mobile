@@ -3,8 +3,7 @@ const english = <String, String>{
   "Перед текущим абзацем": "Before current paragraph",
   "После текущего абзаца": "After current paragraph",
   "В конце документа": "At document end",
-  "Не удалось открыть переданный файл. Поддерживаются DOCX, XLSX, PPTX и PDF до 64 МБ.":
-      "Could not open the incoming file. Supported: DOCX, XLSX, PPTX and PDF up to 64 MB.",
+  "Не удалось открыть переданный файл. Поддерживаются DOCX, XLSX, PPTX и PDF до 64 МБ.": "Could not open the incoming file. Supported: DOCX, XLSX, PPTX and PDF up to 64 MB.",
   "Объединение и разъединение недоступны внутри таблицы Excel":
       "Merge and unmerge are unavailable inside an Excel table",
   "Выделите минимум две ячейки для объединения.":
@@ -655,4 +654,32 @@ const english = <String, String>{
   "Вставляемый диапазон выходит за границы листа":
       "The pasted range exceeds the sheet bounds",
   "Данные вставлены": "Data pasted",
+  "Тестовая версия": "Preview",
+  "Независимый офисный редактор на Flutter и Rust: DOCX, XLSX, PPTX и PDF. Редактирование, поиск, локальный OCR и открытие файлов из других приложений. Полная совместимость со всеми возможностями настольных редакторов пока не заявляется.": "An independent office editor built with Flutter and Rust: DOCX, XLSX, PPTX and PDF. Editing, search, local OCR and opening files from other apps. Full compatibility with every desktop editor feature is not yet claimed.",
+  "Обновления приложения": "App updates",
+  "Режим обновления": "Update mode",
+  "Вручную": "Manually",
+  "Автоматически": "Automatically",
+  "Проверка и скачивание при запуске и возврате в приложение, не чаще раза в сутки.": "Check and download when opening or returning to the app, at most once a day.",
+  "Приложение обращается к GitHub только по кнопке проверки или скачивания.":
+      "The app contacts GitHub only when you check or download an update.",
+  "Проверяем обновления…": "Checking for updates…",
+  "Доступна версия {0}": "Version {0} is available",
+  "Скачивание: {0}%": "Downloading: {0}%",
+  "Версия {0} готова к установке": "Version {0} is ready to install",
+  "Не удалось проверить или скачать обновление. Повторите попытку позже.":
+      "Could not check or download the update. Try again later.",
+  "Установлена актуальная версия.": "Your app is up to date.",
+  "Обновления с GitHub Releases": "Updates from GitHub Releases",
+  "APK-обновления доступны для Android ARM64.":
+      "APK updates are available for Android ARM64.",
+  "Не удалось сохранить режим обновления. Выбор действует до закрытия приложения.":
+      "Could not save the update mode. This choice lasts until the app closes.",
+  "Проверить обновления": "Check for updates",
+  "Скачать обновление": "Download update",
+  "Установить": "Install",
+  "Разрешите установку из ArtOfficeCraft в настройках Android, затем нажмите «Установить» ещё раз.": "Allow installs from ArtOfficeCraft in Android settings, then tap Install again.",
+  "Установка подтверждается в системном окне Android. Документы обрабатываются локально и не отправляются на сервер.": "Installation is confirmed in Android’s system dialog. Documents are processed locally and are not sent to a server.",
+  "Обновление готово к установке": "An update is ready to install",
+  "Открыть": "Open",
 };
