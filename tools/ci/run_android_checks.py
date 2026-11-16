@@ -246,6 +246,7 @@ def checks(device, output):
                 output / 'zipalign.txt')
             run(['node', 'tools/test_recent_imports.js', device, signed_baseline, signed],
                 output / 'test_recent_imports.log', timeout=600)
+            print((ROOT / 'build/recents-021/result.json').read_text(), flush=True)
             run(['node', 'tools/test_grid_touch_import.js', device, signed],
                 output / 'test_grid_touch_import.log', timeout=420)
             update_checks(device, apks, private, key, build_tools, output)
