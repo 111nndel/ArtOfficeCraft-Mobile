@@ -4,9 +4,16 @@ Use aapt separately for the final merged Android permission manifest.
 """
 import argparse
 import json
+import re
 import struct
 import zipfile
 from pathlib import Path
+
+
+def verify_update_permissions(permissions):
+    names = set(re.findall(r"uses-permission(?:-sdk-23)?: name='(android\.permission\.[^']+)'", permissions))
+    if names != {'android.permission.INTERNET', 'android.permission.REQUEST_INSTALL_PACKAGES'}:
+        raise ValueError('Expected only update network/installer permissions, without Wi-Fi or broad storage access')
 
 
 def verify_release_manifest(badging):

@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.51.0.**
+**Current preview — alpha 0.52.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -32,7 +32,7 @@ Spreadsheet reading windows, search batches and filter choices reuse the current
 parsed Rust workbook; edits and closing release that read model. Recent spreadsheet
 regions stay available on return trips, with read-ahead during movement and local
 selection of loaded cells. Progress overlays the grid without moving the lower controls.
-See the [0.51.0 release notes and limits](docs/release-0.51.0-alpha.1.md).
+See the [0.52.0 release notes and limits](docs/release-0.52.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
@@ -132,15 +132,16 @@ preview certificate, then publish through GitHub CLI. See
 [CI and signing](docs/CI_AND_SIGNING.md) for setup, provenance and remaining manual
 Android QA requirements. Engine pins are never automatically advanced.
 
-### Offline permission policy
+### Updates and local document processing
 
-No Android INTERNET or Wi-Fi access permission is requested by this app.
-Even Flutter debug and profile manifests deliberately remove the default
-INTERNET permission added for VM-service debugging and hot reload.
-Consequently Flutter network debugging/hot reload may be unavailable.
-Verified APKs must pass an aapt dump permissions check before release.
-Android PdfRenderer uses a temporary app-private copy of the document
-and removes it when its session closes or is replaced.
+Document editing, rendering and OCR remain local and work without a network.
+Android INTERNET is used only for optional checks/downloads from this repository's
+GitHub Releases. Manual mode is the default and makes no startup network request.
+Automatic mode checks and downloads on launch/resume, at most once daily.
+Android confirms installation; REQUEST_INSTALL_PACKAGES permits that system handoff.
+The updater verifies SHA-256, package identity, increasing versionCode, device ABI
+and the installed signing certificate before offering the APK. No document upload,
+Wi-Fi control, network-state or broad storage permission is added.
 
 ### PDF rasterization (0.42.0)
 

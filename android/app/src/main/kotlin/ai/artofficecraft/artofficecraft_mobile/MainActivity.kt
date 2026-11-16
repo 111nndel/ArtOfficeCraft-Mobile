@@ -26,7 +26,7 @@ import kotlin.math.roundToInt
  * A single worker serializes all open/render/close operations. Only one
  * document is resident per FlutterActivity, with an opaque session token.
  * All temporary PDF data stays in app-private cache and is removed on close.
- * No network, Wi-Fi, or broad storage permissions are required.
+ * Document operations require no network or broad storage permissions.
  */
 class MainActivity : FlutterActivity() {
     private data class PdfSession(
@@ -44,12 +44,14 @@ class MainActivity : FlutterActivity() {
 
     private val worker = Executors.newSingleThreadExecutor()
     private var incomingDocuments: IncomingDocuments? = null
+    private var appUpdates: AppUpdates? = null
     private var active: PdfSession? = null
     private var nextId = 0
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         incomingDocuments = IncomingDocuments(this, flutterEngine.dartExecutor.binaryMessenger, worker).also { it.accept(intent) }
+        appUpdates = AppUpdates(this, flutterEngine.dartExecutor.binaryMessenger, worker)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/workspace")
             .setMethodCallHandler { call, result ->
                 if (call.method == "directory") {
@@ -267,6 +269,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         incomingDocuments?.close()
+        appUpdates?.close()
         worker.execute { closeActive() }
         worker.shutdown()
         super.onDestroy()

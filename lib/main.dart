@@ -2,6 +2,7 @@ import 'native/grid_clipboard.dart';
 import 'platform/application_storage.dart';
 import 'platform/document_files.dart';
 import 'native/pdf_page_renderer.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'ui/home_screen.dart';
 import 'ui/office_theme.dart';
 import 'ui/project_info_screen.dart';
 import 'ui/theme_settings.dart';
+import 'updates/app_updates.dart';
 
 export 'ui/home_screen.dart' show HomeScreen;
 export 'workspace/editor_kind.dart';
@@ -35,12 +37,14 @@ class ArtOfficeCraftApp extends StatefulWidget {
     this.files = const MobileDocumentFiles(),
     this.pdfRenderer,
     this.clipboard,
+    this.updates,
   });
   final String? initialLanguage;
   final ApplicationStorage storage;
   final DocumentFiles files;
   final PdfPageRenderer? pdfRenderer;
   final GridClipboard? clipboard;
+  final AppUpdates? updates;
 
   /// Owned by the app; main supplies an already loaded preference before paint.
   final ThemeSettings? themeSettings;
@@ -48,9 +52,14 @@ class ArtOfficeCraftApp extends StatefulWidget {
   State<ArtOfficeCraftApp> createState() => _ArtOfficeCraftAppState();
 }
 
-class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp> {
-  late final appearance = widget.themeSettings ?? ThemeSettings(storage: widget.storage);
+class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp>
+    with WidgetsBindingObserver {
+  late final appearance =
+      widget.themeSettings ?? ThemeSettings(storage: widget.storage);
   final messenger = GlobalKey<ScaffoldMessengerState>();
+  final navigator = GlobalKey<NavigatorState>();
+  late final updates = widget.updates ?? AppUpdates(storage: widget.storage);
+  int? _notifiedUpdate;
   late final settings = LanguageSettings(
     storage: widget.storage,
     initial: widget.initialLanguage ?? 'system',
@@ -58,15 +67,58 @@ class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    updates.addListener(_updateReady);
+    if (widget.updates == null) unawaited(updates.load());
     if (widget.themeSettings == null) unawaited(appearance.load());
     if (widget.initialLanguage == null) unawaited(settings.load());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    updates.removeListener(_updateReady);
+    if (widget.updates == null) updates.dispose();
     settings.dispose();
     appearance.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(updates.automaticCheck());
+  }
+
+  void _updateReady() {
+    if (updates.phase != UpdatePhase.ready ||
+        updates.release?.code == _notifiedUpdate) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          updates.phase != UpdatePhase.ready ||
+          updates.release?.code == _notifiedUpdate) {
+        return;
+      }
+      final context = navigator.currentContext;
+      if (context == null) return;
+      _notifiedUpdate = updates.release!.code;
+      messenger.currentState?.showSnackBar(
+        SnackBar(
+          content: const UiText('Обновление готово к установке'),
+          action: SnackBarAction(
+            label: tr(context, 'Открыть'),
+            onPressed: () {
+              navigator.currentState?.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ProjectInfoScreen(updates: updates),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    });
   }
 
   @override
@@ -76,6 +128,7 @@ class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp> {
       settings: settings,
       child: MaterialApp(
         scaffoldMessengerKey: messenger,
+        navigatorKey: navigator,
         locale: settings.locale,
         supportedLocales: const [Locale('en'), Locale('ru')],
         localizationsDelegates: const [
@@ -88,6 +141,7 @@ class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp> {
         theme: OfficeTheme.build(Brightness.light),
         darkTheme: OfficeTheme.build(Brightness.dark),
         home: HomeScreen(
+          updates: updates,
           storage: widget.storage,
           files: widget.files,
           pdfRenderer: widget.pdfRenderer,

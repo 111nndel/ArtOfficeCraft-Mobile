@@ -13,6 +13,7 @@ operations do not establish that the entire UI works on another OS.
 | Storage | `ApplicationStorage` | Shared Dart files; Android supplies its private directory and reads legacy preferences |
 | PDF display/OCR | `PdfPageRenderer`, `PdfImageOcr` | Rust worker renderer; lazy Android compatibility; Rust/C API image OCR worker |
 | Spreadsheet clipboard | `SystemClipboard`, `GridClipboard` | Android identity-bearing clipboard; Flutter text-only fallback |
+| App updates | `AppUpdates`, `UpdateSource`, `UpdateInstaller` | Shared Dart policy/downloads/preferences; Android package verification and installer URI grants |
 
 `ArtOfficeCraftApp` accepts storage, file, PDF-renderer and clipboard services and passes
 them through Home to the editors. A new platform entry point can supply these

@@ -14,9 +14,11 @@ is present on the repository's default branch; branch pushes work beforehand.
    `upstream/engines.lock.json`, Rust 1.99.1 tests and an ARM64 release core built
    with Android NDK 28.2.13676358. Cargo uses `--locked`; engine pins are never
    automatically advanced. Licence texts are regenerated from resolved sources.
-3. An unsigned offline ARM64 release APK, with checks for application identity,
+3. An unsigned ARM64 release APK, with checks for application identity,
    disabled Android debugging, permissions, ZIP integrity, native 16-KiB alignment
    and licence texts. Candidate artifacts expire after seven days.
+   Since 0.52.0, only INTERNET and REQUEST_INSTALL_PACKAGES are permitted as
+   Android permissions: optional app updates use GitHub; documents stay local.
 4. For version tags in the original repository only, a separate job downloads
    that run's candidate and signs it with the established preview key. It does
    not check out or run project source. Only this job receives a writable token

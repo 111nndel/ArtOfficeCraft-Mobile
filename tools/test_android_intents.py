@@ -22,7 +22,12 @@ class AndroidIntentTests(unittest.TestCase):
             self.assertEqual(len(filters), 1)
             self.assertEqual({d.get(key + 'mimeType') for d in filters[0].findall('data')}, expected)
             self.assertEqual([c.get(key + 'name') for c in filters[0].findall('category')], ['android.intent.category.DEFAULT'])
-        self.assertEqual(root.findall('uses-permission'), [])
+        self.assertEqual({p.get(key + 'name') for p in root.findall('uses-permission')},
+                         {'android.permission.INTERNET', 'android.permission.REQUEST_INSTALL_PACKAGES'})
+        provider = root.find('application/provider')
+        self.assertEqual(provider.get(key + 'exported'), 'false')
+        paths = ET.parse(Path(__file__).resolve().parents[1] / 'android/app/src/main/res/xml/update_paths.xml').getroot()
+        self.assertEqual([(p.tag, p.get('path')) for p in paths], [('cache-path', 'updates/')])
 
 
 if __name__ == '__main__':

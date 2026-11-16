@@ -7,6 +7,7 @@ import '../workspace/document_picker.dart';
 import '../l10n/app_strings.dart';
 import '../workspace/draft_store.dart';
 import 'project_info_screen.dart';
+import '../updates/app_updates.dart';
 
 import 'dart:io';
 import 'dart:async';
@@ -36,6 +37,7 @@ class HomeScreen extends StatefulWidget {
     this.pdfRenderer,
     this.clipboard,
     this.incoming,
+    this.updates,
   });
   final VoidCallback toggleTheme;
   final ThemeMode theme;
@@ -46,6 +48,7 @@ class HomeScreen extends StatefulWidget {
   final PdfPageRenderer? pdfRenderer;
   final GridClipboard? clipboard;
   final IncomingDocuments? incoming;
+  final AppUpdates? updates;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -412,7 +415,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.info_outline),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const ProjectInfoScreen(),
+                builder: (_) => ProjectInfoScreen(updates: widget.updates),
               ),
             ),
           ),

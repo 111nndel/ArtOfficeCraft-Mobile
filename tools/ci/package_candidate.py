@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from verify_android_apk import verify, verify_release_manifest
+from verify_android_apk import verify, verify_release_manifest, verify_update_permissions
 from stage_pdf_ocr import verify_apk as verify_pdf_ocr
 
 
@@ -32,8 +32,7 @@ def main():
     report['pdfOcrAssetsVerified'] = True
     sdk = Path(os.environ['ANDROID_HOME']) / 'build-tools' / '36.0.0'
     permissions = subprocess.check_output([str(sdk / 'aapt'), 'dump', 'permissions', str(apk)], text=True)
-    if re.search(r'android\.permission\.(INTERNET|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE)', permissions):
-        raise ValueError('Offline permission policy failed')
+    verify_update_permissions(permissions)
     subprocess.run([str(sdk / 'zipalign'), '-c', '-P', '16', '4', str(apk)], check=True)
     identity = subprocess.check_output([str(sdk / 'aapt'), 'dump', 'badging', str(apk)], text=True)
     verify_release_manifest(identity)
@@ -53,7 +52,8 @@ def main():
     metadata = dict(sourceCommit=os.environ['GITHUB_SHA'], version=name,
                     versionCode=2000 + int(base), workflowRun=os.environ['GITHUB_RUN_ID'],
                     sha256BeforeSigning=hashlib.sha256(apk.read_bytes()).hexdigest(),
-                    engines=pins['engines'], checks=report, offlinePermissionsVerified=True,
+                    engines=pins['engines'], checks=report, updatePermissionsVerified=True,
+                    documentProcessing='local',
                     flutter='3.47.9', dart='3.13.7', rust='1.99.1', ndk='28.2.13676358')
     (dest / 'build-info.json').write_text(json.dumps(metadata, indent=2) + '\n')
     (dest / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')
