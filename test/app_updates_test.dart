@@ -269,11 +269,12 @@ void main() {
   testWidgets('Update status and mode have their own accessible labels', (
     tester,
   ) async {
-    final updates = controller();
-    await tester.runAsync(() async {
-      await updates.load();
-      await updates.check();
-    });
+    final updates = (await tester.runAsync(() async {
+      final updates = controller();
+      await updates.load().timeout(const Duration(seconds: 10));
+      await updates.check().timeout(const Duration(seconds: 10));
+      return updates;
+    }))!;
     final semantics = tester.ensureSemantics();
     addTearDown(semantics.dispose);
     await tester.pumpWidget(
