@@ -694,13 +694,15 @@ const english = <String, String>{
   "Очистить все недавние?": "Clear all recents?",
   "Записи исчезнут с главной страницы. Рабочие копии останутся во вкладке «Файлы». Избранное и черновики сохранятся.": "Entries will disappear from Home. Working copies will remain in Files. Favorites and recovery drafts will be kept.",
   "Убрано из недавних": "Removed from recents",
-  "Не удалось изменить список недавних. Попробуйте ещё раз.": "Could not change recent files. Try again.",
+  "Не удалось изменить список недавних. Попробуйте ещё раз.":
+      "Could not change recent files. Try again.",
   "Рабочие копии": "Working copies",
   "Выбрано: {0}": "Selected: {0}",
   "Отмена выбора": "Cancel selection",
   "Выбрать все": "Select all",
   "Убрать из недавних": "Remove from recents",
   "Недавних файлов пока нет": "No recent files yet",
-  "Рабочие копии доступны во вкладке «Файлы».": "Working copies are available in Files.",
+  "Рабочие копии доступны во вкладке «Файлы».":
+      "Working copies are available in Files.",
   "Очистить": "Clear",
 };

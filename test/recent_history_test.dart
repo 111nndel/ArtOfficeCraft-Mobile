@@ -15,11 +15,15 @@ import 'draft_test_io.dart';
 
 Future<void> reveal(WidgetTester tester, Finder target) async {
   if (target.evaluate().isEmpty) {
-    await tester.drag(find.byKey(const PageStorageKey('workspace-scroll')), const Offset(0, 4000));
+    await tester.drag(
+      find.byKey(const PageStorageKey('workspace-scroll')),
+      const Offset(0, 4000),
+    );
     await tester.pumpAndSettle();
   }
   await tester.scrollUntilVisible(
-    target, 250,
+    target,
+    250,
     scrollable: find.byType(Scrollable).first,
   );
   await tester.ensureVisible(target);
@@ -35,12 +39,15 @@ Future<void> historyAction(WidgetTester tester, String action) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> historyTap(WidgetTester tester, WorkspaceStore store, Finder target) =>
-    waitDraftIO(tester, () async {
-      await tester.tap(target);
-      // Queue a no-op behind the UI write, without relying on wall-clock sleeps.
-      await store.setRecent(const [], true);
-    });
+Future<void> historyTap(
+  WidgetTester tester,
+  WorkspaceStore store,
+  Finder target,
+) => waitDraftIO(tester, () async {
+  await tester.tap(target);
+  // Queue a no-op behind the UI write, without relying on wall-clock sleeps.
+  await store.setRecent(const [], true);
+});
 
 void main() {
   Future<(WorkspaceStore, DraftStore, WorkspaceFile, WorkspaceFile)> fixture(
@@ -49,20 +56,28 @@ void main() {
     String language = 'ru',
   }) async {
     final values = (await tester.runAsync(() async {
-      final directory = await Directory.systemTemp.createTemp('aoc-history-ui-');
+      final directory = await Directory.systemTemp.createTemp(
+        'aoc-history-ui-',
+      );
       addTearDown(() => directory.delete(recursive: true));
       final workspace = WorkspaceStore(
         directory: await Directory('${directory.path}/files').create(),
       );
       await workspace.load();
       final word = await workspace.remember(
-        EditorKind.word, Uint8List.fromList([1]), 'Plan.docx',
+        EditorKind.word,
+        Uint8List.fromList([1]),
+        'Plan.docx',
       );
       final grid = await workspace.remember(
-        EditorKind.excel, Uint8List.fromList([2]), 'Budget.xlsx',
+        EditorKind.excel,
+        Uint8List.fromList([2]),
+        'Budget.xlsx',
       );
       await workspace.toggleFavorite(word);
-      final drafts = DraftStore(directory: Directory('${directory.path}/drafts'));
+      final drafts = DraftStore(
+        directory: Directory('${directory.path}/drafts'),
+      );
       await drafts.load();
       await drafts.write(
         id: 'r0123456789abcdef0123456789abcdef',
@@ -77,30 +92,34 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(MaterialApp(
-      theme: OfficeTheme.build(Brightness.dark),
-      locale: Locale(language),
-      supportedLocales: const [Locale('ru'), Locale('en')],
-      localizationsDelegates: const [
-        AppStrings.delegate,
-        ...GlobalMaterialLocalizations.delegates,
-      ],
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
-        child: child!,
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: OfficeTheme.build(Brightness.dark),
+        locale: Locale(language),
+        supportedLocales: const [Locale('ru'), Locale('en')],
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: HomeScreen(
+          toggleTheme: () {},
+          theme: ThemeMode.dark,
+          workspace: values.$1,
+          drafts: values.$2,
+        ),
       ),
-      home: HomeScreen(
-        toggleTheme: () {},
-        theme: ThemeMode.dark,
-        workspace: values.$1,
-        drafts: values.$2,
-      ),
-    ));
+    );
     await tester.pumpAndSettle();
     return values;
   }
 
-  testWidgets('Clear confirms, can be undone, and retains files, favorites and recovery',
+  testWidgets(
+    'Clear confirms, can be undone, and retains files, favorites and recovery',
     (tester) async {
       final (store, drafts, word, grid) = await fixture(tester);
       await historyAction(tester, 'Очистить все недавние');
@@ -140,7 +159,8 @@ void main() {
     },
   );
 
-  testWidgets('Selection removes only visible filtered entries and resets on navigation',
+  testWidgets(
+    'Selection removes only visible filtered entries and resets on navigation',
     (tester) async {
       final (store, _, word, grid) = await fixture(tester);
       await reveal(tester, find.widgetWithText(ChoiceChip, 'Документ'));
@@ -150,7 +170,12 @@ void main() {
       await reveal(tester, find.byTooltip('Выбрать все'));
       await tester.tap(find.byTooltip('Выбрать все'));
       await tester.pumpAndSettle();
-      expect(tester.widget<Text>(find.byKey(const ValueKey('recent-selection-count'))).data, '1');
+      expect(
+        tester
+            .widget<Text>(find.byKey(const ValueKey('recent-selection-count')))
+            .data,
+        '1',
+      );
       await historyTap(tester, store, find.byTooltip('Убрать из недавних'));
       await tester.pumpAndSettle();
       expect(store.files.singleWhere((f) => f.id == word.id).recent, isFalse);
@@ -173,39 +198,62 @@ void main() {
 
   for (final language in ['ru', 'en']) {
     for (final scale in [1.0, 2.0]) {
-      testWidgets('History selection fits 320dp at scale $scale in $language',
-        (tester) async {
-          await fixture(tester, scale: scale, language: language);
-          final menu = find.byTooltip(language == 'en'
-              ? 'Recent file actions' : 'Действия с недавними');
-          await reveal(tester, menu);
-          expect(tester.getSize(menu).width, greaterThanOrEqualTo(48));
-          await tester.tap(menu);
-          await tester.pumpAndSettle();
-          await tester.tap(find.text(language == 'en'
-              ? 'Select documents' : 'Выбрать документы'));
-          await tester.pumpAndSettle();
-          final all = find.byTooltip(language == 'en' ? 'Select all' : 'Выбрать все');
-          await reveal(tester, all);
-          await tester.tap(all);
-          await tester.pumpAndSettle();
-          expect(tester.widget<Text>(find.byKey(const ValueKey('recent-selection-count'))).data, '2');
-          await tester.binding.handlePopRoute();
-          await tester.pumpAndSettle();
-          expect(find.byKey(const ValueKey('recent-selection-count')), findsNothing);
-          await reveal(tester, menu);
-          await tester.tap(menu);
-          await tester.pumpAndSettle();
-          await tester.tap(find.text(language == 'en'
-              ? 'Clear all recents' : 'Очистить все недавние'));
-          await tester.pumpAndSettle();
-          expect(find.text(language == 'en'
-              ? 'Clear all recents?' : 'Очистить все недавние?'), findsOneWidget);
-          await tester.tap(find.text(language == 'en' ? 'Cancel' : 'Отмена'));
-          await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
-        },
-      );
+      testWidgets('History selection fits 320dp at scale $scale in $language', (
+        tester,
+      ) async {
+        await fixture(tester, scale: scale, language: language);
+        final menu = find.byTooltip(
+          language == 'en' ? 'Recent file actions' : 'Действия с недавними',
+        );
+        await reveal(tester, menu);
+        expect(tester.getSize(menu).width, greaterThanOrEqualTo(48));
+        await tester.tap(menu);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.text(
+            language == 'en' ? 'Select documents' : 'Выбрать документы',
+          ),
+        );
+        await tester.pumpAndSettle();
+        final all = find.byTooltip(
+          language == 'en' ? 'Select all' : 'Выбрать все',
+        );
+        await reveal(tester, all);
+        await tester.tap(all);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<Text>(
+                find.byKey(const ValueKey('recent-selection-count')),
+              )
+              .data,
+          '2',
+        );
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('recent-selection-count')),
+          findsNothing,
+        );
+        await reveal(tester, menu);
+        await tester.tap(menu);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.text(
+            language == 'en' ? 'Clear all recents' : 'Очистить все недавние',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            language == 'en' ? 'Clear all recents?' : 'Очистить все недавние?',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.text(language == 'en' ? 'Cancel' : 'Отмена'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      });
     }
   }
 }
