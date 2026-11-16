@@ -190,6 +190,19 @@ void main() {
           await tester.tap(all);
           await tester.pumpAndSettle();
           expect(tester.widget<Text>(find.byKey(const ValueKey('recent-selection-count'))).data, '2');
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.byKey(const ValueKey('recent-selection-count')), findsNothing);
+          await reveal(tester, menu);
+          await tester.tap(menu);
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(language == 'en'
+              ? 'Clear all recents' : 'Очистить все недавние'));
+          await tester.pumpAndSettle();
+          expect(find.text(language == 'en'
+              ? 'Clear all recents?' : 'Очистить все недавние?'), findsOneWidget);
+          await tester.tap(find.text(language == 'en' ? 'Cancel' : 'Отмена'));
+          await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
         },
       );

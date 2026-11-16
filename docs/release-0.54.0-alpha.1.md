@@ -5,7 +5,7 @@
 - Home / Recent file actions adds Clear all recents and document selection.
   Long-press a recent card to select it, select more cards or all visible
   records, then Remove from recents. Selection actions stay in the top bar
-  while scrolling. Removal offers Undo.
+  while scrolling; Android Back cancels selection. Removal offers Undo.
 - Clear all asks for confirmation and clears recent records across every
   format, even when a format filter is active. Select all applies to the
   visible format. Navigation, search and filter changes end selection.
