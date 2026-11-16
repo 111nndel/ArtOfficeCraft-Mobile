@@ -1,5 +1,10 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
+  "Перед текущим абзацем": "Before current paragraph",
+  "После текущего абзаца": "After current paragraph",
+  "В конце документа": "At document end",
+  "Не удалось открыть переданный файл. Поддерживаются DOCX, XLSX, PPTX и PDF до 64 МБ.":
+      "Could not open the incoming file. Supported: DOCX, XLSX, PPTX and PDF up to 64 MB.",
   "Объединение и разъединение недоступны внутри таблицы Excel":
       "Merge and unmerge are unavailable inside an Excel table",
   "Выделите минимум две ячейки для объединения.":

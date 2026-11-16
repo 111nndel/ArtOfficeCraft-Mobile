@@ -3,6 +3,7 @@ package ai.artofficecraft.artofficecraft_mobile
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.PersistableBundle
 import android.graphics.Bitmap
@@ -42,11 +43,13 @@ class MainActivity : FlutterActivity() {
     }
 
     private val worker = Executors.newSingleThreadExecutor()
+    private var incomingDocuments: IncomingDocuments? = null
     private var active: PdfSession? = null
     private var nextId = 0
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        incomingDocuments = IncomingDocuments(this, flutterEngine.dartExecutor.binaryMessenger, worker).also { it.accept(intent) }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/workspace")
             .setMethodCallHandler { call, result ->
                 if (call.method == "directory") {
@@ -256,7 +259,14 @@ class MainActivity : FlutterActivity() {
             output.toByteArray()
         }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingDocuments?.accept(intent)
+    }
+
     override fun onDestroy() {
+        incomingDocuments?.close()
         worker.execute { closeActive() }
         worker.shutdown()
         super.onDestroy()

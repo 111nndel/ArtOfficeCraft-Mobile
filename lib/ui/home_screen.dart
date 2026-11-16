@@ -1,6 +1,7 @@
 import '../native/grid_clipboard.dart';
 import '../platform/application_storage.dart';
 import '../platform/document_files.dart';
+import '../platform/incoming_documents.dart';
 import '../native/pdf_page_renderer.dart';
 import '../workspace/document_picker.dart';
 import '../l10n/app_strings.dart';
@@ -8,6 +9,7 @@ import '../workspace/draft_store.dart';
 import 'project_info_screen.dart';
 
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -33,6 +35,7 @@ class HomeScreen extends StatefulWidget {
     this.files = const MobileDocumentFiles(),
     this.pdfRenderer,
     this.clipboard,
+    this.incoming,
   });
   final VoidCallback toggleTheme;
   final ThemeMode theme;
@@ -42,24 +45,51 @@ class HomeScreen extends StatefulWidget {
   final DocumentFiles files;
   final PdfPageRenderer? pdfRenderer;
   final GridClipboard? clipboard;
+  final IncomingDocuments? incoming;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late final WorkspaceStore store = widget.workspace ?? WorkspaceStore(storage: widget.storage);
-  late final recoveryStore = widget.drafts ?? DraftStore(storage: widget.storage);
+  late final WorkspaceStore store =
+      widget.workspace ?? WorkspaceStore(storage: widget.storage);
+  late final recoveryStore =
+      widget.drafts ?? DraftStore(storage: widget.storage);
   final search = TextEditingController();
   int section = 0;
   EditorKind? filter;
-  bool opening = false;
+  int _editors = 0;
+  bool get opening => _editors > 0;
+  late final incoming = widget.incoming ?? AndroidIncomingDocuments();
   @override
   void initState() {
     super.initState();
     store.addListener(refresh);
     recoveryStore.addListener(refresh);
-    if (!recoveryStore.loaded) recoveryStore.load();
-    if (!store.loaded) store.load();
+    final ready = Future.wait([
+      if (!recoveryStore.loaded) recoveryStore.load(),
+      if (!store.loaded) store.load(),
+    ]);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      incoming.start(
+        (document) async {
+          await ready;
+          if (!mounted) return;
+          // Keep a current editor and its unsaved draft on the navigation stack.
+          unawaited(
+            open(
+              document.kind,
+              external: true,
+              launch: EditorLaunch(bytes: document.bytes, name: document.name),
+            ),
+          );
+        },
+        (_) => message(
+          'Не удалось открыть переданный файл. Поддерживаются DOCX, XLSX, PPTX и PDF до 64 МБ.',
+        ),
+      );
+    });
   }
 
   void refresh() {
@@ -68,6 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    incoming.dispose();
     store.removeListener(refresh);
     recoveryStore.removeListener(refresh);
     if (widget.drafts == null) recoveryStore.dispose();
@@ -88,9 +119,10 @@ class _HomeScreenState extends State<HomeScreen> {
     EditorLaunch? launch,
     WorkspaceFile? entry,
     DraftInfo? recovered,
+    bool external = false,
   }) async {
-    if (opening) return;
-    setState(() => opening = true);
+    if (opening && !external) return;
+    setState(() => _editors++);
     DraftSession? session;
     try {
       if (recovered != null) {
@@ -171,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } finally {
       await session?.close();
-      if (mounted) setState(() => opening = false);
+      if (mounted) setState(() => _editors--);
     }
   }
 

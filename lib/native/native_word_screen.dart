@@ -488,6 +488,28 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
     setState(() => changed = true);
     revealBlock(blocks.last['block'] as int);
     startInline(blocks.last);
+    toolPanel.currentState?.setExpanded(false);
+  });
+
+  Future<void> insertParagraph(int anchor, bool before) => guarded(() async {
+    if (document == null) return;
+    final previous = document!;
+    final result = await engine!.editAndInspect(previous, {
+      'action': 'insert_paragraph',
+      'block': anchor,
+      'before': before,
+    });
+    final id = anchor + (before ? 0 : 1);
+    final inserted = (result.preview['blocks'] as List).cast<Map>().firstWhere(
+      (b) => b['block'] == id && b['editable'] == true && b['text'] == '',
+    );
+    await updatePreview(result.bytes, preview: result.preview);
+    if (!mounted) return;
+    history.push(previous);
+    setState(() => changed = true);
+    revealBlock(id);
+    startInline(Map<String, dynamic>.from(inserted));
+    toolPanel.currentState?.setExpanded(false);
   });
 
   Future<void> editParagraph(Map<String, dynamic> block) async {
@@ -620,6 +642,13 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
 
   Widget editorPanel() {
     final editing = activeBlock != null && !busy && !operationPending;
+    final anchor = activeBlock ?? selectedBlock;
+    final at = textIndex.positionOf(anchor ?? -1);
+    final canInsert =
+        !busy &&
+        !operationPending &&
+        at != null &&
+        blocks[at]['editable'] == true;
     EditorTool alignment(String name, String value, IconData icon) =>
         EditorTool(
           name,
@@ -671,7 +700,27 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
             EditorTool(
               'Новый абзац',
               Icons.add,
-              onPressed: busy ? null : appendParagraph,
+              children: [
+                EditorTool(
+                  'Перед текущим абзацем',
+                  Icons.vertical_align_top,
+                  onPressed: canInsert
+                      ? () => insertParagraph(anchor!, true)
+                      : null,
+                ),
+                EditorTool(
+                  'После текущего абзаца',
+                  Icons.vertical_align_bottom,
+                  onPressed: canInsert
+                      ? () => insertParagraph(anchor!, false)
+                      : null,
+                ),
+                EditorTool(
+                  'В конце документа',
+                  Icons.post_add,
+                  onPressed: busy ? null : appendParagraph,
+                ),
+              ],
             ),
           ],
         },

@@ -114,6 +114,17 @@ pub extern "C" fn ac_docx_edit(data:*const u8,len:usize,req:*const u8,req_len:us
             replace_matches(&mut doc,&j,action=="replace_all")?;
             return wordcraft_docx::write(&doc).map_err(|e|e.to_string())
         }
+        if action=="insert_paragraph" {
+            let index=j.get("block").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Invalid block index")?;
+            let before=j.get("before").and_then(J::as_bool).ok_or("Missing insertion side")?;
+            if j.as_object().ok_or("Invalid edit request")?.keys().any(|key|!matches!(key.as_str(),"action"|"block"|"before")) {return Err("Insertion accepts only an anchor and side".into())}
+            let Block::Para(anchor)=doc.body.get(index).ok_or("Paragraph not found")?.as_ref() else {return Err("Selected block is not a paragraph".into())};
+            if !editable(anchor) {return Err("Protected inline content cannot anchor an insertion".into())}
+            // Inherit formatting, never duplicate runs, objects or section breaks.
+            let mut p=Paragraph::with_text("",anchor.mark.unlinked());p.props=anchor.props.formatting();
+            doc.body.insert(index+if before {0}else{1},Arc::new(Block::Para(p)));
+            return wordcraft_docx::write(&doc).map_err(|e|e.to_string())
+        }
         if action!="paragraph" {return Err("Unsupported Word action".into())}
         let index=j.get("block").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Invalid block index")?;
         let block=doc.body.get_mut(index).ok_or("Paragraph not found")?;
@@ -143,10 +154,16 @@ pub fn preview(doc:&wordcraft_doc::Document)->Vec<J>{
             let style=p.props.style.as_deref().unwrap_or("Normal");
             *outlines.entry(style).or_insert_with(||doc.styles.para_style_props(style).0.outline_level)
         }).filter(|level|*level<9);
-        Some(json!({"block":index,"outlineLevel":outline,"text":p.plain_text(),"editable":editable,"runs":runs,
+        let mut block=json!({"block":index,"outlineLevel":outline,"text":p.plain_text(),"editable":editable,"runs":runs,
             "align":p.props.align.unwrap_or(Align::Left),"indentLeft":p.props.indent_left.unwrap_or(0.0),
             "indentFirst":p.props.indent_first.unwrap_or(0.0),"spaceAfter":p.props.space_after.unwrap_or(12.0),
-            "lineSpacing":match p.props.line_spacing {Some(LineSpacing::Multiple(v))=>Some(v),_=>None}}))
+            "lineSpacing":match p.props.line_spacing {Some(LineSpacing::Multiple(v))=>Some(v),_=>None}});
+        if p.text.is_empty() {
+            block["emptyStyle"]=json!({"bold":p.mark.bold,"italic":p.mark.italic,
+                "underline":p.mark.underline.is_some_and(|v|v!=Underline::None),"size":p.mark.size,
+                "color":match p.mark.color {Some(TextColor::Rgb(rgb))=>Some(format!("#{}",rgb.hex())),_=>None}});
+        }
+        Some(block)
     }).collect()
 }
 
@@ -155,6 +172,34 @@ mod tests{
  use super::*;
  fn bytes(r:AcResult)->Result<Vec<u8>,String>{let status=r.status;let v=if r.len==0{vec![]}else{unsafe{std::slice::from_raw_parts(r.ptr,r.len).to_vec()}};super::super::ac_result_free(r);if status==0{Ok(v)}else{Err(String::from_utf8_lossy(&v).into())}}
  fn edit(input:&[u8],request:J)->Result<Vec<u8>,String>{let request=request.to_string();bytes(ac_docx_edit(input.as_ptr(),input.len(),request.as_ptr(),request.len()))}
+ #[test]fn inserts_blank_paragraphs_without_copying_sections_or_changing_neighbors(){
+  let mut doc=wordcraft_doc::Document::new();
+  let mut anchor=Paragraph::with_text("Styled 😀 anchor",CharProps{bold:Some(true),size:Some(18.0),..Default::default()});
+  anchor.props.align=Some(Align::Center);anchor.props.indent_left=Some(24.0);anchor.section=Some(Default::default());
+  doc.body=vec![Arc::new(Block::Para(Paragraph::with_text("Before",CharProps::default()))),Arc::new(Block::Para(anchor)),Arc::new(Block::Para(Paragraph::with_text("After",CharProps::default())))];
+  let original=wordcraft_docx::write(&doc).unwrap();let source=wordcraft_docx::read(&original).unwrap();
+  for before in [true,false] {
+   let output=edit(&original,json!({"action":"insert_paragraph","block":1,"before":before})).unwrap();
+   let reopened=wordcraft_docx::read(&output).unwrap();assert_eq!(reopened.body.len(),4);
+   let inserted=if before {1}else{2};let Block::Para(p)=reopened.body[inserted].as_ref()else{panic!()};
+   assert!(p.text.is_empty() && p.runs.is_empty() && p.objects.is_empty() && p.section.is_none());
+   let Block::Para(a)=source.body[1].as_ref()else{panic!()};assert_eq!(p.props,a.props.formatting());assert_eq!(p.mark,a.mark.unlinked());
+   assert_eq!(preview(&reopened)[inserted]["emptyStyle"]["bold"],json!(a.mark.bold));
+   let remaining:Vec<_>=reopened.body.iter().enumerate().filter(|(i,_)|*i!=inserted).map(|(_,b)|b.clone()).collect();assert_eq!(remaining,source.body);
+  }
+ }
+ #[test]fn insertion_rejects_invalid_requests_and_document_protection(){
+  let original=bytes(super::super::ac_docx_create(b"Anchor".as_ptr(),6)).unwrap();
+  for request in [json!({"action":"insert_paragraph","block":99,"before":true}),json!({"action":"insert_paragraph","block":0,"before":"true"}),json!({"action":"insert_paragraph","block":0}),json!({"action":"insert_paragraph","block":0,"before":true,"text":"hidden"})] {assert!(edit(&original,request).is_err());}
+  for mode in 0..3 {
+   let mut doc=wordcraft_docx::read(&original).unwrap();match mode {0=>doc.settings.protection=Some("readOnly".into()),1=>doc.settings.track_changes=true,_=>{doc.settings.protection=Some("none".into());doc.settings.protect_formatting=true}}
+   let protected=wordcraft_docx::write(&doc).unwrap();
+   let settings=wordcraft_docx::read(&protected).unwrap().settings;
+   match mode {0=>assert!(settings.protection.is_some()),1=>assert!(settings.track_changes),_=>assert!(settings.protect_formatting)}
+   assert!(edit(&protected,json!({"action":"insert_paragraph","block":0,"before":false})).is_err(),"protection mode {mode}");
+  }
+  let mut p=Paragraph::with_text("Revised",CharProps::default());p.runs[0].props.ins=Some(0);assert!(!editable(&p));
+ }
  #[test]fn unicode_text_and_selected_format_roundtrip(){
   let t="Привет 😀 мир";let input=bytes(super::super::ac_docx_create(t.as_ptr(),t.len())).unwrap();
   let out=edit(&input,json!({"action":"paragraph","block":0,"text":"Привет 😀 мир!","start":0,"end":6,"char":{"bold":true,"size":18},"align":"justify","indentLeft":18,"lineSpacing":1.5})).unwrap();
