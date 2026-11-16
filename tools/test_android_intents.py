@@ -9,6 +9,9 @@ class AndroidIntentTests(unittest.TestCase):
         key = '{http://schemas.android.com/apk/res/android}'
         activity = root.find('application/activity')
         self.assertEqual(activity.get(key + 'launchMode'), 'singleTop')
+        route_flag = next(m for m in activity.findall('meta-data')
+                          if m.get(key + 'name') == 'flutter_deeplinking_enabled')
+        self.assertEqual(route_flag.get(key + 'value'), 'false')
         expected = {'application/pdf',
                     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
