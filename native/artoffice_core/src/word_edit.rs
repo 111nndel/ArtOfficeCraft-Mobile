@@ -121,7 +121,7 @@ pub extern "C" fn ac_docx_edit(data:*const u8,len:usize,req:*const u8,req_len:us
             let Block::Para(anchor)=doc.body.get(index).ok_or("Paragraph not found")?.as_ref() else {return Err("Selected block is not a paragraph".into())};
             if !editable(anchor) {return Err("Protected inline content cannot anchor an insertion".into())}
             // Inherit formatting, never duplicate runs, objects or section breaks.
-            let mut p=Paragraph::with_text("",anchor.mark.clone());p.props=anchor.props.clone();
+            let mut p=Paragraph::with_text("",anchor.mark.unlinked());p.props=anchor.props.formatting();
             doc.body.insert(index+if before {0}else{1},Arc::new(Block::Para(p)));
             return wordcraft_docx::write(&doc).map_err(|e|e.to_string())
         }
@@ -177,7 +177,7 @@ mod tests{
    let reopened=wordcraft_docx::read(&output).unwrap();assert_eq!(reopened.body.len(),4);
    let inserted=if before {1}else{2};let Block::Para(p)=reopened.body[inserted].as_ref()else{panic!()};
    assert!(p.text.is_empty() && p.runs.is_empty() && p.objects.is_empty() && p.section.is_none());
-   let Block::Para(a)=source.body[1].as_ref()else{panic!()};assert_eq!(p.props,a.props);assert_eq!(p.mark,a.mark);
+   let Block::Para(a)=source.body[1].as_ref()else{panic!()};assert_eq!(p.props,a.props.formatting());assert_eq!(p.mark,a.mark.unlinked());
    let remaining:Vec<_>=reopened.body.iter().enumerate().filter(|(i,_)|*i!=inserted).map(|(_,b)|b.clone()).collect();assert_eq!(remaining,source.body);
   }
  }
