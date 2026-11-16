@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:artofficecraft_mobile/l10n/app_strings.dart';
+import 'package:artofficecraft_mobile/ui/update_panel.dart';
 import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'package:artofficecraft_mobile/platform/app_update_installer.dart';
 import 'package:artofficecraft_mobile/updates/app_updates.dart';
@@ -261,5 +264,39 @@ void main() {
       await File('${root.path}/updates.json').readAsString(),
     ) as Map;
     expect(saved['pending']['code'], 2060);
+  });
+
+  testWidgets('Update status and mode have their own accessible labels', (
+    tester,
+  ) async {
+    final updates = controller();
+    await tester.runAsync(() async {
+      await updates.load();
+      await updates.check();
+    });
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        supportedLocales: const [Locale('en'), Locale('ru')],
+        localizationsDelegates: const [AppStrings.delegate],
+        home: Scaffold(
+          body: SingleChildScrollView(child: UpdatePanel(updates: updates)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(find.byKey(const Key('update-status'))).label,
+      'Version 0.53.0 is available',
+    );
+    final mode = tester.getSemantics(find.text('Manually')).label;
+    expect(mode, contains('Manually'));
+    expect(mode, isNot(contains('App updates')));
+    await tester.tap(find.text('Manually'));
+    await tester.pumpAndSettle();
+    expect(find.text('Automatically'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }

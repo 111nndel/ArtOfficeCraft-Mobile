@@ -36,22 +36,28 @@ class UpdatePanel extends StatelessWidget {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<bool>(
-                key: ValueKey(('update-mode', updates.automatic)),
-                initialValue: updates.automatic,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: tr(context, 'Режим обновления'),
+              Semantics(
+                container: true,
+                child: DropdownButtonFormField<bool>(
+                  key: ValueKey(('update-mode', updates.automatic)),
+                  initialValue: updates.automatic,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: tr(context, 'Режим обновления'),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: false, child: UiText('Вручную')),
+                    DropdownMenuItem(
+                      value: true,
+                      child: UiText('Автоматически'),
+                    ),
+                  ],
+                  onChanged: !updates.loaded || updates.installing
+                      ? null
+                      : (value) {
+                          if (value != null) updates.selectAutomatic(value);
+                        },
                 ),
-                items: const [
-                  DropdownMenuItem(value: false, child: UiText('Вручную')),
-                  DropdownMenuItem(value: true, child: UiText('Автоматически')),
-                ],
-                onChanged: !updates.loaded || updates.installing
-                    ? null
-                    : (value) {
-                        if (value != null) updates.selectAutomatic(value);
-                      },
               ),
               const SizedBox(height: 12),
               UiText(
@@ -60,7 +66,10 @@ class UpdatePanel extends StatelessWidget {
                     : 'Приложение обращается к GitHub только по кнопке проверки или скачивания.',
               ),
               const SizedBox(height: 12),
-              UiText(status, key: const Key('update-status')),
+              Semantics(
+                container: true,
+                child: UiText(status, key: const Key('update-status')),
+              ),
               if (!supported && updates.loaded)
                 const UiText('APK-обновления доступны для Android ARM64.'),
               if (updates.preferenceError)

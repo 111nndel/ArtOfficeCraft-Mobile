@@ -12,7 +12,7 @@ function nodes(){
  return [...xml.matchAll(/<node\s+[^>]*>/g)].map(([tag])=>{const n=Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([,k,v])=>[k,v.replace(/&amp;/g,'&').replace(/&#(\d+);/g,(_,c)=>String.fromCodePoint(+c))]));n.label=n.text||n['content-desc']||'';return n;});
 }
 function tap(n){const m=/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(n.bounds||'');if(!m)throw Error('No bounds');command(['shell','input','tap',String((+m[1]+ +m[3])>>1),String((+m[2]+ +m[4])>>1)]);}
-function matches(n,p){return p instanceof RegExp?p.test(n.label):n.label===p;}
+function matches(n,p){return p instanceof RegExp?p.test(n.label):n.label.split('\n').includes(p);}
 async function wait(p){const end=Date.now()+45000;while(Date.now()<end){const n=nodes().find(n=>matches(n,p));if(n)return n;await pause(150);}throw Error('UI not found: '+p);}
 async function reveal(p){for(let i=0;i<8;i++){const n=nodes().find(n=>matches(n,p));if(n)return n;command(['shell','input','swipe','540','1850','540','900','300']);await pause(150);}throw Error('Cannot reveal '+p);}
 function shot(name){fs.writeFileSync(path.join(proof,name+'.png'),command(['exec-out','screencap','-p'],true));}
@@ -22,7 +22,7 @@ async function launch(){command(['shell','am','force-stop',pkg]);command(['shell
 async function about(){tap(await wait('About and licenses'));await wait(new RegExp('^'+fixture.currentVersion.replace(/\./g,'\\.')+' · Preview$'));}
 async function check(){tap(await reveal('Check for updates'));await wait('Version '+fixture.nextVersion+' is available');}
 async function chooseMode(label){
- for(let i=0;i<4;i++){const found=nodes().find(n=>n.label==='Manually'||n.label==='Automatically');if(found){tap(found);tap(await wait(label));return;}command(['shell','input','swipe','540','750','540','1800','300']);}
+ for(let i=0;i<4;i++){const found=nodes().find(n=>matches(n,'Manually')||matches(n,'Automatically'));if(found){tap(found);tap(await wait(label));return;}command(['shell','input','swipe','540','750','540','1800','300']);}
  throw Error('Mode selector missing');
 }
 (async()=>{

@@ -140,7 +140,6 @@ const english = <String, String>{
   " · Черновик не удалён": " · Draft not deleted",
   "{0} · есть изменения{1}": "{0} · unsaved changes{1}",
   "{0} · на устройстве": "{0} · on this device",
-  "{0} · тестовая версия": "{0} · preview",
   "О проекте и лицензиях": "About and licenses",
   "О проекте и движках": "About and engines",
   "Изменить тему": "Change theme",
@@ -148,7 +147,6 @@ const english = <String, String>{
   "Системный язык": "System language",
   "Язык изменён только для этого сеанса: настройку не удалось сохранить.":
       "Language changed for this session only: the setting could not be saved.",
-  "Независимый Android-порт с использованием четырёх открытых движков. Возможности мобильных редакторов пока ограничены. Полная совместимость с настольными приложениями не заявляется.": "An independent Android port using four open-source engines. Mobile editing is still limited; full compatibility with desktop applications is not claimed.",
   "Исходники:\nhttps://github.com/111nndel/ArtOfficeCraft-Mobile":
       "Source code:\nhttps://github.com/111nndel/ArtOfficeCraft-Mobile",
   "Не удалось прочитать версии нативных движков этой сборки.":
@@ -157,7 +155,6 @@ const english = <String, String>{
       "Engines are available in the Android build.",
   "Нативное ядро {0} · ABI {1}": "Native core {0} · ABI {1}",
   "Лицензии и авторские права": "Licenses and copyright",
-  "Обновления движков проверяются по исходным репозиториям и точным коммитам. Приложение не скачивает и не запускает новые нативные библиотеки из интернета.": "Engine updates are reviewed against their original repositories and exact commits. The app does not download or run new native libraries from the internet.",
   "Меню файла": "File menu",
   "Открыть DOCX": "Open DOCX",
   "Открыть XLSX": "Open XLSX",
@@ -682,4 +679,5 @@ const english = <String, String>{
   "Установка подтверждается в системном окне Android. Документы обрабатываются локально и не отправляются на сервер.": "Installation is confirmed in Android’s system dialog. Documents are processed locally and are not sent to a server.",
   "Обновление готово к установке": "An update is ready to install",
   "Открыть": "Open",
+  "Движки обновляются вместе с подписанной APK после проверки исходных репозиториев и точных коммитов. Отдельные нативные библиотеки из сети не подгружаются.": "Engines are updated with the signed APK after reviewing upstream repositories and exact commits. Separate native libraries are not loaded from the network.",
 };
