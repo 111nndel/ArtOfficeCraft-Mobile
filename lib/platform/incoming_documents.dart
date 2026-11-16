@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
@@ -49,8 +48,9 @@ class AndroidIncomingDocuments implements IncomingDocuments {
     final byType = EditorKind.values
         .where((k) => k.mimeType == type)
         .firstOrNull;
-    if (byName != null && byType != null && byName != byType)
+    if (byName != null && byType != null && byName != byType) {
       throw const FormatException('Conflicting document type');
+    }
     final kind = byName ?? byType;
     if (kind == null) throw const FormatException('Unsupported document type');
     if (name.isEmpty) name = 'Document';
@@ -67,8 +67,9 @@ class AndroidIncomingDocuments implements IncomingDocuments {
     _error = error;
     channel.setMethodCallHandler((call) async {
       if (call.method == 'available') _request();
-      if (call.method == 'error' && !_closed)
+      if (call.method == 'error' && !_closed) {
         _error(StateError('Incoming file queue is full'));
+      }
     });
     _request();
   }
@@ -97,11 +98,13 @@ class AndroidIncomingDocuments implements IncomingDocuments {
               );
               final file = File(path);
               final length = await file.length();
-              if (length == 0 || length > 64 * 1024 * 1024)
+              if (length == 0 || length > 64 * 1024 * 1024) {
                 throw const FormatException('Document size is outside limits');
+              }
               final bytes = await file.readAsBytes();
-              if (bytes.isEmpty || bytes.length > 64 * 1024 * 1024)
+              if (bytes.isEmpty || bytes.length > 64 * 1024 * 1024) {
                 throw const FormatException('Document size is outside limits');
+              }
               if (!_closed) await _receive(IncomingDocument(kind, name, bytes));
             } finally {
               await channel.invokeMethod<void>('release', {'path': path});

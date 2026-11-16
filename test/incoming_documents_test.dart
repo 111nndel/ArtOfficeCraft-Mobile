@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:artofficecraft_mobile/platform/incoming_documents.dart';
 import 'package:artofficecraft_mobile/platform/application_storage.dart';
@@ -138,8 +137,9 @@ void main() {
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
       call,
     ) async {
-      if (call.method == 'take')
+      if (call.method == 'take') {
         return queue.isEmpty ? null : queue.removeAt(0);
+      }
       await File((call.arguments as Map)['path'] as String).delete();
       if (++releases == 3) done.complete();
       return null;

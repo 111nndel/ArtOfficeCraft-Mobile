@@ -185,8 +185,11 @@ mod tests{
   let original=bytes(super::super::ac_docx_create(b"Anchor".as_ptr(),6)).unwrap();
   for request in [json!({"action":"insert_paragraph","block":99,"before":true}),json!({"action":"insert_paragraph","block":0,"before":"true"}),json!({"action":"insert_paragraph","block":0}),json!({"action":"insert_paragraph","block":0,"before":true,"text":"hidden"})] {assert!(edit(&original,request).is_err());}
   for mode in 0..3 {
-   let mut doc=wordcraft_docx::read(&original).unwrap();match mode {0=>doc.settings.protection=Some("readOnly".into()),1=>doc.settings.track_changes=true,_=>doc.settings.protect_formatting=true}
-   assert!(edit(&wordcraft_docx::write(&doc).unwrap(),json!({"action":"insert_paragraph","block":0,"before":false})).is_err());
+   let mut doc=wordcraft_docx::read(&original).unwrap();match mode {0=>doc.settings.protection=Some("readOnly".into()),1=>doc.settings.track_changes=true,_=>{doc.settings.protection=Some("none".into());doc.settings.protect_formatting=true}}
+   let protected=wordcraft_docx::write(&doc).unwrap();
+   let settings=wordcraft_docx::read(&protected).unwrap().settings;
+   match mode {0=>assert!(settings.protection.is_some()),1=>assert!(settings.track_changes),_=>assert!(settings.protect_formatting)}
+   assert!(edit(&protected,json!({"action":"insert_paragraph","block":0,"before":false})).is_err(),"protection mode {mode}");
   }
   let mut p=Paragraph::with_text("Revised",CharProps::default());p.runs[0].props.ins=Some(0);assert!(!editable(&p));
  }
