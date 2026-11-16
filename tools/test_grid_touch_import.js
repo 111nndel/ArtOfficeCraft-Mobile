@@ -117,7 +117,7 @@ async function openPicker(kind){
   if(unrelated.includes(pkg+'/'))throw Error('Application claims unrelated text files');
   command(['shell','am','force-stop',pkg]);
   command(['shell','am','start','-n',component]);await pause(600);
-  if(!nodes().some(n=>n.label==='Open from')) tap(await waitFor(/^Show roots$|^Open navigation drawer$/));
+  if(!nodes().some(n=>/^sdk_gphone/.test(n.label)&&n['resource-id']==='android:id/title')) tap(await waitFor(/^Show roots$|^Open navigation drawer$/));
   tap(await waitFor(n=>/^sdk_gphone/.test(n.label)&&n['resource-id']==='android:id/title','Storage root'));
   tap(await waitFor('Download'));tap(await waitFor('AOC-QA-018'));tap(await waitFor('Formatted.xlsx'));
   // If the emulator has another handler, select this app and the persistent choice.

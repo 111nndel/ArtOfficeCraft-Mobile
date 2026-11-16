@@ -7,6 +7,8 @@ import 'package:artofficecraft_mobile/ui/home_screen.dart';
 import 'package:artofficecraft_mobile/native/native_word_screen.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/workspace/editor_kind.dart';
+import 'package:artofficecraft_mobile/workspace/workspace_store.dart';
+import 'package:artofficecraft_mobile/workspace/draft_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -162,10 +164,21 @@ void main() {
   testWidgets('A warm external open preserves the previous editor on Back', (
     tester,
   ) async {
-    final directory = await Directory.systemTemp.createTemp(
-      'aoc-incoming-home-',
-    );
+    final fixture = (await tester.runAsync(() async {
+      final directory = await Directory.systemTemp.createTemp(
+        'aoc-incoming-home-',
+      );
+      final storage = DirectoryApplicationStorage(directory);
+      final workspace = WorkspaceStore(storage: storage);
+      final drafts = DraftStore(storage: storage);
+      await workspace.load();
+      await drafts.load();
+      return (directory, workspace, drafts);
+    }))!;
+    final (directory, workspace, drafts) = fixture;
     addTearDown(() => directory.delete(recursive: true));
+    addTearDown(workspace.dispose);
+    addTearDown(drafts.dispose);
     final incoming = IncomingFeed();
     await tester.pumpWidget(
       MaterialApp(
@@ -173,6 +186,8 @@ void main() {
           toggleTheme: () {},
           theme: ThemeMode.light,
           incoming: incoming,
+          workspace: workspace,
+          drafts: drafts,
           storage: DirectoryApplicationStorage(directory),
         ),
       ),
