@@ -276,7 +276,6 @@ void main() {
       return updates;
     }))!;
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
@@ -298,6 +297,7 @@ void main() {
     await tester.tap(find.text('Manually'));
     await tester.pumpAndSettle();
     expect(find.text('Automatically'), findsOneWidget);
+    semantics.dispose();
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
