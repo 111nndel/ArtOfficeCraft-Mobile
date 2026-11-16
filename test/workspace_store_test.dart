@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -103,6 +104,86 @@ void main() {
       },
     );
   }
+
+  test('Legacy history remains recent and hiding keeps copies after restart', () async {
+    final directory = await Directory.systemTemp.createTemp('aoc-history-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = WorkspaceStore(directory: directory);
+    await store.load();
+    final first = await store.remember(EditorKind.word, Uint8List.fromList([1]), 'First.docx');
+    final second = await store.remember(EditorKind.pdf, Uint8List.fromList([2]), 'Second.pdf');
+    await store.toggleFavorite(first);
+    final index = File('${directory.path}/index.json');
+    final legacy = (jsonDecode(await index.readAsString()) as List)
+        .map((value) => (Map<String, dynamic>.from(value as Map)..remove('recent')))
+        .toList();
+    await index.writeAsString(jsonEncode(legacy));
+    final restored = WorkspaceStore(directory: directory);
+    await restored.load();
+    expect(restored.files.every((f) => f.recent), isTrue);
+    final before = restored.files.map((f) => f.toJson()..remove('recent')).toList();
+    expect(await restored.setRecent([first.id], false), {first.id});
+    expect(restored.files.singleWhere((f) => f.id == second.id).recent, isTrue);
+    await restored.setRecent(restored.files.map((f) => f.id), false);
+    final reopened = WorkspaceStore(directory: directory);
+    await reopened.load();
+    expect(reopened.files.every((f) => !f.recent), isTrue);
+    expect(reopened.files.map((f) => f.toJson()..remove('recent')).toList(), before);
+    expect(await reopened.read(first), [1]);
+    expect(await reopened.read(second), [2]);
+    expect(reopened.files.singleWhere((f) => f.id == first.id).favorite, isTrue);
+  });
+
+  test('Queued history and undo preserve newer favorites and document changes', () async {
+    final directory = await Directory.systemTemp.createTemp('aoc-history-queue-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = WorkspaceStore(directory: directory);
+    await store.load();
+    final first = await store.remember(EditorKind.excel, Uint8List.fromList([1]), 'First.xlsx');
+    final second = await store.remember(EditorKind.pdf, Uint8List.fromList([2]), 'Second.pdf');
+    final selected = {first.id};
+    final removal = store.setRecent(selected, false);
+    selected
+      ..clear()
+      ..add(second.id);
+    final favorite = store.toggleFavorite(first);
+    final removed = await removal;
+    await favorite;
+    expect(removed, {first.id});
+    expect(store.files.singleWhere((f) => f.id == second.id).recent, isTrue);
+    final updated = await store.remember(
+      EditorKind.excel, Uint8List.fromList([3, 4]), 'Renamed.xlsx', id: first.id,
+    );
+    expect(updated.recent, isTrue);
+    expect(updated.favorite, isTrue);
+    await store.setRecent(removed, true);
+    expect(store.files, hasLength(2));
+    expect(store.files.singleWhere((f) => f.id == first.id).name, 'Renamed.xlsx');
+    expect(await store.read(updated), [3, 4]);
+    await store.setRecent([first.id], false);
+    await store.toggleFavorite(updated);
+    await store.setRecent([first.id], true);
+    expect(store.files.singleWhere((f) => f.id == first.id).favorite, isFalse);
+  });
+
+  test('Failed atomic history writes retain the list and allow a retry', () async {
+    final directory = await Directory.systemTemp.createTemp('aoc-history-failure-');
+    addTearDown(() => directory.delete(recursive: true));
+    final store = WorkspaceStore(directory: directory);
+    await store.load();
+    final entry = await store.remember(EditorKind.pdf, Uint8List.fromList([7]), 'Kept.pdf');
+    final index = File('${directory.path}/index.json');
+    final before = await index.readAsString();
+    final blocker = await Directory('${index.path}.tmp').create();
+    await expectLater(store.setRecent([entry.id], false), throwsA(isA<FileSystemException>()));
+    expect(store.files.single.recent, isTrue);
+    expect(await index.readAsString(), before);
+    expect(await store.read(entry), [7]);
+    await blocker.delete();
+    await store.setRecent([entry.id], false);
+    expect(store.files.single.recent, isFalse);
+  });
+
   test(
     'Damaged index is preserved and cannot be silently overwritten',
     () async {
@@ -119,6 +200,7 @@ void main() {
         store.remember(EditorKind.word, Uint8List.fromList([1]), 'File.docx'),
         throwsStateError,
       );
+      await expectLater(store.setRecent(['f1'], false), throwsStateError);
       expect(await index.readAsString(), '[broken');
     },
   );

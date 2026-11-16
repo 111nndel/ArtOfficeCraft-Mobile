@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.53.0.**
+**Current preview — alpha 0.54.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -36,7 +36,11 @@ Home / Fill range repeats the first selected row down or the first column right,
 preserving formatting and adjusting relative formula references. Filtered-out rows
 stay unchanged; pending input and fill share one undo step. Fill is limited to
 4096 cells outside merged cells, Excel tables and array/spill ranges.
-See the [0.53.0 release notes and limits](docs/release-0.53.0-alpha.1.md).
+Home / Recent file actions can remove selected records or clear all recents, with
+Undo. Long-press a recent document to select it. Clearing history keeps working
+copies in Files, favorites and recovery drafts; opening a retained copy adds it
+back to Home without creating another working copy.
+See the [0.54.0 release notes and limits](docs/release-0.54.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

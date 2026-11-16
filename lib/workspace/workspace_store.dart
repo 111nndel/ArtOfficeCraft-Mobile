@@ -14,18 +14,26 @@ class WorkspaceFile {
     required this.kind,
     required this.modified,
     this.favorite = false,
+    this.recent = true,
   });
   final String id, name;
   final EditorKind kind;
   final DateTime modified;
   final bool favorite;
-  WorkspaceFile copyWith({String? name, DateTime? modified, bool? favorite}) =>
+  final bool recent;
+  WorkspaceFile copyWith({
+    String? name,
+    DateTime? modified,
+    bool? favorite,
+    bool? recent,
+  }) =>
       WorkspaceFile(
         id: id,
         name: name ?? this.name,
         kind: kind,
         modified: modified ?? this.modified,
         favorite: favorite ?? this.favorite,
+        recent: recent ?? this.recent,
       );
   Map<String, Object> toJson() => {
     'id': id,
@@ -33,6 +41,7 @@ class WorkspaceFile {
     'kind': kind.name,
     'modified': modified.toIso8601String(),
     'favorite': favorite,
+    'recent': recent,
   };
   factory WorkspaceFile.fromJson(Map<String, dynamic> json) {
     final id = json['id'] as String;
@@ -45,6 +54,8 @@ class WorkspaceFile {
       kind: EditorKind.values.byName(json['kind'] as String),
       modified: DateTime.parse(json['modified'] as String),
       favorite: json['favorite'] == true,
+      // Existing installations retain their recent list on the first upgrade.
+      recent: json['recent'] != false,
     );
   }
 }
@@ -165,6 +176,31 @@ class WorkspaceStore extends ChangeNotifier {
       ..addAll(next);
     notifyListeners();
   });
+  /// Hide or restore history entries without changing documents or favorites.
+  /// Snapshot IDs before queueing so later selection changes cannot affect work.
+  Future<Set<String>> setRecent(Iterable<String> ids, bool value) {
+    final targets = Set<String>.of(ids);
+    return _serialize(() async {
+      if (!loaded || error != null) {
+        throw StateError(error ?? 'История ещё загружается');
+      }
+      final changed = _files
+          .where((f) => targets.contains(f.id) && f.recent != value)
+          .map((f) => f.id)
+          .toSet();
+      if (changed.isEmpty) return <String>{};
+      final next = _files
+          .map((f) => changed.contains(f.id) ? f.copyWith(recent: value) : f)
+          .toList();
+      await _writeIndex(await _root(), next);
+      _files
+        ..clear()
+        ..addAll(next);
+      notifyListeners();
+      return Set<String>.unmodifiable(changed);
+    });
+  }
+
   Future<Uint8List> read(WorkspaceFile entry) async {
     final file = File(
       '${(await _root()).path}/${entry.id}.${entry.kind.extension}',

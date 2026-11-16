@@ -245,14 +245,15 @@ def checks(device, output):
             run([build_tools / 'zipalign', '-c', '-P', '16', '4', signed],
                 output / 'zipalign.txt')
             run(['node', 'tools/test_recent_imports.js', device, signed_baseline, signed],
-                output / 'test_recent_imports.log', timeout=420)
+                output / 'test_recent_imports.log', timeout=600)
             run(['node', 'tools/test_grid_touch_import.js', device, signed],
                 output / 'test_grid_touch_import.log', timeout=420)
             update_checks(device, apks, private, key, build_tools, output)
         report['ordinaryApp'] = {'documentsLocal': True, 'updatePermissionsVerified': True, 'native16KiBAligned': True,
                                  'nonDebuggable': True, 'profileToReleaseUpgrade': True,
                                  'systemPickerAndTouchResize': True, 'externalViewAndShare': True,
-                                 'recentCopiesAfterForceStop': True, 'updateModesAndInstaller': True}
+                                 'recentCopiesAfterForceStop': True, 'recentHistoryCleanup': True,
+                                 'updateModesAndInstaller': True}
         report['passed'] = True
     except Exception as error:
         report['error'] = str(error)

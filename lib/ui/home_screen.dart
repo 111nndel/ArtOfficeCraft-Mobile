@@ -61,6 +61,19 @@ class _HomeScreenState extends State<HomeScreen> {
   final search = TextEditingController();
   int section = 0;
   EditorKind? filter;
+  bool _selecting = false;
+  bool _historyBusy = false;
+  final _selected = <String>{};
+  bool get _showingRecents => section == 0 && search.text.trim().isEmpty;
+  List<WorkspaceFile> get _visibleFiles {
+    final q = search.text.trim().toLowerCase();
+    return store.files.where((f) =>
+      (filter == null || f.kind == filter) &&
+      (section != 2 || f.favorite) &&
+      (!_showingRecents || f.recent) &&
+      f.name.toLowerCase().contains(q),
+    ).toList();
+  }
   int _editors = 0;
   bool get opening => _editors > 0;
   late final incoming = widget.incoming ?? AndroidIncomingDocuments();
@@ -363,9 +376,146 @@ class _HomeScreenState extends State<HomeScreen> {
     3 => 'Начните с хорошей основы',
     _ => 'Ваши идеи.\nВаше пространство.',
   };
+  void _endSelection() {
+    _selecting = false;
+    _selected.clear();
+  }
+
   void selectSection(int value) => setState(() {
     section = value;
+    _endSelection();
   });
+
+  void _toggleSelection(String id) => setState(() {
+    _selecting = true;
+    if (!_selected.add(id)) _selected.remove(id);
+  });
+
+  Future<void> _clearRecents() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const UiText('Очистить все недавние?'),
+        content: const UiText(
+          'Записи исчезнут с главной страницы. Рабочие копии останутся во вкладке «Файлы». Избранное и черновики сохранятся.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const UiText('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const UiText('Очистить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _removeRecents(store.files.where((f) => f.recent).map((f) => f.id));
+    }
+  }
+
+  Future<void> _removeRecents(Iterable<String> ids) async {
+    if (_historyBusy) return;
+    setState(() => _historyBusy = true);
+    try {
+      final removed = await store.setRecent(ids, false);
+      if (!mounted) return;
+      setState(_endSelection);
+      if (removed.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: const UiText('Убрано из недавних'),
+            action: SnackBarAction(
+              label: tr(context, 'Отменить'),
+              onPressed: () => _undoHistory(removed),
+            ),
+          ));
+      }
+    } catch (_) {
+      message('Не удалось изменить список недавних. Попробуйте ещё раз.');
+    } finally {
+      if (mounted) setState(() => _historyBusy = false);
+    }
+  }
+
+  Future<void> _undoHistory(Set<String> ids) async {
+    if (_historyBusy) return;
+    setState(() => _historyBusy = true);
+    try {
+      await store.setRecent(ids, true);
+    } catch (_) {
+      message('Не удалось изменить список недавних. Попробуйте ещё раз.');
+    } finally {
+      if (mounted) setState(() => _historyBusy = false);
+    }
+  }
+
+  Widget _fileHeader(bool searching) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: UiText(
+              searching ? 'Результаты поиска' : section == 2
+                  ? 'Избранное' : section == 1
+                  ? 'Рабочие копии' : 'Недавние файлы',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (_showingRecents)
+            PopupMenuButton<String>(
+              tooltip: tr(context, 'Действия с недавними'),
+              enabled: !_historyBusy && !opening && store.loaded &&
+                  store.error == null && store.files.any((f) => f.recent),
+              onSelected: (action) {
+                if (action == 'clear') {
+                  _clearRecents();
+                } else {
+                  setState(() {
+                    _endSelection();
+                    _selecting = true;
+                  });
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'select', child: UiText('Выбрать документы')),
+                PopupMenuItem(value: 'clear', child: UiText('Очистить все недавние')),
+              ],
+            ),
+        ],
+      ),
+      if (_selecting) ...[
+        const SizedBox(height: 8),
+        UiText('Выбрано: ${_selected.length}'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            TextButton(
+              onPressed: _historyBusy ? null : () => setState(_endSelection),
+              child: const UiText('Отмена выбора'),
+            ),
+            TextButton(
+              onPressed: _historyBusy ? null : () => setState(() {
+                _selected.addAll(_visibleFiles.map((f) => f.id));
+              }),
+              child: const UiText('Выбрать все'),
+            ),
+            TextButton.icon(
+              onPressed: _historyBusy || _selected.isEmpty
+                  ? null : () => _removeRecents(_selected),
+              icon: const Icon(Icons.playlist_remove),
+              label: const UiText('Убрать из недавних'),
+            ),
+          ],
+        ),
+      ],
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -483,7 +633,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     TextField(
                       controller: search,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (_) => setState(_endSelection),
                       textInputAction: TextInputAction.search,
                       decoration: InputDecoration(
                         hintText: tr(context, 'Найти файл'),
@@ -492,7 +642,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? null
                             : IconButton(
                                 tooltip: tr(context, 'Очистить поиск'),
-                                onPressed: () => setState(() => search.clear()),
+                                onPressed: () => setState(() {
+                                  search.clear();
+                                  _endSelection();
+                                }),
                                 icon: const Icon(Icons.close),
                               ),
                         border: OutlineInputBorder(
@@ -572,19 +725,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 28),
                     ],
                     if (section != 3 || searching) ...[
-                      UiText(
-                        searching
-                            ? 'Результаты поиска'
-                            : section == 2
-                            ? 'Избранное'
-                            : section == 1
-                            ? 'Файлы на устройстве'
-                            : 'Недавние файлы',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      _fileHeader(searching),
                       const SizedBox(height: 10),
                       Align(
                         alignment: Alignment.centerLeft,
@@ -616,7 +757,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                     selected: filter == k,
                                     onSelected: (_) =>
-                                        setState(() => filter = k),
+                                        setState(() {
+                                          filter = k;
+                                          _endSelection();
+                                        }),
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 12,
@@ -709,14 +853,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> fileWidgets(ColorScheme colors) {
     final q = search.text.trim().toLowerCase();
-    final list = store.files
-        .where(
-          (f) =>
-              (filter == null || f.kind == filter) &&
-              (section != 2 || f.favorite) &&
-              f.name.toLowerCase().contains(q),
-        )
-        .toList();
+    final list = _visibleFiles;
     if (!store.loaded) {
       return [
         const Padding(
@@ -746,6 +883,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? 'Файлы не найдены'
                     : section == 2
                     ? 'Здесь будут избранные файлы'
+                    : _showingRecents
+                    ? 'Недавних файлов пока нет'
                     : 'Ваш первый файл появится здесь',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
@@ -757,6 +896,8 @@ class _HomeScreenState extends State<HomeScreen> {
               UiText(
                 section == 2
                     ? 'Нажмите звёздочку рядом с нужным файлом.'
+                    : _showingRecents
+                    ? 'Рабочие копии доступны во вкладке «Файлы».'
                     : 'Откройте документ с устройства или сохраните новый.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 15, color: colors.onSurfaceVariant),
@@ -769,6 +910,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return [
       for (final file in list)
         Card(
+          key: ValueKey('workspace-${file.id}'),
           margin: const EdgeInsets.only(bottom: 10),
           elevation: 0,
           color: colors.surface,
@@ -780,7 +922,15 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  onTap: opening ? null : () => open(file.kind, entry: file),
+                  onTap: opening || _historyBusy ? null : () {
+                    if (_selecting) {
+                      _toggleSelection(file.id);
+                    } else {
+                      open(file.kind, entry: file);
+                    }
+                  },
+                  onLongPress: !_showingRecents || opening || _historyBusy
+                      ? null : () => _toggleSelection(file.id),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 18, 4, 18),
                     child: Row(
@@ -816,7 +966,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              IconButton(
+              if (_selecting)
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Checkbox(
+                    key: ValueKey('select-${file.id}'),
+                    semanticLabel: file.name,
+                    value: _selected.contains(file.id),
+                    onChanged: _historyBusy ? null : (_) => _toggleSelection(file.id),
+                  ),
+                )
+              else IconButton(
                 tooltip: tr(
                   context,
                   file.favorite ? 'Убрать из избранного' : 'В избранное',

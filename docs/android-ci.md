@@ -16,9 +16,9 @@ x86_64 image with the Pixel 7 hardware profile and KVM acceleration.
 | Suite | Current scenarios | Coverage |
 | --- | ---: | --- |
 | native_editors | 9 | Four real engines, in-page editing/export, recovery, English UI, worker/media lifetime, distant cells, imported layout, resizing, formulas and zoom |
-| office_features | 13 | Legacy Android reading preferences and new Dart-file precedence, Word replacement, active/new sheets, PPTX order and touch object editing, PDF rotation, notes, text editing and insertion, offline Russian and English OCR from a raster-only PDF, searchable export, identical rendered images, duplicate-layer rejection and undo/redo, text search and highlighted jumps in both page layouts, reading modes and direct navigation |
-| range_features | 7 | Cell search with distant matches, formulas, sheet switching and pending input, touch range selection/format/clear, sort direction and header, worksheet filtering by value and blanks, whole rows and columns, cross-sheet formulas, undo/redo, Word color/indent/spacing, export and reopen |
-| clipboard_features | 3 | Real Android clipboard identity, cross-workbook/sheet style and formula paste, special modes, external Unicode TSV, export and undo |
+| office_features | 18 | Legacy Android reading preferences and new Dart-file precedence, Word replacement, active/new sheets, PPTX order and touch object editing, PDF rotation, notes, text editing and insertion, offline Russian and English OCR from a raster-only PDF, searchable export, identical rendered images, duplicate-layer rejection and undo/redo, text search and highlighted jumps in both page layouts, reading modes and direct navigation |
+| range_features | 8 | Cell search with distant matches, formulas, sheet switching and pending input, touch range selection/format/clear, sort direction and header, worksheet filtering by value and blanks, whole rows and columns, cross-sheet formulas, undo/redo, Word color/indent/spacing, export and reopen |
+| clipboard_features | 5 | Real Android clipboard identity, cross-workbook/sheet style and formula paste, special modes, external Unicode TSV, export and undo |
 
 Flutter's host-side integration driver saves the existing screenshots directly
 under `build/android-qa/screenshots`. A screenshot must contain a PNG signature;
@@ -62,3 +62,8 @@ app checks and cannot satisfy the publication dependency.
 
 References: [emulator runner source](https://github.com/ReactiveCircus/android-emulator-runner/tree/a421e43855164a8197daf9d8d40fe71c6996bb0d)
 and [Flutter integration screenshot driver](https://github.com/flutter/flutter/blob/c197ca5199e9ee5661e865596c9c07294dfab51c/packages/integration_test/lib/integration_test_driver_extended.dart).
+
+The ordinary-app recent-copy scenario also checks clear cancellation, long-press
+selection, batch removal, Undo, persistence after force-stop, favorite retention,
+reopening a hidden copy from Files, and removing the single reactivated record.
+History cleanup never deletes the stored document bytes or recovery drafts.

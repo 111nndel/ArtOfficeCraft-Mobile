@@ -74,6 +74,32 @@ async function selectFixture(name) {
   await waitFor(n=>n.package===pkg && n.label.startsWith(name),'Opened '+name);
   await pause(800);
 }
+
+async function reveal(pattern) {
+  for(let i=0;i<10;i++) {
+    const node=nodes().find(n=>typeof pattern==='function'?pattern(n):n.label===pattern);
+    if(node && rect(node).h>0)return node;
+    command(['shell','input','swipe','540','1850','540','850','300']);
+    await pause(200);
+  }
+  throw Error('Could not reveal '+String(pattern));
+}
+async function freshHome() {
+  command(['shell','am','force-stop',pkg]);
+  command(['shell','am','start','-n',pkg+'/.MainActivity','-f','0x10008000']);
+  await waitFor(/^Files(?:\n|$)/);
+}
+async function historyAction(label) {
+  tap(await reveal('Recent file actions'));
+  tap(await waitFor(label));
+}
+async function clearHistory() {
+  await historyAction('Clear all recents');
+  await waitFor('Clear all recents?');
+  tap(await waitFor('Clear'));
+  await waitFor('Removed from recents');
+}
+
 (async()=>{
   if(Number(command(['shell','getprop','ro.build.version.sdk']).trim())<36)throw Error('Use Android 16 or newer');
   command(['install','-r',path.resolve(apk)]);
@@ -105,6 +131,62 @@ async function selectFixture(name) {
   tap(await waitFor(n=>n.label.startsWith(second),'Second recent'));
   await waitFor(n=>n.label.startsWith(second),'Reopened second');
   await waitFor(/Imported merged title/);
-  const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened']};
+
+  // A history entry is a view onto a retained copy, not permission to delete it.
+  command(['shell','input','keyevent','4']);
+  await freshHome();
+  const row=rect(await reveal(n=>n.label.startsWith(second)));
+  const star=nodes().find(n=>n.label==='Add to favorites' &&
+    rect(n).y+rect(n).h/2>=row.y && rect(n).y+rect(n).h/2<=row.y+row.h);
+  if(!star)throw Error('Favorite action missing for second copy');
+  tap(star);
+  await waitFor('Remove from favorites');
+
+  await freshHome();
+  await historyAction('Clear all recents');
+  await waitFor('Clear all recents?');
+  tap(await waitFor('Cancel'));
+  await reveal(n=>n.label.startsWith(second));
+  shot('clear-cancel-retains-history');
+
+  // Long press and batch removal must share the same reversible behavior.
+  await freshHome();
+  const item=await reveal(n=>n.label.startsWith(second));
+  const bounds=rect(item),x=Math.round(bounds.x+bounds.w/2),y=Math.round(bounds.y+bounds.h/2);
+  command(['shell','input','swipe',String(x),String(y),String(x),String(y),'900']);
+  tap(await reveal('Select all'));
+  await waitFor('Selected: 2');
+  tap(await waitFor('Remove from recents'));
+  await waitFor('Removed from recents');
+  tap(await waitFor('Undo'));
+  await reveal(n=>n.label.startsWith(second));
+
+  await freshHome();
+  await clearHistory();
+  tap(await waitFor('Undo'));
+  await reveal(n=>n.label.startsWith(second));
+  await freshHome();
+  await clearHistory();
+  await freshHome();
+  await reveal('No recent files yet');
+  shot('recent-history-cleared-after-restart');
+
+  tap(await waitFor(/^Favorites(?:\n|$)/));
+  await reveal(n=>n.label.startsWith(second));
+  tap(await waitFor(/^Files(?:\n|$)/));
+  tap(await reveal(n=>n.label.startsWith(first)));
+  await waitFor(/Imported merged title/);
+  command(['shell','input','keyevent','4']);
+  tap(await waitFor(/^Home(?:\n|$)/));
+  await reveal(n=>n.label.startsWith(first));
+  await historyAction('Select documents');
+  tap(await reveal('Select all'));
+  await waitFor('Selected: 1');
+  tap(await waitFor('Remove from recents'));
+  await waitFor('Removed from recents');
+  await reveal('No recent files yet');
+  shot('single-reopened-copy-removed');
+
+  const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened','clear cancellation retains history','long press and batch removal with undo','clear all with undo','cleared history survives restart','favorites retained','hidden copy reopened from Files','reopened copy returns to recents without a duplicate','single entry removal']};
   fs.writeFileSync(path.join(proof,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});
