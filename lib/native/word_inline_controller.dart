@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 /// A bounded paragraph draft. Typing changes spans locally; Rust runs on commit.
 class WordInlineController extends TextEditingController {
   List<TextStyle> _styles = [];
+  TextStyle _emptyStyle = const TextStyle();
   String _previous = '';
 
   static Color? textColor(dynamic value) {
@@ -24,6 +25,9 @@ class WordInlineController extends TextEditingController {
 
   void load(Map<String, dynamic> block, {TextSelection? selection}) {
     final content = block['text']?.toString() ?? '';
+    _emptyStyle = block['emptyStyle'] is Map
+        ? runStyle(block['emptyStyle'] as Map)
+        : const TextStyle();
     _styles = [
       for (final run in block['runs'] as List? ?? [])
         ...List.filled(
@@ -76,7 +80,7 @@ class WordInlineController extends TextEditingController {
       suffix--;
     }
     final inherited = _styles.isEmpty
-        ? const TextStyle()
+        ? _emptyStyle
         : _styles[prefix.clamp(0, _styles.length - 1)];
     _styles = [
       ..._styles.take(prefix),
@@ -90,7 +94,7 @@ class WordInlineController extends TextEditingController {
     _syncStyles();
     final offset = selection.isValid ? selection.start : 0;
     final style = _styles.isEmpty
-        ? const TextStyle()
+        ? _emptyStyle
         : _styles[offset.clamp(0, _styles.length - 1)];
     return switch (key) {
       'bold' => style.fontWeight == FontWeight.bold,
@@ -135,6 +139,9 @@ class WordInlineController extends TextEditingController {
       );
       start = end;
     }
-    return TextSpan(style: style, children: children);
+    return TextSpan(
+      style: text.isEmpty ? (style?.merge(_emptyStyle) ?? _emptyStyle) : style,
+      children: children,
+    );
   }
 }

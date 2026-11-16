@@ -154,10 +154,16 @@ pub fn preview(doc:&wordcraft_doc::Document)->Vec<J>{
             let style=p.props.style.as_deref().unwrap_or("Normal");
             *outlines.entry(style).or_insert_with(||doc.styles.para_style_props(style).0.outline_level)
         }).filter(|level|*level<9);
-        Some(json!({"block":index,"outlineLevel":outline,"text":p.plain_text(),"editable":editable,"runs":runs,
+        let mut block=json!({"block":index,"outlineLevel":outline,"text":p.plain_text(),"editable":editable,"runs":runs,
             "align":p.props.align.unwrap_or(Align::Left),"indentLeft":p.props.indent_left.unwrap_or(0.0),
             "indentFirst":p.props.indent_first.unwrap_or(0.0),"spaceAfter":p.props.space_after.unwrap_or(12.0),
-            "lineSpacing":match p.props.line_spacing {Some(LineSpacing::Multiple(v))=>Some(v),_=>None}}))
+            "lineSpacing":match p.props.line_spacing {Some(LineSpacing::Multiple(v))=>Some(v),_=>None}});
+        if p.text.is_empty() {
+            block["emptyStyle"]=json!({"bold":p.mark.bold,"italic":p.mark.italic,
+                "underline":p.mark.underline.is_some_and(|v|v!=Underline::None),"size":p.mark.size,
+                "color":match p.mark.color {Some(TextColor::Rgb(rgb))=>Some(format!("#{}",rgb.hex())),_=>None}});
+        }
+        Some(block)
     }).collect()
 }
 
@@ -178,6 +184,7 @@ mod tests{
    let inserted=if before {1}else{2};let Block::Para(p)=reopened.body[inserted].as_ref()else{panic!()};
    assert!(p.text.is_empty() && p.runs.is_empty() && p.objects.is_empty() && p.section.is_none());
    let Block::Para(a)=source.body[1].as_ref()else{panic!()};assert_eq!(p.props,a.props.formatting());assert_eq!(p.mark,a.mark.unlinked());
+   assert_eq!(preview(&reopened)[inserted]["emptyStyle"]["bold"],json!(a.mark.bold));
    let remaining:Vec<_>=reopened.body.iter().enumerate().filter(|(i,_)|*i!=inserted).map(|(_,b)|b.clone()).collect();assert_eq!(remaining,source.body);
   }
  }

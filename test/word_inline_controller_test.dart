@@ -6,6 +6,36 @@ import 'dart:convert';
 
 void main() {
   testWidgets(
+    'An empty paragraph inherits mark formatting before its first character',
+    (tester) async {
+      final controller = WordInlineController();
+      addTearDown(controller.dispose);
+      controller.load({
+        'text': '',
+        'emptyStyle': {'bold': true, 'size': 18, 'color': '#3565CA'},
+      });
+      expect(controller.propertyAtSelection('bold'), isTrue);
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      final context = tester.element(find.byType(SizedBox).first);
+      expect(
+        controller
+            .buildTextSpan(context: context, withComposing: false)
+            .style!
+            .fontSize,
+        closeTo(18 * 1.33, .001),
+      );
+      controller.text = '😀';
+      final span = controller.buildTextSpan(
+        context: context,
+        withComposing: false,
+      );
+      final style = span.children!.cast<TextSpan>().single.style!;
+      expect(style.fontWeight, FontWeight.bold);
+      expect(style.color, const Color(0xff3565CA));
+      expect(style.fontSize, closeTo(18 * 1.33, .001));
+    },
+  );
+  testWidgets(
     'Long Unicode paragraph load preserves per-character formatting with shared run styles',
     (tester) async {
       final controller = WordInlineController();
