@@ -89,7 +89,7 @@ async function reveal(pattern) {
     command(['shell','input','swipe','540','1850','540','850','300']);
     await pause(200);
   }
-  throw Error('Could not reveal '+String(pattern));
+  throw Error('Could not reveal '+String(pattern)+'; visible labels: '+JSON.stringify(nodes().map(n=>n.label).filter(Boolean)));
 }
 async function freshHome() {
   command(['shell','am','force-stop',pkg]);
@@ -175,7 +175,7 @@ async function clearHistory() {
   await freshHome();
   await clearHistory();
   await freshHome();
-  await reveal('No recent files yet');
+  await reveal(n=>n.label.split('\n').includes('No recent files yet'));
   shot('recent-history-cleared-after-restart');
 
   tap(await waitFor(/^Favorites(?:\n|$)/));
@@ -191,7 +191,7 @@ async function clearHistory() {
   await waitFor('Selected: 1');
   tap(await waitFor('Remove from recents'));
   await waitFor('Removed from recents');
-  await reveal('No recent files yet');
+  await reveal(n=>n.label.split('\n').includes('No recent files yet'));
   shot('single-reopened-copy-removed');
 
   const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened','clear cancellation retains history','long press and batch removal with undo','clear all with undo','cleared history survives restart','favorites retained','hidden copy reopened from Files','reopened copy returns to recents without a duplicate','single entry removal']};
