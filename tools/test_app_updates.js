@@ -32,9 +32,8 @@ async function chooseMode(label){
  await check();
  if(requests().some(r=>r.path.endsWith('.apk')))throw Error('Manual check downloaded APK automatically');
  for(const bad of ['corrupt','wrong-key','old-code']){
-  mode(bad);if(bad!=='corrupt')await check();
   // A fresh check selects that fixture's size/hash before every download.
-  if(bad==='corrupt')await check();
+  mode(bad);await check();
   tap(await reveal('Download update'));
   await wait('Could not check or download the update. Try again later.');
   if(nodes().some(n=>n.label==='Install'))throw Error('Invalid APK was offered for install: '+bad);

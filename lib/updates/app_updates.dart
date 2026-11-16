@@ -160,8 +160,9 @@ class AppUpdates extends ChangeNotifier {
         busy ||
         installing ||
         _disposed ||
-        installed == null)
+        installed == null) {
       return;
+    }
     if (!force &&
         checkedAt != null &&
         now().difference(checkedAt!) < const Duration(days: 1)) {
@@ -210,8 +211,13 @@ class AppUpdates extends ChangeNotifier {
   }
 
   Future<void> download() async {
-    if (release == null || installed == null || busy || installing || _disposed)
+    if (release == null ||
+        installed == null ||
+        busy ||
+        installing ||
+        _disposed) {
       return;
+    }
     final token = ++_generation;
     try {
       await _download(token, release!);

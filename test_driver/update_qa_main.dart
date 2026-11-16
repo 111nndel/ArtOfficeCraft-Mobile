@@ -21,7 +21,7 @@ class FixtureClient implements HttpClient {
       host: '10.0.2.2',
       port: 8765,
       path: uri.path,
-      query: uri.query,
+      query: uri.hasQuery ? uri.query : null,
     ),
   );
   @override
