@@ -69,7 +69,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "artoffice_core"
-version = "0.51.0"
+version = "0.53.0"
 dependencies = [
  "deckcraft-model",
  "deckcraft-pptx",
@@ -366,14 +366,14 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-color"
-version = "0.17.0"
+version = "0.18.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "deckcraft-geom"
-version = "0.17.0"
+version = "0.18.1"
 dependencies = [
  "kurbo",
  "serde",
@@ -381,7 +381,7 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-model"
-version = "0.17.0"
+version = "0.18.1"
 dependencies = [
  "deckcraft-color",
  "deckcraft-geom",
@@ -393,7 +393,7 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-pptx"
-version = "0.17.0"
+version = "0.18.1"
 dependencies = [
  "deckcraft-color",
  "deckcraft-geom",
@@ -568,6 +568,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "form_urlencoded"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+dependencies = [
+ "percent-encoding",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -638,7 +647,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-calc"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -650,7 +659,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-chart"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-core",
@@ -661,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-core"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "chrono",
  "js-sys",
@@ -671,7 +680,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-engine"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "gridcraft-calc",
  "gridcraft-chart",
@@ -693,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-formula"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "gridcraft-core",
  "serde",
@@ -702,7 +711,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-functions"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "gridcraft-core",
  "regex",
@@ -710,7 +719,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-math"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "ratex-font",
  "ratex-layout",
@@ -720,7 +729,7 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-model"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "gridcraft-core",
  "gridcraft-formula",
@@ -733,18 +742,18 @@ dependencies = [
 
 [[package]]
 name = "gridcraft-numfmt"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "gridcraft-core",
 ]
 
 [[package]]
 name = "gridcraft-pdf"
-version = "0.18.0"
+version = "0.19.1"
 
 [[package]]
 name = "gridcraft-xlsx"
-version = "0.18.0"
+version = "0.19.1"
 dependencies = [
  "aes",
  "gridcraft-core",
@@ -960,6 +969,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3632ebbd0c5c3637ba1a40bdf8288f2cb9d2268e73441a69d5fc73d7cfbaa87c"
 
 [[package]]
+name = "icu_normalizer"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "404a3b8c486f205c87fe7f23ab6894d84a4ad76d6e4671ae1981ba7def87c599"
+dependencies = [
+ "icu_collections",
+ "icu_normalizer_data",
+ "icu_properties",
+ "icu_provider",
+ "smallvec",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_normalizer_data"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20f0088bfb7441f7a37fa0c9e20cb1e9cba1cac6b9ce8cd2a6dc44294f8e8cbc"
+
+[[package]]
+name = "icu_properties"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2ea83d991c56158f7cf898bf86436c1dfe7c07ee82fe88951f2695c9f37a379f"
+dependencies = [
+ "displaydoc",
+ "icu_collections",
+ "icu_locale_core",
+ "icu_properties_data",
+ "icu_provider",
+ "zerotrie",
+ "zerovec",
+]
+
+[[package]]
+name = "icu_properties_data"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b98f29af82d02b163fe50161388350e743bb3107cc8e8c2f7314cb505faddfcf"
+
+[[package]]
 name = "icu_provider"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -998,6 +1048,27 @@ name = "icu_segmenter_data"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "913a7d294ad056474749152107309fdee3ec17d2482d1ab70fdc61a81c64b9a3"
+
+[[package]]
+name = "idna"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de"
+dependencies = [
+ "idna_adapter",
+ "smallvec",
+ "utf8_iter",
+]
+
+[[package]]
+name = "idna_adapter"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
+dependencies = [
+ "icu_normalizer",
+ "icu_properties",
+]
 
 [[package]]
 name = "image"
@@ -1193,7 +1264,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "pdfcraft-annot"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "pdfcraft-cos",
  "pdfcraft-fonts",
@@ -1204,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-content"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "hayro-syntax",
  "pdfcraft-cos",
@@ -1212,7 +1283,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-cos"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "chrono",
  "js-sys",
@@ -1224,18 +1295,19 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-crypt"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "aes",
  "md-5",
  "sha2",
  "stringprep",
  "thiserror 2.0.21",
+ "zeroize",
 ]
 
 [[package]]
 name = "pdfcraft-edit"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "icu_segmenter",
  "kurbo",
@@ -1251,7 +1323,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-filters"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "fax",
  "flate2",
@@ -1262,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-fonts"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "harfrust",
  "pdfcraft-cos",
@@ -1272,18 +1344,18 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-geom"
-version = "0.20.0"
+version = "0.21.1"
 
 [[package]]
 name = "pdfcraft-model"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "pdfcraft-cos",
 ]
 
 [[package]]
 name = "pdfcraft-organize"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
@@ -1292,7 +1364,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-render"
-version = "0.20.0"
+version = "0.21.1"
 dependencies = [
  "bytemuck",
  "getrandom 0.4.3",
@@ -1308,6 +1380,7 @@ dependencies = [
  "skrifa 0.44.0",
  "thiserror 2.0.21",
  "unicode-bidi",
+ "url",
 ]
 
 [[package]]
@@ -1322,6 +1395,12 @@ dependencies = [
  "linebender_resource_handle",
  "smallvec",
 ]
+
+[[package]]
+name = "percent-encoding"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "phf"
@@ -1985,6 +2064,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
 
 [[package]]
+name = "url"
+version = "2.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+dependencies = [
+ "form_urlencoded",
+ "idna",
+ "percent-encoding",
+ "serde",
+]
+
+[[package]]
 name = "utf8_iter"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2188,7 +2279,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wordcraft-doc"
-version = "0.17.0"
+version = "0.18.1"
 dependencies = [
  "base64",
  "log",
@@ -2201,7 +2292,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docx"
-version = "0.17.0"
+version = "0.18.1"
 dependencies = [
  "aes",
  "base64",
@@ -2223,7 +2314,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-geom"
-version = "0.17.0"
+version = "0.18.1"
 dependencies = [
  "serde",
 ]

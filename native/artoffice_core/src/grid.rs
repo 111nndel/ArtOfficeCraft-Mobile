@@ -231,6 +231,9 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
+        if action == "fill_range" {
+            return super::grid_fill::edit(wb, idx, address, &req);
+        }
         if action == "merge_range" {
             return super::grid_merge::edit(wb, idx, address, &req);
         }
