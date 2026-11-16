@@ -26,15 +26,14 @@ class WorkspaceFile {
     DateTime? modified,
     bool? favorite,
     bool? recent,
-  }) =>
-      WorkspaceFile(
-        id: id,
-        name: name ?? this.name,
-        kind: kind,
-        modified: modified ?? this.modified,
-        favorite: favorite ?? this.favorite,
-        recent: recent ?? this.recent,
-      );
+  }) => WorkspaceFile(
+    id: id,
+    name: name ?? this.name,
+    kind: kind,
+    modified: modified ?? this.modified,
+    favorite: favorite ?? this.favorite,
+    recent: recent ?? this.recent,
+  );
   Map<String, Object> toJson() => {
     'id': id,
     'name': name,
@@ -176,6 +175,7 @@ class WorkspaceStore extends ChangeNotifier {
       ..addAll(next);
     notifyListeners();
   });
+
   /// Hide or restore history entries without changing documents or favorites.
   /// Snapshot IDs before queueing so later selection changes cannot affect work.
   Future<Set<String>> setRecent(Iterable<String> ids, bool value) {
