@@ -126,8 +126,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Файлы'));
       await tester.pumpAndSettle();
-      await reveal(tester, find.text('Plan.docx'));
+      await reveal(tester, find.text('Рабочие копии'));
       expect(find.text('Рабочие копии'), findsOneWidget);
+      await reveal(tester, find.text('Plan.docx'));
       await reveal(tester, find.text('Budget.xlsx'));
       await tester.tap(find.byTooltip('Избранное'));
       await tester.pumpAndSettle();
@@ -155,6 +156,7 @@ void main() {
       expect(store.files.singleWhere((f) => f.id == word.id).recent, isFalse);
       expect(store.files.singleWhere((f) => f.id == grid.id).recent, isTrue);
 
+      await reveal(tester, find.widgetWithText(ChoiceChip, 'Все'));
       await tester.tap(find.widgetWithText(ChoiceChip, 'Все'));
       await tester.pumpAndSettle();
       await reveal(tester, find.byKey(ValueKey('workspace-${grid.id}')));
