@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.52.0.**
+**Current preview — alpha 0.53.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -32,7 +32,11 @@ Spreadsheet reading windows, search batches and filter choices reuse the current
 parsed Rust workbook; edits and closing release that read model. Recent spreadsheet
 regions stay available on return trips, with read-ahead during movement and local
 selection of loaded cells. Progress overlays the grid without moving the lower controls.
-See the [0.52.0 release notes and limits](docs/release-0.52.0-alpha.1.md).
+Home / Fill range repeats the first selected row down or the first column right,
+preserving formatting and adjusting relative formula references. Filtered-out rows
+stay unchanged; pending input and fill share one undo step. Fill is limited to
+4096 cells outside merged cells, Excel tables and array/spill ranges.
+See the [0.53.0 release notes and limits](docs/release-0.53.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
@@ -78,10 +82,10 @@ Android port, rather than a GitHub fork with a single upstream parent:
 
 | Engine | Original source | Pinned version |
 | --- | --- | --- |
-| WordCraft | https://github.com/storytold/wordcraft | v0.17.0 |
-| GridCraft | https://github.com/storytold/gridcraft | v0.18.0 |
-| DeckCraft | https://github.com/storytold/deckcraft | v0.17.0 |
-| PDFCraft | https://github.com/storytold/pdfcraft | v0.20.0 |
+| WordCraft | https://github.com/storytold/wordcraft | v0.18.1 |
+| GridCraft | https://github.com/storytold/gridcraft | v0.19.1 |
+| DeckCraft | https://github.com/storytold/deckcraft | v0.18.1 |
+| PDFCraft | https://github.com/storytold/pdfcraft | v0.21.1 |
 
 Exact commits are recorded in `upstream/engines.lock.json` and embedded in the
 native binary (`ac_engine_info`). The About screen reads those binary values.

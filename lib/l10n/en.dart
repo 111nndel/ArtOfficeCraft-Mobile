@@ -1,5 +1,13 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
+  "Заполнить диапазон": "Fill range",
+  "Заполнить вниз": "Fill down",
+  "Заполнить вправо": "Fill right",
+  "Диапазон заполнен": "Range filled",
+  "Для заполнения выберите диапазон без объединённых ячеек и таблиц Excel":
+      "For filling, select a range without merged cells or Excel tables",
+  "Выделите диапазон вместе с исходной строкой или столбцом. Формулы и оформление копируются, относительные ссылки изменяются.": "Select the range including its source row or column. Formulas and formatting are copied; relative references adjust.",
+  "Вниз — повторить первую строку; вправо — первый столбец. Скрытые фильтром строки сохраняются.": "Down repeats the first row; right repeats the first column. Filtered-out rows stay unchanged.",
   "Перед текущим абзацем": "Before current paragraph",
   "После текущего абзаца": "After current paragraph",
   "В конце документа": "At document end",

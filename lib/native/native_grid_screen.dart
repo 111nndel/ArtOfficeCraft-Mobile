@@ -953,6 +953,38 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     inputFocus.unfocus();
   });
 
+  String? fillBlockReason(GridSelection range) =>
+      undoableEditBlocked ??
+      (layout.mergesIn(range).isNotEmpty ||
+              layout.tables.any(
+                (t) =>
+                    t.row <= range.endRow &&
+                    t.endRow >= range.row &&
+                    t.column <= range.endColumn &&
+                    t.endColumn >= range.column,
+              )
+          ? 'Для заполнения выберите диапазон без объединённых ячеек и таблиц Excel'
+          : null);
+
+  Future<void> fillSelected(String direction) => run(() async {
+    if (book == null) return;
+    final range = selectedRange, blocked = fillBlockReason(selectedRange);
+    if (blocked != null) {
+      tip(blocked);
+      return;
+    }
+    if (!await applyUndoableEdit({
+      'action': 'fill_range',
+      'range': range.address,
+      'direction': direction,
+      if (inputDirty) 'value': input.text,
+    }, flushPending: false)) {
+      return;
+    }
+    inputFocus.unfocus();
+    tip('Диапазон заполнен');
+  });
+
   ({int first, int count, String label}) lineSpan(bool rows) {
     final cell = gridAddress(selected)!;
     final range = rangeSelection;
@@ -2095,6 +2127,52 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                   ),
               ],
             ),
+          ),
+          'Заполнить диапазон': EditorTool(
+            'Заполнить диапазон',
+            Icons.copy_all,
+            builder: (_) {
+              final range = selectedRange,
+                  blocked = fillBlockReason(selectedRange);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(range.address),
+                  const SizedBox(height: 8),
+                  const UiText(
+                    'Выделите диапазон вместе с исходной строкой или столбцом. Формулы и оформление копируются, относительные ссылки изменяются.',
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        busy ||
+                            book == null ||
+                            blocked != null ||
+                            range.row == range.endRow
+                        ? null
+                        : () => fillSelected('down'),
+                    icon: const Icon(Icons.arrow_downward),
+                    label: const UiText('Заполнить вниз'),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        busy ||
+                            book == null ||
+                            blocked != null ||
+                            range.column == range.endColumn
+                        ? null
+                        : () => fillSelected('right'),
+                    icon: const Icon(Icons.arrow_forward),
+                    label: const UiText('Заполнить вправо'),
+                  ),
+                  const SizedBox(height: 8),
+                  UiText(
+                    blocked ?? 'Вниз — повторить первую строку; вправо — первый столбец. Скрытые фильтром строки сохраняются.',
+                  ),
+                ],
+              );
+            },
           ),
           'Очистить содержимое': EditorTool(
             'Очистить содержимое',

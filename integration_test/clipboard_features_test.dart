@@ -171,6 +171,81 @@ void main() {
   tearDown(defaultGridClipboard.clearLocal);
 
   testWidgets(
+    'Fill down commits pending formula as one undo step and exports adjusted references',
+    (tester) async {
+      final b = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(b.close);
+      var original = await source(b);
+      original = await b.edit(original, {
+        'sheet': 0,
+        'address': 'A2',
+        'value': '20',
+      });
+      original = await b.edit(original, {
+        'sheet': 0,
+        'address': 'A3',
+        'value': '30',
+      });
+      await present(tester, b, original);
+      await select(tester, 'B1:B3');
+      final input = find.descendant(
+        of: find.byKey(const Key('formula-input')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(input, r'=A1+$A$1');
+      await tool(tester, 'Главная', 'Заполнить диапазон');
+      await press(tester, 'Заполнить вниз');
+      await until(tester, () => panel(tester).undo != null, 'filled range');
+      await tester.pumpAndSettle();
+      var saved = await save(tester);
+      expect((await cell(b, saved, 'B3'))['input'], r'=A3+$A$1');
+      expect((await cell(b, saved, 'B3'))['display'], '40.00');
+      expect((await cell(b, saved, 'B3'))['style']['bold'], true);
+      await collapse(tester);
+      await tester.tap(find.byTooltip('Отменить'));
+      await tester.pumpAndSettle();
+      saved = await save(tester);
+      expect((await cell(b, saved, 'B1'))['input'], '=A1*2');
+      expect((await cell(b, saved, 'B3'))['input'], '');
+      await tester.tap(find.byTooltip('Повторить'));
+      await tester.pumpAndSettle();
+      saved = await save(tester);
+      expect((await cell(b, saved, 'B3'))['input'], r'=A3+$A$1');
+      await capture(tester, 'grid-fill-down-053');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Fill right repeats the first column, preserves absolute references and survives reopen',
+    (tester) async {
+      final b = NativeDocumentBackend(NativeDocumentKind.grid);
+      addTearDown(b.close);
+      final original = await b.edit(await source(b), {
+        'sheet': 0,
+        'address': 'A2',
+        'value': r'=A1+$A$1',
+      });
+      await present(tester, b, original);
+      await select(tester, 'A1:C2');
+      await tool(tester, 'Главная', 'Заполнить диапазон');
+      await press(tester, 'Заполнить вправо');
+      await until(tester, () => panel(tester).undo != null, 'horizontal fill');
+      await tester.pumpAndSettle();
+      final saved = await save(tester);
+      await present(tester, b, saved);
+      expect((await cell(b, saved, 'C1'))['input'], '10');
+      expect((await cell(b, saved, 'C1'))['style']['bold'], true);
+      expect((await cell(b, saved, 'C2'))['input'], r'=C1+$A$1');
+      expect((await cell(b, saved, 'C2'))['display'], '20');
+      await capture(tester, 'grid-fill-right-053');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'Rich Android clipboard survives source screen closure and pastes across workbooks and sheets with undo',
     (tester) async {
       final b = NativeDocumentBackend(NativeDocumentKind.grid);
