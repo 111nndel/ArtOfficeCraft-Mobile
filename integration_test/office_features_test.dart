@@ -404,6 +404,107 @@ void main() {
   );
 
   testWidgets(
+    'Word inserts around the current paragraph and round-trips save undo redo',
+    (tester) async {
+      final backend = NativeDocumentBackend(NativeDocumentKind.word);
+      addTearDown(backend.close);
+      var bytes = await backend.create('First');
+      for (final text in ['Middle', 'Last']) {
+        bytes = await backend.edit(bytes, {'action': 'append', 'text': text});
+      }
+      await present(
+        tester,
+        NativeWordScreen(
+          backend: backend,
+          launch: EditorLaunch(bytes: bytes, name: 'Paragraph insert.docx'),
+        ),
+      );
+      await tester.tap(find.text('Middle'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('word-inline-input')),
+        'Middle draft 😀',
+      );
+      await tool(tester, 'Вставка', 'Новый абзац');
+      await press(tester, 'Перед текущим абзацем');
+      await until(
+        tester,
+        () =>
+            find.byKey(const Key('word-inline-input')).evaluate().isNotEmpty &&
+            tester
+                .widget<TextField>(find.byKey(const Key('word-inline-input')))
+                .controller!
+                .text
+                .isEmpty &&
+            !tester
+                .widget<TextField>(find.byKey(const Key('word-inline-input')))
+                .readOnly,
+        'inserted blank paragraph',
+      );
+      await history(tester, true);
+      expect(
+        (await backend.inspect(
+          await save(tester, 'Сохранить как DOCX'),
+        ))['paragraphs'],
+        ['First', 'Middle draft 😀', 'Last'],
+      );
+      await history(tester, false);
+      expect(
+        (await backend.inspect(
+          await save(tester, 'Сохранить как DOCX'),
+        ))['paragraphs'],
+        ['First', '', 'Middle draft 😀', 'Last'],
+      );
+      await tester.tap(find.text('Коснитесь, чтобы начать писать'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('word-inline-input')),
+        'Inserted before',
+      );
+      await save(tester, 'Сохранить как DOCX');
+      await tester.tap(find.text('Middle draft 😀'));
+      await tester.pumpAndSettle();
+      await tool(tester, 'Вставка', 'Новый абзац');
+      await press(tester, 'После текущего абзаца');
+      await until(
+        tester,
+        () =>
+            find.byKey(const Key('word-inline-input')).evaluate().isNotEmpty &&
+            tester
+                .widget<TextField>(find.byKey(const Key('word-inline-input')))
+                .controller!
+                .text
+                .isEmpty &&
+            !tester
+                .widget<TextField>(find.byKey(const Key('word-inline-input')))
+                .readOnly,
+        'second blank paragraph',
+      );
+      await tester.enterText(
+        find.byKey(const Key('word-inline-input')),
+        'Inserted after',
+      );
+      final saved = await save(tester, 'Сохранить как DOCX');
+      expect((await backend.inspect(saved))['paragraphs'], [
+        'First',
+        'Inserted before',
+        'Middle draft 😀',
+        'Inserted after',
+        'Last',
+      ]);
+      expect((await backend.inspect(bytes))['paragraphs'], [
+        'First',
+        'Middle',
+        'Last',
+      ]);
+      await tool(tester, 'Вставка', 'Новый абзац');
+      await capture(tester, 'word-paragraph-insert-051');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
     'Android legacy reading preferences survive and new Dart files take precedence',
     (tester) async {
       // tools/ci/run_android_checks.py seeds these old-format XML preferences.

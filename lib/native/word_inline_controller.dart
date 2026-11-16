@@ -26,8 +26,10 @@ class WordInlineController extends TextEditingController {
     final content = block['text']?.toString() ?? '';
     _styles = [
       for (final run in block['runs'] as List? ?? [])
-        for (var i = 0; i < (run['text']?.toString() ?? '').length; i++)
+        ...List.filled(
+          (run['text']?.toString() ?? '').length,
           runStyle(run as Map),
+        ),
     ];
     if (_styles.length > content.length) {
       _styles = _styles.sublist(0, content.length);

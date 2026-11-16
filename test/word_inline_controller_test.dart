@@ -2,7 +2,80 @@ import 'package:artofficecraft_mobile/native/word_inline_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'dart:convert';
+
 void main() {
+  testWidgets(
+    'Long Unicode paragraph load preserves per-character formatting with shared run styles',
+    (tester) async {
+      final controller = WordInlineController();
+      addTearDown(controller.dispose);
+      final runs = [
+        for (var i = 0; i < 4; i++)
+          {
+            'text': 'Абзац 😀 ' * 256,
+            'bold': i.isEven,
+            'italic': i.isOdd,
+            'color': i.isEven ? '#3565CA' : '#147553',
+            'size': 16,
+          },
+      ];
+      final text = runs.map((r) => r['text'] as String).join();
+      final block = {'text': text, 'runs': runs};
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      final context = tester.element(find.byType(SizedBox).first);
+      final times = {
+        'previousStyleExpansion': <int>[],
+        'currentFullLoad': <int>[],
+      };
+      final watch = Stopwatch();
+      for (var sample = 0; sample < 30; sample++) {
+        List<TextStyle>? expected;
+        for (final mode
+            in sample.isEven ? times.keys : times.keys.toList().reversed) {
+          watch
+            ..reset()
+            ..start();
+          if (mode == 'previousStyleExpansion') {
+            expected = [
+              for (final run in runs)
+                for (var i = 0; i < (run['text'] as String).length; i++)
+                  WordInlineController.runStyle(run),
+            ];
+          } else {
+            controller.load(block);
+          }
+          times[mode]!.add(watch.elapsedMicroseconds);
+        }
+        final span = controller.buildTextSpan(
+          context: context,
+          withComposing: false,
+        );
+        expect(span.toPlainText(), text);
+        final actual = [
+          for (final child in span.children!.cast<TextSpan>())
+            ...List.filled(child.text!.length, child.style!),
+        ];
+        expect(actual, expected);
+        expect(controller.selection.extentOffset, text.length);
+      }
+      double median(List<int> values) {
+        final sorted = [...values]..sort();
+        return (sorted[14] + sorted[15]) / 2;
+      }
+
+      debugPrint(
+        'WORD_INLINE_BENCHMARK ${jsonEncode({
+          'scope': 'Flutter debug Linux; style expansion versus full paragraph load; not Android FPS',
+          'utf16Units': text.length,
+          'runs': runs.length,
+          'equalStyles': true,
+          'medianUs': {for (final e in times.entries) e.key: median(e.value)},
+        })}',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'Inline draft preserves styled Unicode runs during typing and IME composition',
     (tester) async {

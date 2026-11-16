@@ -104,6 +104,42 @@ async function openPicker(kind){
   if(Math.abs(restored.h-rowBefore.h)>4)throw Error('Undo did not restore row height');
   tap(await waitFor('Redo'));await pause(500);
   shot('touch-redone');
-  const result={passed:true,types:verified,columnPixels:{before:colBefore.w,after:colAfter.w},rowPixels:{before:rowBefore.h,after:rowAfter.h,undo:restored.h},device,api:36};
+  // Real external VIEW comes from DocumentsUI, which owns and grants the URI.
+  const component=command(['shell','cmd','package','query-activities','--brief','-a','android.intent.action.MAIN','-c','android.intent.category.LAUNCHER']).split(/\r?\n/).map(x=>x.trim()).find(x=>x.includes('documentsui/')&&!x.includes(' '));
+  if(!component)throw Error('DocumentsUI launcher not found');
+  for(const mime of Object.values(types)) {
+    for(const action of ['android.intent.action.VIEW','android.intent.action.SEND']) {
+      const handlers=command(['shell','cmd','package','query-activities','--brief','-a',action,'-c','android.intent.category.DEFAULT','-t',mime,...(action.endsWith('.VIEW')?['-d','content://qa.example/document']:[])]);
+      if(!handlers.includes(pkg+'/'))throw Error('Missing system handler: '+action+' '+mime);
+    }
+  }
+  const unrelated=command(['shell','cmd','package','query-activities','--brief','-a','android.intent.action.VIEW','-c','android.intent.category.DEFAULT','-t','text/plain','-d','content://qa.example/document']);
+  if(unrelated.includes(pkg+'/'))throw Error('Application claims unrelated text files');
+  command(['shell','am','force-stop',pkg]);
+  command(['shell','am','start','-n',component]);await pause(600);
+  if(!nodes().some(n=>n.label==='Open from')) tap(await waitFor(/^Show roots$|^Open navigation drawer$/));
+  tap(await waitFor(n=>/^sdk_gphone/.test(n.label)&&n['resource-id']==='android:id/title','Storage root'));
+  tap(await waitFor('Download'));tap(await waitFor('AOC-QA-018'));tap(await waitFor('Formatted.xlsx'));
+  // If the emulator has another handler, select this app and the persistent choice.
+  await pause(500);
+  const choice=nodes().find(n=>n.label==='ArtOfficeCraft Mobile');
+  if(choice){tap(choice);await pause(200);const always=nodes().find(n=>/^Always$/i.test(n.label));if(always)tap(always);}
+  await waitFor(n=>n.package===pkg&&n.label.startsWith('Formatted.xlsx'),'Cold external open');
+  await waitFor(/Imported merged title/);shot('external-cold-open');
+  const uri='content://com.android.externalstorage.documents/document/primary%3ADownload%2FAOC-QA-018%2FFormatted.xlsx';
+  const warm=command(['shell','am','start','-n',pkg+'/.MainActivity','-a','android.intent.action.VIEW','-t',types.Spreadsheet,'-d',uri,'-f','0x20000000']);
+  fs.writeFileSync(path.join(proof,'warm-intent.txt'),warm);
+  await pause(700);await waitFor(/Imported merged title/);
+  command(['shell','input','keyevent','4']);await waitFor(/Imported merged title/);
+  command(['shell','input','keyevent','4']);await waitFor(n=>n.package===pkg&&n.label==='Files','Previous editor preserved on Back');
+  command(['shell','am','start','-n',pkg+'/.MainActivity','-a','android.intent.action.SEND','-t',types.Spreadsheet,'--eu','android.intent.extra.STREAM',uri,'-f','0x20000000']);
+  await waitFor(/Imported merged title/);shot('external-share-open');
+  command(['shell','input','keyevent','4']);await waitFor(n=>n.package===pkg&&n.label==='Files');
+  command(['shell','am','start','-n',pkg+'/.MainActivity','-a','android.intent.action.VIEW','-t','application/pdf','-d','content://qa.invalid/ungranted.pdf','-f','0x20000000']);
+  await waitFor(/Could not open the incoming file/);shot('external-denied-uri');
+  const crypto=require('crypto');
+  const hash=data=>crypto.createHash('sha256').update(data).digest('hex');
+  if(hash(command(['exec-out','cat',directory+'/Formatted.xlsx'],true))!==hash(fs.readFileSync('test/fixtures/formatted-grid.xlsx')))throw Error('Incoming source changed');
+  const result={passed:true,incomingDocuments:true,types:verified,columnPixels:{before:colBefore.w,after:colAfter.w},rowPixels:{before:rowBefore.h,after:rowAfter.h,undo:restored.h},device,api:36};
   fs.writeFileSync(path.join(proof,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});

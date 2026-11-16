@@ -184,7 +184,7 @@ def checks(device, output):
                 output / 'test_grid_touch_import.log', timeout=420)
         report['ordinaryApp'] = {'offline': True, 'native16KiBAligned': True,
                                  'nonDebuggable': True, 'profileToReleaseUpgrade': True,
-                                 'systemPickerAndTouchResize': True,
+                                 'systemPickerAndTouchResize': True, 'externalViewAndShare': True,
                                  'recentCopiesAfterForceStop': True}
         report['passed'] = True
     except Exception as error:
