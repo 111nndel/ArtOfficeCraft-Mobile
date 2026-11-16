@@ -1,4 +1,4 @@
-# ArtOfficeCraft Mobile 0.52.0-alpha.1
+# ArtOfficeCraft Mobile 0.52.0
 
 ## What's New
 

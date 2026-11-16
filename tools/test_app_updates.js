@@ -57,14 +57,16 @@ async function chooseMode(label){
  await wait('Version '+fixture.nextVersion+' is ready to install');
  tap(await reveal('Install'));tap(await wait(/^Update$/));
  await pause(2000);
- await wait(/^Done$|^Open$/);
- command(['shell','am','force-stop',pkg]);command(['shell','am','start','-n',pkg+'/.MainActivity']);
+ await wait(/^Done$|^Open$/);shot('update-system-installed');
+ tap(await wait(/^Open$/));await wait(/^Files(?:\n|$)/);
+ await launch();shot('update-home-after-upgrade');
+ const state=command(['shell','dumpsys','package',pkg]);
+ fs.writeFileSync(path.join(proof,'installed-package.txt'),state);
+ if(!state.includes('versionCode='+fixture.nextCode))throw Error('New package version was not installed');
  await wait('Formatted.xlsx'); // The pre-update editor draft survives replacement.
  tap(await wait('About and licenses'));
  await wait(new RegExp('^'+fixture.nextVersion.replace(/\./g,'\\.')+' · Preview$'));
  await reveal('Check for updates');await wait('Manually');shot('update-installed-version');
- const state=command(['shell','dumpsys','package',pkg]);
- if(!state.includes('versionCode='+fixture.nextCode))throw Error('New package version was not installed');
  const result={passed:true,manualStartupNoNetwork:true,manualCheckNoDownload:true,automaticDownload:true,
   dailyThrottle:true,modeSurvivesRestart:true,verifiedCacheSurvivesRestart:true,
   rejected:['checksum','signingCertificate','nonIncreasingVersion'],androidPermissionScreen:true,
