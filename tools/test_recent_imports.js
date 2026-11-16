@@ -76,6 +76,13 @@ async function selectFixture(name) {
 }
 
 async function reveal(pattern) {
+  const match=n=>typeof pattern==='function'?pattern(n):n.label===pattern;
+  const visible=nodes().find(match);
+  if(visible && rect(visible).h>0)return visible;
+  // A selection toolbar can appear above the current scroll position.
+  for(let i=0;i<3;i++) {
+    command(['shell','input','swipe','540','850','540','2000','250']);
+  }
   for(let i=0;i<10;i++) {
     const node=nodes().find(n=>typeof pattern==='function'?pattern(n):n.label===pattern);
     if(node && rect(node).h>0)return node;

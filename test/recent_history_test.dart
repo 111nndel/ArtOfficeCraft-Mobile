@@ -14,6 +14,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'draft_test_io.dart';
 
 Future<void> reveal(WidgetTester tester, Finder target) async {
+  if (target.evaluate().isEmpty) {
+    await tester.drag(find.byKey(const PageStorageKey('workspace-scroll')), const Offset(0, 4000));
+    await tester.pumpAndSettle();
+  }
   await tester.scrollUntilVisible(
     target, 250,
     scrollable: find.byType(Scrollable).first,
