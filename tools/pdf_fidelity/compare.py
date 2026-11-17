@@ -11,6 +11,7 @@ POLICY = {'pageMeanError': 8.0, 'pageLargeErrorPercent': 5.0,
           'largeErrorThreshold': 32, 'inkThreshold': 220,
           'minimumReferenceInkPixels': 100, 'minimumInkRatio': .75,
           'maximumInkRatio': 1.45}
+MINIMUM_DETAIL_IMPROVEMENT = .20
 
 
 def metrics(reference, candidate):
@@ -71,8 +72,8 @@ def compare_suite(root, candidate='rust'):
     manifest = json.loads((root / 'fixture/manifest.json').read_text())
     report = {'schema': 1, 'policy': POLICY, 'scale': manifest['scale'],
               'pdfSha256': manifest['pdfSha256'], 'pages': [],
-              'candidate': candidate,
-              'scope': 'Eight synthetic cases; no universal document-fidelity claim.'}
+              'candidate': candidate, 'tiles': [],
+              'scope': 'Eight synthetic cases and three zoom crops; no universal document-fidelity claim.'}
     suffix = '' if candidate == 'rust' else '-' + candidate
     output = root / ('comparison' + suffix)
     output.mkdir(exist_ok=True)
@@ -102,9 +103,48 @@ def compare_suite(root, candidate='rust'):
                 diff = ImageChops.difference(ref, actual).point(lambda v: min(255, v * 4))
                 diff.save(output / f'diff-{number:02}.png')
             report['pages'].append(result)
-    report['passed'] = len(report['pages']) == 8 and all(p['passed'] for p in report['pages'])
+    for tile in manifest.get('tiles', []):
+        name = tile['name']
+        paths = [root / f'reference/tile-{name}.png',
+                 root / f'{candidate}/tile-{name}.png',
+                 root / f'{candidate}/preview-tile-{name}.png']
+        if not all(p.is_file() for p in paths):
+            report['tiles'].append({'name': name, 'passed': False, 'errors': ['Missing zoom evidence']})
+            continue
+        with Image.open(paths[0]) as ref, Image.open(paths[1]) as actual, Image.open(paths[2]) as preview:
+            result = compare_detail(ref.convert('RGB'), actual.convert('RGB'), preview.convert('RGB'), tile)
+            result['name'] = name
+            report['tiles'].append(result)
+            if ref.size == actual.size:
+                sheet = Image.new('RGB', (ref.width * 2, ref.height), 'white')
+                sheet.paste(ref, (0, 0))
+                sheet.paste(actual, (ref.width, 0))
+                sheet.save(output / f'zoom-{name}.png')
+    report['passed'] = (len(report['pages']) == 8 and all(p['passed'] for p in report['pages']) and
+                        len(report['tiles']) == len(manifest.get('tiles', [])) and all(t['passed'] for t in report['tiles']))
     (root / ('comparison' + suffix + '.json')).write_text(json.dumps(report, indent=2) + '\n')
     return report
+
+
+def compare_detail(reference, detail, preview, tile):
+    size = (tile['width'], tile['height'])
+    result = compare_images(reference, detail, size,
+                            [{'name': 'visible text at zoom', 'box': [0, 0, *size]}])
+    if not result['passed']:
+        return result
+    ratio = preview.width / tile['pageWidth']
+    box = [tile[key] * ratio for key in ('x', 'y')]
+    box += [(tile['x'] + tile['width']) * ratio, (tile['y'] + tile['height']) * ratio]
+    # Reproduce stretching the old 1000px preview; never resize the actual detail.
+    enlarged = preview.transform(size, Image.Transform.EXTENT, box, Image.Resampling.BICUBIC)
+    old = metrics(reference, enlarged)['meanError']
+    result['previewMeanError'] = old
+    result['relativeImprovement'] = 1 - result['meanError'] / old if old else 0
+    result['minimumRelativeImprovement'] = MINIMUM_DETAIL_IMPROVEMENT
+    if result['relativeImprovement'] < MINIMUM_DETAIL_IMPROVEMENT:
+        result['errors'].append('Detail does not improve on the stretched preview enough')
+        result['passed'] = False
+    return result
 
 
 if __name__ == '__main__':

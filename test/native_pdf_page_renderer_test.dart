@@ -30,6 +30,7 @@ void worker((SendPort, Map<String, Object?>) args) {
         }
         return Uint8List(0);
       case 'page':
+      case 'tile':
         if (!sessions.contains(request['session'])) {
           throw StateError('Closed native session');
         }
@@ -76,6 +77,74 @@ class Fallback implements PdfPageRenderer {
 }
 
 void main() {
+  test(
+    'detail renders reuse the native session and keep tile allocations bounded',
+    () async {
+      final renderer = NativePdfPageRenderer(workerEntry: worker);
+      final session = await renderer.open(pdf);
+      const tile = (pageWidth: 6000, x: 2048, y: 3000, width: 1, height: 1);
+      expect(await renderer.renderTile(session, 0, tile), image());
+      expect(renderer.nativeRenders, 1);
+      await expectLater(
+        renderer.renderTile(session, 0, (
+          pageWidth: 6000,
+          x: 0,
+          y: 0,
+          width: 2880,
+          height: 2880,
+        )),
+        throwsRangeError,
+      );
+      await expectLater(
+        renderer.renderTile(session, 0, (
+          pageWidth: 6000,
+          x: 5999,
+          y: 0,
+          width: 2,
+          height: 1,
+        )),
+        throwsRangeError,
+      );
+      await renderer.close(session);
+      await expectLater(
+        renderer.renderTile(session, 0, tile),
+        throwsStateError,
+      );
+    },
+  );
+  test('detail results with different dimensions are rejected', () async {
+    final renderer = NativePdfPageRenderer(workerEntry: worker);
+    final session = await renderer.open(pdf);
+    await expectLater(
+      renderer.renderTile(session, 0, (
+        pageWidth: 6000,
+        x: 0,
+        y: 0,
+        width: 64,
+        height: 64,
+      )),
+      throwsFormatException,
+    );
+    await renderer.close(session);
+  });
+  test(
+    'closing a document during detail rendering rejects the late image',
+    () async {
+      final renderer = NativePdfPageRenderer(workerEntry: worker);
+      final session = await renderer.open(pdf);
+      final pending = renderer.renderTile(session, 2, (
+        pageWidth: 6000,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      ));
+      final rejected = expectLater(pending, throwsStateError);
+      await renderer.close(session);
+      await rejected;
+      expect(renderer.fallbackRenders, 0);
+    },
+  );
   test('Rust renders stay on one owned worker; replacement and reopen release sessions', () async {
     final fallback = Fallback();
     final renderer = NativePdfPageRenderer(

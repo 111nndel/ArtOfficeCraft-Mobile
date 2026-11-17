@@ -29,7 +29,7 @@ class _Session {
 
 /// Rust rasterization on the existing serial document worker, independent of
 /// Android. Compatibility rendering and image OCR are independently injectable.
-final class NativePdfPageRenderer implements PdfPageRenderer {
+final class NativePdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
   NativePdfPageRenderer({
     this.fallback,
     this.recognizeImage,
@@ -102,18 +102,35 @@ final class NativePdfPageRenderer implements PdfPageRenderer {
   }
 
   @override
-  Future<Uint8List> render(int session, int page, {int width = 1000}) async {
-    if (page < 0 || width < 96 || width > 1600) {
+  Future<Uint8List> render(int session, int page, {int width = 1000}) =>
+      _render(session, page, width: width);
+
+  @override
+  Future<Uint8List> renderTile(int session, int page, PdfPageTile tile) async {
+    pdfTileArguments(tile);
+    return _render(session, page, width: tile.pageWidth, tile: tile);
+  }
+
+  Future<Uint8List> _render(
+    int session,
+    int page, {
+    required int width,
+    PdfPageTile? tile,
+  }) async {
+    if (page < 0 ||
+        width < 96 ||
+        width > (tile == null ? 1600 : maxPdfTilePageWidth)) {
       throw RangeError('Invalid PDF raster page/width');
     }
     final state = _get(session);
     if (state.native != null) {
       try {
         final png = await _worker!.request('raster', {
-          'op': 'page',
+          'op': tile == null ? 'page' : 'tile',
           'session': state.native,
           'page': page,
           'width': width,
+          if (tile != null) 'tile': [tile.x, tile.y, tile.width, tile.height],
         }) as Uint8List;
         if (state.closed) throw StateError('PDF raster session is closed');
         if (png.length < 24 ||
@@ -123,7 +140,12 @@ final class NativePdfPageRenderer implements PdfPageRenderer {
         }
         final header = ByteData.sublistView(png);
         final w = header.getUint32(16), h = header.getUint32(20);
-        if (w == 0 || h == 0 || w > 2880 || h > 2880 || w * h > 4200000) {
+        if (w == 0 ||
+            h == 0 ||
+            w > maxPdfRasterSide ||
+            h > maxPdfRasterSide ||
+            w * h > maxPdfRasterPixels ||
+            (tile != null && (w != tile.width || h != tile.height))) {
           throw const FormatException('Invalid native PDF raster dimensions');
         }
         nativeRenders++;
@@ -132,8 +154,14 @@ final class NativePdfPageRenderer implements PdfPageRenderer {
         if (fallback == null || state.closed) rethrow;
       }
     }
+    final adapter = fallback;
+    if (tile != null && adapter is! PdfTileRenderer) {
+      throw UnsupportedError('PDF detail renderer is unavailable');
+    }
     final token = await _fallback(state);
-    final png = await fallback!.render(token, page, width: width);
+    final png = tile == null
+        ? await adapter!.render(token, page, width: width)
+        : await (adapter as PdfTileRenderer).renderTile(token, page, tile);
     if (state.closed) throw StateError('PDF raster session is closed');
     fallbackRenders++;
     return png;

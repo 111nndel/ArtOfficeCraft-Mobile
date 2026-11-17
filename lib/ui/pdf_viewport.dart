@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
+import '../native/pdf_page_renderer.dart';
 import 'page_reading.dart';
 
 /// The viewport fills the available canvas. The page starts fitted to width,
@@ -19,6 +21,7 @@ class PdfViewport extends StatefulWidget {
     this.onPageTap,
     this.pageIdentity,
     this.highlight,
+    this.renderTile,
   });
   final Future<Uint8List>? image;
   final double pageWidth, pageHeight;
@@ -27,6 +30,7 @@ class PdfViewport extends StatefulWidget {
   final ValueChanged<Offset>? onPageTap;
   final Object? pageIdentity;
   final Rect? highlight;
+  final PdfTileRaster? renderTile;
   @override
   State<PdfViewport> createState() => PdfViewportState();
 }
@@ -118,10 +122,25 @@ class PdfViewportState extends State<PdfViewport> {
                 key: const Key('pdf-page-canvas'),
                 width: widget.pageWidth,
                 height: widget.pageHeight,
-                child: PdfPageImage(
-                  image: widget.image,
-                  onPageTap: widget.onPageTap,
-                  highlight: widget.highlight,
+                child: AnimatedBuilder(
+                  animation: transform,
+                  builder: (context, _) => PdfPageImage(
+                    image: widget.image,
+                    pageSize: Size(widget.pageWidth, widget.pageHeight),
+                    pageIdentity: widget.pageIdentity ?? widget.image,
+                    renderTile: widget.renderTile,
+                    view: (
+                      viewport: Rect.fromPoints(
+                        transform.toScene(Offset.zero),
+                        transform.toScene(Offset(_size.width, _size.height)),
+                      ),
+                      pixelRatio:
+                          transform.value.getMaxScaleOnAxis() *
+                          MediaQuery.devicePixelRatioOf(context),
+                    ),
+                    onPageTap: widget.onPageTap,
+                    highlight: widget.highlight,
+                  ),
                 ),
               ),
             ),
@@ -139,11 +158,19 @@ class PdfPageImage extends StatelessWidget {
     this.fit = BoxFit.fill,
     this.onPageTap,
     this.highlight,
+    this.pageSize,
+    this.view,
+    this.renderTile,
+    this.pageIdentity,
   });
 
   final Future<Uint8List>? image;
   final BoxFit fit;
   final Rect? highlight;
+  final Size? pageSize;
+  final PageRasterView? view;
+  final PdfTileRaster? renderTile;
+  final Object? pageIdentity;
 
   /// A touch point as fractions of the visible page from its top left.
   final ValueChanged<Offset>? onPageTap;
@@ -173,6 +200,16 @@ class PdfPageImage extends StatelessWidget {
         }
         final png = snapshot.data!;
         Widget page = Image.memory(png, fit: fit, gaplessPlayback: false);
+        if (renderTile != null && view != null && pageSize != null) {
+          page = _PdfPageDetail(
+            key: ValueKey(pageIdentity ?? image),
+            preview: png,
+            pageSize: pageSize!,
+            view: view!,
+            render: renderTile!,
+            fit: fit,
+          );
+        }
         if (highlight case final Rect bounds when png.length >= 24) {
           final header = ByteData.sublistView(png, 16, 24);
           final imageSize = Size(
@@ -203,6 +240,206 @@ class PdfPageImage extends StatelessWidget {
         );
       },
     ),
+  );
+}
+
+/// A single viewport-sized detail image over the retained page preview.
+/// Gesture frames only update demand; one render runs at a time after settling.
+class _PdfPageDetail extends StatefulWidget {
+  const _PdfPageDetail({
+    super.key,
+    required this.preview,
+    required this.pageSize,
+    required this.view,
+    required this.render,
+    required this.fit,
+  });
+  final Uint8List preview;
+  final Size pageSize;
+  final PageRasterView view;
+  final PdfTileRaster render;
+  final BoxFit fit;
+
+  @override
+  State<_PdfPageDetail> createState() => _PdfPageDetailState();
+}
+
+class _PdfPageDetailState extends State<_PdfPageDetail> {
+  Timer? _debounce;
+  PdfPageTile? _wanted, _active, _failed;
+  ({PdfPageTile tile, Uint8List png})? _detail;
+  int _generation = 0;
+
+  void _evict(Uint8List? png) {
+    if (png != null) unawaited(MemoryImage(png).evict());
+  }
+
+  @override
+  void didUpdateWidget(covariant _PdfPageDetail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.preview, oldWidget.preview) ||
+        widget.pageSize != oldWidget.pageSize) {
+      _generation++;
+      _debounce?.cancel();
+      _debounce = null;
+      _wanted = _failed = null;
+      _evict(_detail?.png);
+      _detail = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    _debounce?.cancel();
+    _evict(_detail?.png);
+    super.dispose();
+  }
+
+  void _demand(PdfPageTile? tile) {
+    if (_wanted == tile) return;
+    _wanted = tile;
+    if (_failed != tile) _failed = null;
+    _debounce?.cancel();
+    _debounce = null;
+    if (tile != null &&
+        tile != _detail?.tile &&
+        tile != _active &&
+        tile != _failed) {
+      _debounce = Timer(const Duration(milliseconds: 160), _render);
+    }
+  }
+
+  Future<void> _render() async {
+    _debounce = null;
+    final tile = _wanted;
+    if (_active != null ||
+        tile == null ||
+        tile == _detail?.tile ||
+        tile == _failed) {
+      return;
+    }
+    _active = tile;
+    final generation = _generation;
+    try {
+      final png = await widget.render(tile);
+      if (!mounted || generation != _generation || _wanted != tile) return;
+      final previous = _detail?.png;
+      setState(() => _detail = (tile: tile, png: png));
+      if (!identical(previous, png)) _evict(previous);
+    } catch (_) {
+      if (mounted && generation == _generation && _wanted == tile) {
+        _failed = tile;
+      }
+      // Keep the preview and any previous detail while compatibility is unavailable.
+    } finally {
+      _active = null;
+      if (mounted &&
+          _wanted != null &&
+          _wanted != _detail?.tile &&
+          _wanted != _failed) {
+        _debounce ??= Timer(const Duration(milliseconds: 160), _render);
+      }
+    }
+  }
+
+  PdfPageTile? _request(Rect visible, double aspect, double pixels) {
+    if (!pixels.isFinite || pixels <= 0 || !aspect.isFinite || aspect <= 0) {
+      return null;
+    }
+    var full = ((pixels / 128).ceil() * 128).clamp(96, maxPdfTilePageWidth);
+    final previewWidth = widget.preview.length >= 24
+        ? ByteData.sublistView(widget.preview).getUint32(16)
+        : 1000;
+    for (var attempt = 0; attempt < 5; attempt++) {
+      if (full <= previewWidth) return null;
+      final fullHeight = (full * aspect).floor().clamp(1, 0x7fffffff);
+      const pad = 96;
+      final left = math.max(0, ((visible.left * full - pad) / 64).floor() * 64);
+      final top = math.max(
+        0,
+        ((visible.top * full * aspect - pad) / 64).floor() * 64,
+      );
+      final right = math.min(
+        full,
+        ((visible.right * full + pad) / 64).ceil() * 64,
+      );
+      final bottom = math.min(
+        fullHeight,
+        ((visible.bottom * full * aspect + pad) / 64).ceil() * 64,
+      );
+      final width = right - left, height = bottom - top;
+      if (width <= 0 || height <= 0) return null;
+      if (width <= maxPdfRasterSide &&
+          height <= maxPdfRasterSide &&
+          width * height <= maxPdfRasterPixels) {
+        return (pageWidth: full, x: left, y: top, width: width, height: height);
+      }
+      final reduction = math.min(
+        math.min(maxPdfRasterSide / width, maxPdfRasterSide / height),
+        math.sqrt(maxPdfRasterPixels / (width * height)),
+      );
+      full = (full * reduction * .96).floor().clamp(96, maxPdfTilePageWidth);
+    }
+    return null;
+  }
+
+  bool _covers(PdfPageTile? tile, Rect visible, double aspect, int width) =>
+      tile != null &&
+      tile.pageWidth >= width &&
+      tile.x <= visible.left * tile.pageWidth + 1 &&
+      tile.y <= visible.top * tile.pageWidth * aspect + 1 &&
+      tile.x + tile.width >= visible.right * tile.pageWidth - 1 &&
+      tile.y + tile.height >= visible.bottom * tile.pageWidth * aspect - 1;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (_, box) {
+      final page = Alignment.center.inscribe(
+        applyBoxFit(widget.fit, widget.pageSize, box.biggest).destination,
+        Offset.zero & box.biggest,
+      );
+      final visible = widget.view.viewport.intersect(page);
+      PdfPageTile? wanted;
+      if (!visible.isEmpty && page.width > 0 && page.height > 0) {
+        final region = Rect.fromLTRB(
+          (visible.left - page.left) / page.width,
+          (visible.top - page.top) / page.height,
+          (visible.right - page.left) / page.width,
+          (visible.bottom - page.top) / page.height,
+        );
+        final aspect = widget.pageSize.height / widget.pageSize.width;
+        wanted = _request(region, aspect, page.width * widget.view.pixelRatio);
+        if (wanted != null) {
+          if (_covers(_detail?.tile, region, aspect, wanted.pageWidth)) {
+            wanted = _detail!.tile;
+          } else if (_covers(_active, region, aspect, wanted.pageWidth)) {
+            wanted = _active;
+          }
+        }
+      }
+      _demand(wanted);
+      final detail = _detail;
+      final unit = detail == null ? 0.0 : page.width / detail.tile.pageWidth;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.memory(widget.preview, fit: widget.fit),
+          if (detail != null)
+            Positioned(
+              left: page.left + detail.tile.x * unit,
+              top: page.top + detail.tile.y * unit,
+              width: detail.tile.width * unit,
+              height: detail.tile.height * unit,
+              child: Image.memory(
+                detail.png,
+                key: const Key('pdf-page-detail'),
+                fit: BoxFit.fill,
+              ),
+            ),
+        ],
+      );
+    },
   );
 }
 

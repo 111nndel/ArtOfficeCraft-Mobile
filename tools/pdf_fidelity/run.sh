@@ -7,6 +7,21 @@ mkdir -p "$results/reference" "$results/rust"
 python -m unittest discover -s tools/pdf_fidelity -p '*_test.py' -v
 python tools/pdf_fidelity/make_fixture.py "$results/fixture"
 pdftoppm -r 144 -cropbox -png "$results/fixture/fixture.pdf" "$results/reference/page"
+python - "$results" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+manifest = json.loads((root / 'fixture/manifest.json').read_text())
+for tile in manifest['tiles']:
+    page = manifest['pages'][tile['page']-1]
+    dpi = 72 * tile['pageWidth'] / (page['size'][0] / manifest['scale'])
+    subprocess.run(['pdftoppm', '-r', str(dpi), '-cropbox',
+                    '-f', str(tile['page']), '-l', str(tile['page']),
+                    '-x', str(tile['x']), '-y', str(tile['y']),
+                    '-W', str(tile['width']), '-H', str(tile['height']),
+                    '-singlefile', '-png', str(root / 'fixture/fixture.pdf'),
+                    str(root / 'reference' / ('tile-' + tile['name']))], check=True)
+PY
 pdfinfo "$results/fixture/fixture.pdf" > "$results/pdfinfo.txt"
 pdftoppm -v 2> "$results/reference-version.txt"
 rustup toolchain install 1.99.1 --profile minimal
@@ -24,7 +39,8 @@ python tools/pdf_fidelity/compare.py "$results"
 python - "$results/rust-render.txt" <<'PY'
 from pathlib import Path
 import re, sys
-rows = [dict(re.findall(r'(\w+)=(\d+)', line)) for line in Path(sys.argv[1]).read_text().splitlines()]
-if len(rows) != 8 or any(row.get('warnings') != '0' for row in rows):
+lines = Path(sys.argv[1]).read_text().splitlines()
+rows = [dict(re.findall(r'(\w+)=(\d+)', line)) for line in lines]
+if sum(line.startswith('page=') for line in lines) != 8 or sum(line.startswith('tile=') for line in lines) != 3 or any(row.get('warnings') != '0' for row in rows):
     raise SystemExit('Missing or warned Rust pages; review retained evidence')
 PY

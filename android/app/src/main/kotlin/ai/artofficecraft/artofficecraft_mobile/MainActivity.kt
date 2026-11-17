@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.PersistableBundle
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -144,9 +145,11 @@ class MainActivity : FlutterActivity() {
                     val id = call.argument<Int>("session")
                     val pageIndex = call.argument<Int>("page")
                     val width = call.argument<Int>("width")
+                    val tile = call.argument<List<*>>("tile")
                     if (id == null || id <= 0 ||
                         pageIndex == null || pageIndex < 0 ||
-                        width == null || width !in 96..1600
+                        width == null || width !in 96..(if (tile == null) 1600 else 16384) ||
+                        (tile != null && (tile.size != 4 || tile.any { it !is Int }))
                     ) {
                         result.error("BAD_ARGS", "Invalid page render request", null)
                         return@setMethodCallHandler
@@ -157,7 +160,7 @@ class MainActivity : FlutterActivity() {
                             require(session != null && session.id == id) {
                                 "PDF document session is no longer active"
                             }
-                            val bitmap = renderPage(session, pageIndex, width)
+                            val bitmap = renderPage(session, pageIndex, width, tile?.map { it as Int })
                             val output = try {
                                 encodePng(bitmap)
                             } finally {
@@ -232,21 +235,32 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun renderPage(session: PdfSession, index: Int, widthRequest: Int): Bitmap {
+    private fun renderPage(session: PdfSession, index: Int, widthRequest: Int, tile: List<Int>? = null): Bitmap {
         require(index < session.renderer.pageCount) { "Invalid page" }
         session.renderer.openPage(index).use { page ->
             require(page.width > 0 && page.height > 0) { "Invalid page dimensions" }
             val ratio = page.height.toDouble() / page.width.toDouble()
-            val width = minOf(widthRequest, (2880.0 / ratio).toInt())
-            require(width >= 32) { "Unusually tall page" }
-            val height = (width * ratio).roundToInt()
-            require(height in 1..2880 && width.toLong() * height <= 4_200_000L) {
+            val width = tile?.get(2) ?: minOf(widthRequest, (2880.0 / ratio).toInt())
+            val height = tile?.get(3) ?: (width * ratio).roundToInt()
+            require(width in 1..2880 && height in 1..2880 && width.toLong() * height <= 4_200_000L) {
                 "Page exceeds raster memory limit"
+            }
+            val matrix = if (tile == null) null else {
+                require(tile[0] >= 0 && tile[1] >= 0 &&
+                    tile[0].toLong() + width <= widthRequest &&
+                    tile[1].toLong() + height <= kotlin.math.ceil(widthRequest * ratio).toLong()) {
+                    "Tile exceeds page bounds"
+                }
+                val scale = widthRequest.toFloat() / page.width
+                Matrix().apply {
+                    setScale(scale, scale)
+                    postTranslate(-tile[0].toFloat(), -tile[1].toFloat())
+                }
             }
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             try {
                 bitmap.eraseColor(Color.WHITE)
-                page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                 return bitmap
             } catch (error: Throwable) {
                 bitmap.recycle()

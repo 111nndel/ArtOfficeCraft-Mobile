@@ -2,7 +2,7 @@
 //! Dart's existing worker serializes calls; the mutex also covers other FFI callers
 //! and does not assume that an isolate stays on one operating-system thread.
 use std::{collections::BTreeMap, sync::{Arc, Mutex, OnceLock}};
-use pdfcraft_render::{PageRenderer, RenderConfig, RenderRequest, RequestKind};
+use pdfcraft_render::{PageRenderer, RenderConfig, RenderRequest, RequestKind, Tile, device_pixels};
 use serde_json::{Value, json};
 use super::{AcResult, MAX_INPUT_BYTES, decode, protect};
 
@@ -19,6 +19,7 @@ fn integer(request: &Value, field: &str) -> Result<u64, String> {
 }
 
 /// JSON commands: open (PDF input), page (session/page/width), close (session).
+/// Tile adds device-pixel [x,y,width,height] at the requested full-page width.
 /// Open returns {session,pageCount}; page returns a white-composited RGB PNG.
 /// Two sessions permit an atomic replacement: open new, then close old.
 #[unsafe(no_mangle)]
@@ -55,17 +56,36 @@ pub extern "C" fn ac_pdf_render(data: *const u8, len: usize, request: *const u8,
                 sessions.documents.remove(&integer(&request,"session")?);
                 Ok(Vec::new())
             }
-            Some("page") => {
+            Some("page" | "tile") => {
                 let id = integer(&request,"session")?;
                 let page = usize::try_from(integer(&request,"page")?).map_err(|_| "PDF page index overflow")?;
                 let width = integer(&request,"width")?;
-                if !(96..=1600).contains(&width) { return Err("PDF raster width must be 96..1600".into()); }
+                let detail = request["op"] == "tile";
+                if !(96..=if detail { 16384 } else { 1600 }).contains(&width) {
+                    return Err("PDF raster width exceeds its mode limit".into());
+                }
                 let session = sessions.documents.get_mut(&id).ok_or("PDF raster session is closed")?;
                 let &(w,h) = session.sizes.get(page).ok_or("PDF page not found")?;
                 // Bound allocations before asking the renderer for pixels.
-                let scale = (width as f64 / w).min(2880.0 / h).min((4_200_000.0 / (w*h)).sqrt()) as f32;
+                let (scale, tile) = if detail {
+                    let values = request["tile"].as_array().filter(|v| v.len() == 4).ok_or("Invalid PDF tile")?;
+                    let values = values.iter().map(|v| v.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or("Invalid PDF tile coordinate"))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let tile = Tile { x: values[0], y: values[1], w: values[2], h: values[3] };
+                    let scale = (width as f64 / w) as f32;
+                    if !scale.is_finite() || scale <= 0.0 ||
+                        tile.w == 0 || tile.h == 0 || tile.w > 2880 || tile.h > 2880 ||
+                        u64::from(tile.w) * u64::from(tile.h) > 4_200_000 ||
+                        tile.x.checked_add(tile.w).is_none_or(|right| right > device_pixels(w as f32, scale)) ||
+                        tile.y.checked_add(tile.h).is_none_or(|bottom| bottom > device_pixels(h as f32, scale)) {
+                        return Err("PDF tile exceeds page or allocation limits".into());
+                    }
+                    (scale, Some(tile))
+                } else {
+                    ((width as f64 / w).min(2880.0 / h).min((4_200_000.0 / (w*h)).sqrt()) as f32, None)
+                };
                 let rendered = session.renderer.render(RenderRequest {
-                    page, kind: RequestKind::Pixels, tile: None, scale, tag: id, preview: false,
+                    page, kind: RequestKind::Pixels, tile, scale, tag: id, preview: false,
                 });
                 if let Some(error) = rendered.error { return Err(error); }
                 if !rendered.warnings.is_empty() { return Err(format!("Incomplete PDF raster: {:?}", rendered.warnings)); }
@@ -118,6 +138,12 @@ mod tests {
         let png = std::thread::spawn(move || call(&[],json!({"op":"page","session":id,"page":0,"width":600})).unwrap()).join().unwrap();
         assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
         assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()),600);
+        let tile = call(&[], json!({"op":"tile","session":id,"page":0,"width":6000,"tile":[1024,2048,320,480]})).unwrap();
+        assert_eq!(u32::from_be_bytes(tile[16..20].try_into().unwrap()),320);
+        assert_eq!(u32::from_be_bytes(tile[20..24].try_into().unwrap()),480);
+        for region in [json!([-1,0,64,64]),json!([0,0,0,64]),json!([0,0,2880,2880]),json!([5990,0,64,64]),json!([0,99999,64,64]),json!([4294967296u64,0,64,64])] {
+            assert!(call(&[],json!({"op":"tile","session":id,"page":0,"width":6000,"tile":region})).is_err());
+        }
         for request in [json!({"op":"page","session":id,"page":-1,"width":600}),json!({"op":"page","session":id,"page":1,"width":600}),json!({"op":"page","session":id,"page":0,"width":1601}),json!({"op":"bogus"})] { assert!(call(&[],request).is_err()); }
         let second: Value = serde_json::from_slice(&call(&pdf,json!({"op":"open"})).unwrap()).unwrap();
         assert!(call(&pdf,json!({"op":"open"})).is_err());

@@ -236,6 +236,14 @@ def make_fixture(output, font_directory):
     assert '/OpenAction' not in check.trailer['/Root']
     assert '/JavaScript' not in check.trailer['/Root'].get('/Names', {})
     manifest = {'schema': 1, 'scale': SCALE, 'pages': cases, 'fonts': fonts,
+                'tiles': [
+                    {'name': 'cyrillic', 'page': 1, 'pageWidth': 6000,
+                     'x': 640, 'y': 1100, 'width': 1600, 'height': 1200},
+                    {'name': 'rotated', 'page': 5, 'pageWidth': 6400,
+                     'x': 2880, 'y': 800, 'width': 1024, 'height': 1536},
+                    {'name': 'cropbox', 'page': 6, 'pageWidth': 5200,
+                     'x': 320, 'y': 1120, 'width': 1600, 'height': 1200},
+                ],
                 'pdfBytes': (output / 'fixture.pdf').stat().st_size,
                 'pdfSha256': hashlib.sha256((output / 'fixture.pdf').read_bytes()).hexdigest()}
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')

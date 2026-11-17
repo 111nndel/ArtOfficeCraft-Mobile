@@ -324,6 +324,14 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     return future;
   }
 
+  PdfTileRaster? detailRaster(int page) {
+    final renderer = _pageRenderer;
+    final session = _session;
+    if (renderer is! PdfTileRenderer || session == null) return null;
+    return (tile) =>
+        (renderer as PdfTileRenderer).renderTile(session, page, tile);
+  }
+
   Size pageSize(Map<String, dynamic> page) {
     final width = (page['width'] as num?)?.toDouble() ?? 595;
     final height = (page['height'] as num?)?.toDouble() ?? 842;
@@ -1220,9 +1228,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
           final Rect rect => (page: selected, fraction: rect.top),
           null => null,
         },
-        pageBuilder: (_, page) => _PdfStripPage(
+        pageBuilder: (_, page, view) => _PdfStripPage(
           key: ValueKey((_session, page)),
           render: () => raster(page),
+          renderTile: detailRaster(page),
+          view: view,
+          pageSize: pageSizes[page],
           highlight: _highlightFor(page),
           onPageTap: placement == null
               ? null
@@ -1236,6 +1247,7 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
       child: PdfViewport(
         key: pdfViewport,
         image: raster(page),
+        renderTile: detailRaster(page),
         pageWidth: pageSizes[page].width,
         pageHeight: pageSizes[page].height,
         pageIdentity: (_viewDocument, page),
@@ -1252,11 +1264,17 @@ class _PdfStripPage extends StatefulWidget {
   const _PdfStripPage({
     super.key,
     required this.render,
+    required this.view,
+    required this.pageSize,
+    this.renderTile,
     this.onPageTap,
     this.highlight,
   });
 
   final Future<Uint8List> Function() render;
+  final PdfTileRaster? renderTile;
+  final PageRasterView view;
+  final Size pageSize;
   final Rect? highlight;
   final ValueChanged<Offset>? onPageTap;
 
@@ -1271,6 +1289,9 @@ class _PdfStripPageState extends State<_PdfStripPage> {
   Widget build(BuildContext context) => RepaintBoundary(
     child: PdfPageImage(
       image: image,
+      pageSize: widget.pageSize,
+      view: widget.view,
+      renderTile: widget.renderTile,
       fit: BoxFit.contain,
       onPageTap: widget.onPageTap,
       highlight: widget.highlight,
