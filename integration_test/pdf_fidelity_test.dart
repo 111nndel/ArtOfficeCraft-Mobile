@@ -5,7 +5,6 @@ import 'package:artofficecraft_mobile/native/pdf_page_renderer.dart';
 import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -136,11 +135,14 @@ void main() {
             expect(requests.last.pageWidth, greaterThan(3000));
             expect(completedWidths.any((width) => width > 3000), isTrue);
             expect(key.currentState!.transform.value, position);
-            final detail = find.byKey(const Key('pdf-page-detail'));
+            final detail = find.descendant(
+              of: find.byKey(const Key('pdf-page-detail')),
+              matching: find.byType(RawImage),
+            );
             // The worker result arrives before Flutter finishes decoding its PNG.
             // Capture the displayed detail rather than the retained preview.
             for (var i = 0; i < 100; i++) {
-              final pixels = tester.renderObject<RenderImage>(detail).image;
+              final pixels = tester.widget<RawImage>(detail).image;
               if (pixels?.width == requests.last.width &&
                   pixels?.height == requests.last.height) {
                 break;
@@ -150,7 +152,7 @@ void main() {
               );
               await tester.pump();
             }
-            final pixels = tester.renderObject<RenderImage>(detail).image;
+            final pixels = tester.widget<RawImage>(detail).image;
             expect(pixels?.width, requests.last.width);
             expect(pixels?.height, requests.last.height);
             await binding.convertFlutterSurfaceToImage();
