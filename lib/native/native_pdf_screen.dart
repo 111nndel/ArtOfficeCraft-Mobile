@@ -328,7 +328,8 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
     final renderer = _pageRenderer;
     final session = _session;
     if (renderer is! PdfTileRenderer || session == null) return null;
-    return (tile) => renderer.renderTile(session, page, tile);
+    return (tile) =>
+        (renderer as PdfTileRenderer).renderTile(session, page, tile);
   }
 
   Size pageSize(Map<String, dynamic> page) {

@@ -316,8 +316,9 @@ class _PdfPageDetailState extends State<_PdfPageDetail> {
     if (_active != null ||
         tile == null ||
         tile == _detail?.tile ||
-        tile == _failed)
+        tile == _failed) {
       return;
+    }
     _active = tile;
     final generation = _generation;
     try {
@@ -327,8 +328,9 @@ class _PdfPageDetailState extends State<_PdfPageDetail> {
       setState(() => _detail = (tile: tile, png: png));
       if (!identical(previous, png)) _evict(previous);
     } catch (_) {
-      if (mounted && generation == _generation && _wanted == tile)
+      if (mounted && generation == _generation && _wanted == tile) {
         _failed = tile;
+      }
       // Keep the preview and any previous detail while compatibility is unavailable.
     } finally {
       _active = null;
@@ -342,8 +344,9 @@ class _PdfPageDetailState extends State<_PdfPageDetail> {
   }
 
   PdfPageTile? _request(Rect visible, double aspect, double pixels) {
-    if (!pixels.isFinite || pixels <= 0 || !aspect.isFinite || aspect <= 0)
+    if (!pixels.isFinite || pixels <= 0 || !aspect.isFinite || aspect <= 0) {
       return null;
+    }
     var full = ((pixels / 128).ceil() * 128).clamp(96, maxPdfTilePageWidth);
     final previewWidth = widget.preview.length >= 24
         ? ByteData.sublistView(widget.preview).getUint32(16)

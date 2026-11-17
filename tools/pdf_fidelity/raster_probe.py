@@ -48,6 +48,14 @@ def main(library, fixture, output):
                 raise ValueError('Non-PNG native result')
             (output / f'page-{number:02}.png').write_bytes(png)
             print(f'page={number} bytes={len(png)} warnings=0', flush=True)
+        for tile in manifest.get('tiles', []):
+            common = {'session': session['session'], 'page': tile['page']-1}
+            png = call(b'', {'op': 'tile', **common, 'width': tile['pageWidth'],
+                            'tile': [tile[key] for key in ('x', 'y', 'width', 'height')]})
+            (output / f'tile-{tile["name"]}.png').write_bytes(png)
+            preview = call(b'', {'op': 'page', **common, 'width': 1000})
+            (output / f'preview-tile-{tile["name"]}.png').write_bytes(preview)
+            print(f'tile={tile["name"]} bytes={len(png)} warnings=0', flush=True)
     finally:
         call(b'', {'op': 'close', 'session': session['session']})
 

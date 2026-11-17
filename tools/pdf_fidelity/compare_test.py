@@ -1,6 +1,6 @@
 import unittest
 from PIL import Image, ImageDraw
-from compare import compare_images
+from compare import compare_images, compare_detail
 
 
 class ComparatorTests(unittest.TestCase):
@@ -41,6 +41,18 @@ class ComparatorTests(unittest.TestCase):
 
     def test_outside_region_is_reported(self):
         self.assertFalse(self.check(self.reference, [{'name': 'invalid', 'box': [-1, 2, 40, 30]}])['passed'])
+
+    def test_fresh_detail_improves_on_a_low_resolution_preview(self):
+        preview = self.reference.resize((20, 20), Image.Resampling.BILINEAR)
+        tile = dict(pageWidth=200, x=0, y=0, width=200, height=200)
+        self.assertTrue(compare_detail(self.reference, self.reference, preview, tile)['passed'])
+
+    def test_stretching_the_same_preview_cannot_pass_as_new_detail(self):
+        preview = self.reference.resize((20, 20), Image.Resampling.BILINEAR)
+        stretched = preview.transform((200, 200), Image.Transform.EXTENT,
+                                      (0, 0, 20, 20), Image.Resampling.BICUBIC)
+        tile = dict(pageWidth=200, x=0, y=0, width=200, height=200)
+        self.assertFalse(compare_detail(self.reference, stretched, preview, tile)['passed'])
 
 
 if __name__ == '__main__':
