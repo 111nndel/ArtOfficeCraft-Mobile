@@ -448,6 +448,13 @@ void main() {
       });
       expect(exact.hits.map((hit) => hit.address), ['C6']);
       expect(exact.hits.single.sheet, 0);
+      // Synthetic edits and a live Android IME can replay the previous query.
+      // Stub only text input for these cases; the UI and Rust backend stay real.
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      tester.testTextInput.register();
+      addTearDown(tester.testTextInput.unregister);
       await tool(tester, 'Главная', 'Найти');
       await tester.enterText(query, '=sum(b1:b2)');
       await tester.pumpAndSettle();
@@ -501,6 +508,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(query, '=SUM(B1:B2)');
       await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(query).controller!.text, '=SUM(B1:B2)');
       await press(tester, 'Найти в Excel');
       await until(
         tester,
@@ -510,6 +518,7 @@ void main() {
       await capture(tester, 'grid-find-options-056');
       await tester.tap(find.byTooltip('Закрыть поиск'));
       await tester.pumpAndSettle();
+      tester.testTextInput.unregister();
 
       await history(tester, true);
       final undo = await save(tester, 'Сохранить копию');
