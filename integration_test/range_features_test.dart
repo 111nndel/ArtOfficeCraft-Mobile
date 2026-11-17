@@ -448,18 +448,26 @@ void main() {
       });
       expect(exact.hits.map((hit) => hit.address), ['C6']);
       expect(exact.hits.single.sheet, 0);
-      // Synthetic edits and a live Android IME can replay the previous query.
-      // Stub only text input for these cases; the UI and Rust backend stay real.
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
-      tester.testTextInput.register();
-      addTearDown(tester.testTextInput.unregister);
+      Future<void> enterQuery(String value) async {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.ensureVisible(query);
+        await tester.pumpAndSettle();
+        await until(tester,
+            () => !tester.widget<TextField>(query).readOnly,
+            'search input editable');
+        // Deliver the native input callback to this field instead of relying
+        // on the harness's global keyboard-client selection after reopening.
+        tester.state<EditableTextState>(find.descendant(
+          of: query, matching: find.byType(EditableText),
+        )).updateEditingValue(TextEditingValue(
+          text: value,
+          selection: TextSelection.collapsed(offset: value.length),
+        ));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(query).controller!.text, value);
+      }
       await tool(tester, 'Главная', 'Найти');
-      await tester.enterText(query, '=sum(b1:b2)');
-      await tester.pumpAndSettle();
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
+      await enterQuery('=sum(b1:b2)');
       await tester.ensureVisible(find.byKey(const Key('grid-find-whole-cell')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('grid-find-whole-cell')));
@@ -504,11 +512,7 @@ void main() {
         () => find.text('Совпадений не найдено').evaluate().isNotEmpty,
         'case-sensitive search rejects a different formula case',
       );
-      await tester.ensureVisible(query);
-      await tester.pumpAndSettle();
-      await tester.enterText(query, '=SUM(B1:B2)');
-      await tester.pumpAndSettle();
-      expect(tester.widget<TextField>(query).controller!.text, '=SUM(B1:B2)');
+      await enterQuery('=SUM(B1:B2)');
       await press(tester, 'Найти в Excel');
       await until(
         tester,
@@ -518,7 +522,6 @@ void main() {
       await capture(tester, 'grid-find-options-056');
       await tester.tap(find.byTooltip('Закрыть поиск'));
       await tester.pumpAndSettle();
-      tester.testTextInput.unregister();
 
       await history(tester, true);
       final undo = await save(tester, 'Сохранить копию');
