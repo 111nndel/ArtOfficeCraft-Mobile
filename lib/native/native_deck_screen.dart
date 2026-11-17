@@ -1210,7 +1210,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
         page: index,
         enabled: !busy,
         onPageChanged: selectSlide,
-        pageBuilder: (_, slide) => RepaintBoundary(
+        pageBuilder: (_, slide, view) => RepaintBoundary(
           child: slideCanvas(slideIndex: slide, allowEdit: true),
         ),
       );

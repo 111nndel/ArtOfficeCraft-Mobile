@@ -9,6 +9,14 @@ import '../l10n/app_strings.dart';
 import '../platform/application_storage.dart';
 import 'editor_tools.dart';
 
+/// Visible child coordinates and physical pixels per logical child unit.
+typedef PageRasterView = ({Rect viewport, double pixelRatio});
+typedef PageCanvasBuilder = Widget Function(
+  BuildContext context,
+  int page,
+  PageRasterView view,
+);
+
 EditorTool pageJumpTool({
   required String label,
   required String fieldLabel,
@@ -125,8 +133,7 @@ class ReadingModePreference extends ValueNotifier<ReadingMode> {
   ReadingModePreference(
     this.format, {
     this.storage = const AndroidApplicationStorage(),
-  })
-    : super(ReadingMode.horizontal);
+  }) : super(ReadingMode.horizontal);
 
   final ApplicationStorage storage;
 
@@ -285,7 +292,7 @@ class ContinuousPages extends StatefulWidget {
   final List<Size> sizes;
   final int page;
   final ValueChanged<int> onPageChanged;
-  final IndexedWidgetBuilder pageBuilder;
+  final PageCanvasBuilder pageBuilder;
   final bool enabled;
   final ({int page, double fraction})? reveal;
 
@@ -423,6 +430,13 @@ class ContinuousPagesState extends State<ContinuousPages> {
             maxScale: 5,
             alignment: Alignment.topLeft,
             builder: (context, viewport) {
+              final visible = Rect.fromPoints(
+                transform.toScene(Offset.zero),
+                transform.toScene(Offset(_viewport.width, _viewport.height)),
+              );
+              final pixelRatio =
+                  transform.value.getMaxScaleOnAxis() *
+                  MediaQuery.devicePixelRatioOf(context);
               final target = widget.page.clamp(0, _tops.length - 1);
               final top = _jumpQueued
                   ? _tops[target] - _margin
@@ -444,7 +458,10 @@ class ContinuousPagesState extends State<ContinuousPages> {
                         right: _margin,
                         top: _tops[i],
                         height: _heights[i],
-                        child: widget.pageBuilder(context, i),
+                        child: widget.pageBuilder(context, i, (
+                          viewport: visible.shift(Offset(-_margin, -_tops[i])),
+                          pixelRatio: pixelRatio,
+                        )),
                       ),
                   ],
                 ),

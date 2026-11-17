@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 /// Android first-party PdfRenderer with one open, app-private document session.
 /// Used only when the Rust renderer cannot render a document or page.
-final class AndroidPdfPageRenderer implements PdfPageRenderer {
+final class AndroidPdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
   AndroidPdfPageRenderer({
     MethodChannel? channel,
     this.allowNonAndroidForTesting = false,
@@ -54,13 +54,34 @@ final class AndroidPdfPageRenderer implements PdfPageRenderer {
 
   @override
   Future<Uint8List> render(int session, int page, {int width = 1000}) async {
-    _platformCheck();
     if (session <= 0 || page < 0 || width < 96 || width > 1600) {
       throw RangeError('Invalid PDF session/page/width');
     }
+    return _render(session, page, {'width': width});
+  }
+
+  @override
+  Future<Uint8List> renderTile(int session, int page, PdfPageTile tile) async {
+    final data = await _render(session, page, pdfTileArguments(tile));
+    if (data.length < 24) throw const FormatException('Invalid PDF tile PNG');
+    final header = ByteData.sublistView(data);
+    if (header.getUint32(16) != tile.width ||
+        header.getUint32(20) != tile.height) {
+      throw const FormatException('Invalid PDF tile dimensions');
+    }
+    return data;
+  }
+
+  Future<Uint8List> _render(
+    int session,
+    int page,
+    Map<String, Object> request,
+  ) async {
+    _platformCheck();
+    if (session <= 0 || page < 0) throw RangeError('Invalid PDF session/page');
     final data = await _channel.invokeMethod<Uint8List>(
       'renderPage',
-      <String, Object>{'session': session, 'page': page, 'width': width},
+      <String, Object>{'session': session, 'page': page, ...request},
     );
     const header = <int>[137, 80, 78, 71, 13, 10, 26, 10];
     if (data == null || data.length < header.length) {

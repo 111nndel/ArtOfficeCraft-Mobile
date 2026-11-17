@@ -1,4 +1,5 @@
 import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
+import 'package:artofficecraft_mobile/native/pdf_page_renderer.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -69,6 +70,45 @@ void main() {
     await expectLater(renderer.render(1, -1), throwsRangeError);
     await expectLater(renderer.render(1, 0, width: 2000), throwsRangeError);
   });
+
+  test(
+    'detail crop uses the existing channel and validates returned dimensions',
+    () async {
+      const tile = (pageWidth: 6000, x: 1200, y: 2400, width: 320, height: 480);
+      final data = Uint8List(24)..setAll(0, png.take(8));
+      ByteData.sublistView(data)
+        ..setUint32(16, 320)
+        ..setUint32(20, 480);
+      var calls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls++;
+            expect(call.method, 'renderPage');
+            expect(call.arguments, {
+              'session': 5,
+              'page': 2,
+              ...pdfTileArguments(tile),
+            });
+            return data;
+          });
+      final renderer = AndroidPdfPageRenderer(allowNonAndroidForTesting: true);
+      expect(await renderer.renderTile(5, 2, tile), data);
+      ByteData.sublistView(data).setUint32(16, 321);
+      await expectLater(renderer.renderTile(5, 2, tile), throwsFormatException);
+      expect(calls, 2);
+      await expectLater(
+        renderer.renderTile(5, 2, (
+          pageWidth: 6000,
+          x: 0,
+          y: 0,
+          width: 2880,
+          height: 2880,
+        )),
+        throwsRangeError,
+      );
+      expect(calls, 2);
+    },
+  );
 
   test('Reject invalid session response', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
