@@ -26,7 +26,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       if (done()) return;
     }
-    throw StateError('Timed out: $label');
+    final labels = tester.widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data ?? widget.textSpan?.toPlainText() ?? '')
+        .join(' | ');
+    final fields = tester.widgetList<TextField>(find.byType(TextField))
+        .map((widget) => widget.controller?.text ?? '').join(' | ');
+    throw StateError('Timed out: $label\nLabels: $labels\nFields: $fields');
   }
 
   EditorToolPanel panel(WidgetTester tester) =>
@@ -62,6 +67,7 @@ void main() {
 
   Future<void> press(WidgetTester tester, String label) async {
     await tester.ensureVisible(find.text(label).last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text(label).last);
     await tester.pump();
   }
@@ -436,6 +442,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('grid-find-count')), findsNothing);
 
+      final exact = await backend.findGridCells(saved, {
+        'query': '=sum(b1:b2)', 'sheet': 0, 'lookIn': 'formulas',
+        'workbook': true, 'matchCase': false, 'wholeCell': true, 'limit': 512,
+      });
+      expect(exact.hits.map((hit) => hit.address), ['C6']);
+      expect(exact.hits.single.sheet, 0);
       await tool(tester, 'Главная', 'Найти');
       await tester.enterText(query, '=sum(b1:b2)');
       await tester.pumpAndSettle();
@@ -460,6 +472,7 @@ void main() {
           find.byKey(const Key('grid-find-look-in'))).value,
         true,
       );
+      expect(tester.widget<TextField>(query).controller!.text, '=sum(b1:b2)');
       await press(tester, 'Найти в Excel');
       await until(
         tester,
