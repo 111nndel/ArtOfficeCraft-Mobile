@@ -42,8 +42,9 @@ Future<void> main() async {
                 page >= 1 &&
                 page <= 8 &&
                 encoded.length <= 12 * 1024 * 1024) {
-          if (!seen.add('$renderer/$page'))
+          if (!seen.add('$renderer/$page')) {
             throw const FormatException('Duplicate raster page');
+          }
           final png = base64Decode(encoded);
           total += png.length;
           if (png.length < 24 ||
@@ -85,16 +86,18 @@ Future<void> main() async {
             }
             when (renderer == 'android' || renderer == 'rust-android') &&
                 expected.containsKey(name)) {
-          if (!seen.add('$renderer/tile/$name'))
+          if (!seen.add('$renderer/tile/$name')) {
             throw const FormatException('Duplicate detail crop');
+          }
           final specification = expected[name] as Map;
           final output = Directory('${root.path}/$renderer');
           for (final image in [
             ('tile-$name', encoded),
             ('preview-tile-$name', preview),
           ]) {
-            if (image.$2.length > 12 * 1024 * 1024)
+            if (image.$2.length > 12 * 1024 * 1024) {
               throw const FormatException('Oversized zoom evidence');
+            }
             final png = base64Decode(image.$2);
             total += png.length;
             if (png.length < 24 ||
