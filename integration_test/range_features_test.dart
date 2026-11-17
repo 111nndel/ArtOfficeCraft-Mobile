@@ -436,6 +436,41 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('grid-find-count')), findsNothing);
 
+      await tool(tester, 'Главная', 'Найти');
+      await tester.enterText(query, '=sum(b1:b2)');
+      await tester.ensureVisible(find.byKey(const Key('grid-find-whole-cell')));
+      await tester.tap(find.byKey(const Key('grid-find-whole-cell')));
+      await tester.pumpAndSettle();
+      await press(tester, 'Найти в Excel');
+      await until(
+        tester,
+        () =>
+            cellInput(tester) == '=SUM(B1:B2)' &&
+            find.text('Результат 1 из 1').evaluate().isNotEmpty,
+        'exact formula search without case sensitivity',
+      );
+      await tool(tester, 'Главная', 'Найти');
+      await tester.ensureVisible(find.byKey(const Key('grid-find-match-case')));
+      await tester.tap(find.byKey(const Key('grid-find-match-case')));
+      await tester.pumpAndSettle();
+      await press(tester, 'Найти в Excel');
+      await until(
+        tester,
+        () => find.text('Совпадений не найдено').evaluate().isNotEmpty,
+        'case-sensitive search rejects a different formula case',
+      );
+      await tester.ensureVisible(query);
+      await tester.enterText(query, '=SUM(B1:B2)');
+      await press(tester, 'Найти в Excel');
+      await until(
+        tester,
+        () => find.text('Результат 1 из 1').evaluate().isNotEmpty,
+        'case-sensitive exact formula search',
+      );
+      await capture(tester, 'grid-find-options-056');
+      await tester.tap(find.byTooltip('Закрыть поиск'));
+      await tester.pumpAndSettle();
+
       await history(tester, true);
       final undo = await save(tester, 'Сохранить копию');
       expect((await inspectCell(backend, undo, 'AY6001'))['input'], 'ЧАЙ');

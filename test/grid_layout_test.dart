@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:artofficecraft_mobile/native/grid_layout.dart';
 import 'package:artofficecraft_mobile/native/grid_window.dart';
 import 'package:artofficecraft_mobile/ui/sheet_viewport.dart';
@@ -7,6 +9,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'mobile_viewports_test.dart' show pinch;
 
 void main() {
+  test(
+    'Point lookup preserves first imported overlap without expanding merges',
+    () {
+      final random = Random(5624);
+      final merges = List.generate(300, (_) {
+        final row = random.nextInt(200), column = random.nextInt(40);
+        return GridMerge(
+          row,
+          column,
+          row + random.nextInt(40),
+          column + random.nextInt(12),
+        );
+      });
+      final layout = GridLayout(GridAxis(1000, 20), GridAxis(100, 80), merges);
+      for (var i = 0; i < 5000; i++) {
+        final row = random.nextInt(250) - 1, column = random.nextInt(55) - 1;
+        final expected = merges
+            .where((merge) => merge.contains(row, column))
+            .firstOrNull;
+        expect(layout.mergeAt(row, column), same(expected));
+      }
+      for (final merge in merges) {
+        for (final point in [
+          (merge.row, merge.column),
+          (merge.endRow, merge.endColumn),
+        ]) {
+          final expected = merges
+              .where((m) => m.contains(point.$1, point.$2))
+              .firstOrNull;
+          expect(layout.mergeAt(point.$1, point.$2), same(expected));
+        }
+      }
+    },
+  );
   test(
     'Sparse geometry handles hidden blocks, distant positions and resize',
     () {

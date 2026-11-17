@@ -96,6 +96,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   List<GridFindHit> _findHits = [];
   int _findIndex = -1, _findRun = 0, _findScanned = 0;
   bool _finding = false, _findBook = false, _findFormulas = false;
+  bool _findMatchCase = false, _findWholeCell = false;
   bool _findLimited = false;
   String? _findMessage;
 
@@ -138,6 +139,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             'sheet': originSheet,
             'lookIn': _findFormulas ? 'formulas' : 'values',
             'workbook': _findBook,
+            'matchCase': _findMatchCase,
+            'wholeCell': _findWholeCell,
             'limit': 512 - hits.length,
             if (cursor != null)
               'cursor': {'sheet': cursor.sheet, 'after': cursor.after},
@@ -264,6 +267,31 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         }),
       ),
       const SizedBox(height: 8),
+      SwitchListTile(
+        key: const Key('grid-find-match-case'),
+        contentPadding: EdgeInsets.zero,
+        title: const UiText('Учитывать регистр'),
+        value: _findMatchCase,
+        onChanged: busy
+            ? null
+            : (value) => setState(() {
+                _clearFind();
+                _findMatchCase = value;
+              }),
+      ),
+      SwitchListTile(
+        key: const Key('grid-find-whole-cell'),
+        contentPadding: EdgeInsets.zero,
+        title: const UiText('Ячейка целиком'),
+        subtitle: const UiText('Искать точное совпадение всего содержимого'),
+        value: _findWholeCell,
+        onChanged: busy
+            ? null
+            : (value) => setState(() {
+                _clearFind();
+                _findWholeCell = value;
+              }),
+      ),
       if (_finding) _findProgress() else ...[
         FilledButton.icon(
           style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),

@@ -106,6 +106,9 @@ class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp>
       messenger.currentState?.showSnackBar(
         SnackBar(
           content: const UiText('Обновление готово к установке'),
+          duration: const Duration(seconds: 8),
+          persist: false,
+          showCloseIcon: true,
           action: SnackBarAction(
             label: tr(context, 'Открыть'),
             onPressed: () {

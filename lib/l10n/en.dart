@@ -445,6 +445,10 @@ const english = <String, String>{
   "Значения ячеек": "Cell values",
   "Искать в": "Look in",
   "Во всей книге": "Entire workbook",
+  "Учитывать регистр": "Match case",
+  "Ячейка целиком": "Match entire cell",
+  "Искать точное совпадение всего содержимого":
+      "Match the entire cell contents",
   "По умолчанию поиск на текущем листе": "Search the current sheet by default",
   "Проверено ячеек: {0}": "Cells checked: {0}",
   "Найти в Excel": "Find in Excel",
