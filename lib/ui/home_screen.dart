@@ -24,6 +24,7 @@ import '../workspace/editor_kind.dart';
 import '../workspace/editor_launch.dart';
 import '../workspace/workspace_store.dart';
 import 'office_theme.dart';
+import 'transient_notice.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -451,15 +452,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ..clearSnackBars()
           ..removeCurrentSnackBar();
         final notice = messenger.showSnackBar(
-          SnackBar(
-            content: const UiText('Убрано из недавних'),
-            duration: const Duration(seconds: 5),
-            persist: false,
-            showCloseIcon: true,
-            action: SnackBarAction(
-              label: tr(context, 'Отменить'),
-              onPressed: () => _undoHistory(removed),
-            ),
+          transientNotice(
+            'Убрано из недавних',
+            action: (label: 'Отменить', onPressed: () => _undoHistory(removed)),
           ),
         );
         _historyNotice = notice;

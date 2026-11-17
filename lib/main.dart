@@ -15,6 +15,7 @@ import 'ui/home_screen.dart';
 import 'ui/office_theme.dart';
 import 'ui/project_info_screen.dart';
 import 'ui/theme_settings.dart';
+import 'ui/transient_notice.dart';
 import 'updates/app_updates.dart';
 
 export 'ui/home_screen.dart' show HomeScreen;
@@ -104,13 +105,11 @@ class _ArtOfficeCraftAppState extends State<ArtOfficeCraftApp>
       if (context == null) return;
       _notifiedUpdate = updates.release!.code;
       messenger.currentState?.showSnackBar(
-        SnackBar(
-          content: const UiText('Обновление готово к установке'),
+        transientNotice(
+          'Обновление готово к установке',
           duration: const Duration(seconds: 8),
-          persist: false,
-          showCloseIcon: true,
-          action: SnackBarAction(
-            label: tr(context, 'Открыть'),
+          action: (
+            label: 'Открыть',
             onPressed: () {
               navigator.currentState?.push(
                 MaterialPageRoute<void>(

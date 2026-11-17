@@ -249,6 +249,7 @@ void main() {
       await historyAction(tester, 'Выбрать документы');
       await reveal(tester, find.byKey(ValueKey('select-${word.id}')));
       await tester.tap(find.byKey(ValueKey('select-${word.id}')));
+      await tester.pumpAndSettle();
       await historyTap(tester, store, find.byTooltip('Убрать из недавних'));
       await tester.pumpAndSettle();
       expect(find.text('Убрано из недавних'), findsOneWidget);
