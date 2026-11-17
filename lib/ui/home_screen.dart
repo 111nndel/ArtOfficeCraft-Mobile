@@ -61,6 +61,23 @@ class _HomeScreenState extends State<HomeScreen> {
   final search = TextEditingController();
   int section = 0;
   EditorKind? filter;
+  bool _selecting = false;
+  bool _historyBusy = false;
+  final _selected = <String>{};
+  bool get _showingRecents => section == 0 && search.text.trim().isEmpty;
+  List<WorkspaceFile> get _visibleFiles {
+    final q = search.text.trim().toLowerCase();
+    return store.files
+        .where(
+          (f) =>
+              (filter == null || f.kind == filter) &&
+              (section != 2 || f.favorite) &&
+              (!_showingRecents || f.recent) &&
+              f.name.toLowerCase().contains(q),
+        )
+        .toList();
+  }
+
   int _editors = 0;
   bool get opening => _editors > 0;
   late final incoming = widget.incoming ?? AndroidIncomingDocuments();
@@ -363,360 +380,509 @@ class _HomeScreenState extends State<HomeScreen> {
     3 => 'Начните с хорошей основы',
     _ => 'Ваши идеи.\nВаше пространство.',
   };
+  void _endSelection() {
+    _selecting = false;
+    _selected.clear();
+  }
+
   void selectSection(int value) => setState(() {
     section = value;
+    _endSelection();
   });
+
+  void _toggleSelection(String id) => setState(() {
+    _selecting = true;
+    if (!_selected.add(id)) _selected.remove(id);
+  });
+
+  Future<void> _clearRecents() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const UiText('Очистить все недавние?'),
+        scrollable: true,
+        content: const UiText(
+          'Записи исчезнут с главной страницы. Рабочие копии останутся во вкладке «Файлы». Избранное и черновики сохранятся.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const UiText('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const UiText('Очистить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _removeRecents(store.files.where((f) => f.recent).map((f) => f.id));
+    }
+  }
+
+  Future<void> _removeRecents(Iterable<String> ids) async {
+    if (_historyBusy) return;
+    setState(() => _historyBusy = true);
+    try {
+      final removed = await store.setRecent(ids, false);
+      if (!mounted) return;
+      setState(_endSelection);
+      if (removed.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: const UiText('Убрано из недавних'),
+              action: SnackBarAction(
+                label: tr(context, 'Отменить'),
+                onPressed: () => _undoHistory(removed),
+              ),
+            ),
+          );
+      }
+    } catch (_) {
+      message('Не удалось изменить список недавних. Попробуйте ещё раз.');
+    } finally {
+      if (mounted) setState(() => _historyBusy = false);
+    }
+  }
+
+  Future<void> _undoHistory(Set<String> ids) async {
+    if (_historyBusy) return;
+    setState(() => _historyBusy = true);
+    try {
+      await store.setRecent(ids, true);
+    } catch (_) {
+      message('Не удалось изменить список недавних. Попробуйте ещё раз.');
+    } finally {
+      if (mounted) setState(() => _historyBusy = false);
+    }
+  }
+
+  Widget _fileHeader(bool searching) => Row(
+    children: [
+      Expanded(
+        child: UiText(
+          searching
+              ? 'Результаты поиска'
+              : section == 2
+              ? 'Избранное'
+              : section == 1
+              ? 'Рабочие копии'
+              : 'Недавние файлы',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+      ),
+      if (_showingRecents)
+        PopupMenuButton<String>(
+          tooltip: tr(context, 'Действия с недавними'),
+          enabled:
+              !_historyBusy &&
+              !opening &&
+              store.loaded &&
+              store.error == null &&
+              store.files.any((f) => f.recent),
+          onSelected: (action) {
+            if (action == 'clear') {
+              _clearRecents();
+            } else {
+              setState(() {
+                _endSelection();
+                _selecting = true;
+              });
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'select', child: UiText('Выбрать документы')),
+            PopupMenuItem(
+              value: 'clear',
+              child: UiText('Очистить все недавние'),
+            ),
+          ],
+        ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final searching = search.text.trim().isNotEmpty;
     final colors = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: OfficeTheme.primary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const UiText(
-                'a',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 27,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: UiText(
-                'ArtOfficeCraft',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -.5,
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: tr(context, 'О проекте и лицензиях'),
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => ProjectInfoScreen(updates: widget.updates),
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: tr(context, 'Изменить тему'),
-            onPressed: widget.toggleTheme,
-            icon: Icon(
-              Theme.of(context).brightness == Brightness.dark
-                  ? Icons.light_mode_outlined
-                  : Icons.dark_mode_outlined,
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Row(
-        children: [
-          if (wide)
-            SizedBox(
-              width: 224,
-              child: ColoredBox(
-                color: colors.surface,
-                child: Column(
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selecting) setState(_endSelection);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: 20,
+          title: _selecting
+              ? Semantics(
+                  label: tr(context, 'Выбрано: ${_selected.length}'),
+                  excludeSemantics: true,
+                  child: Text(
+                    '${_selected.length}',
+                    key: const ValueKey('recent-selection-count'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )
+              : Row(
                   children: [
-                    const SizedBox(height: 24),
-                    for (final i in [0, 1, 2, 3])
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        child: ListTile(
-                          minTileHeight: 56,
-                          selected: section == i,
-                          selectedTileColor: colors.primaryContainer,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          leading: Icon(navIcon(i)),
-                          title: UiText(navLabel(i)),
-                          onTap: () => selectSection(i),
+                    Container(
+                      width: 36,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: OfficeTheme.primary,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const UiText(
+                        'a',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 27,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    const SizedBox(height: 24),
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: FilledButton.icon(
-                        onPressed: () => chooseKind(create: true),
-                        icon: const Icon(Icons.add),
-                        label: const UiText('Создать'),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: UiText(
+                        'ArtOfficeCraft',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -.5,
+                        ),
                       ),
                     ),
                   ],
                 ),
+          actions: [
+            if (_selecting) ...[
+              IconButton(
+                tooltip: tr(context, 'Отмена выбора'),
+                onPressed: _historyBusy ? null : () => setState(_endSelection),
+                icon: const Icon(Icons.close),
               ),
-            ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1100),
-                child: ListView(
-                  key: const PageStorageKey('workspace-scroll'),
-                  padding: EdgeInsets.all(wide ? 32 : 20),
-                  children: [
-                    TextField(
-                      controller: search,
-                      onChanged: (_) => setState(() {}),
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        hintText: tr(context, 'Найти файл'),
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: search.text.isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: tr(context, 'Очистить поиск'),
-                                onPressed: () => setState(() => search.clear()),
-                                icon: const Icon(Icons.close),
-                              ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    if (section == 0 && !searching) ...recoveryWidgets(),
-                    if (!searching) ...[
-                      const SizedBox(height: 28),
-                      UiText(
-                        title,
-                        style: TextStyle(
-                          fontSize: wide ? 32 : 29,
-                          height: 1.15,
-                          letterSpacing: -.8,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      UiText(
-                        section == 3
-                            ? 'Продуманные заготовки для ваших задач.'
-                            : 'Документы, расчёты и большие замыслы.\nВсё в одном пространстве.',
-                        style: TextStyle(
-                          fontSize: 16,
-                          height: 1.5,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
+              IconButton(
+                tooltip: tr(context, 'Выбрать все'),
+                onPressed: _historyBusy
+                    ? null
+                    : () => setState(() {
+                        _selected.addAll(_visibleFiles.map((f) => f.id));
+                      }),
+                icon: const Icon(Icons.select_all),
+              ),
+              IconButton(
+                tooltip: tr(context, 'Убрать из недавних'),
+                onPressed: _historyBusy || _selected.isEmpty
+                    ? null
+                    : () => _removeRecents(_selected),
+                icon: const Icon(Icons.playlist_remove),
+              ),
+            ] else ...[
+              IconButton(
+                tooltip: tr(context, 'О проекте и лицензиях'),
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProjectInfoScreen(updates: widget.updates),
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: tr(context, 'Изменить тему'),
+                onPressed: widget.toggleTheme,
+                icon: Icon(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                ),
+              ),
+            ],
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: Row(
+          children: [
+            if (wide)
+              SizedBox(
+                width: 224,
+                child: ColoredBox(
+                  color: colors.surface,
+                  child: Column(
+                    children: [
                       const SizedBox(height: 24),
-                    ],
-                    if (!searching && section != 2 && section != 3) ...[
-                      const UiText(
-                        'Создать файл',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                      for (final i in [0, 1, 2, 3])
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          child: ListTile(
+                            minTileHeight: 56,
+                            selected: section == i,
+                            selectedTileColor: colors.primaryContainer,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            leading: Icon(navIcon(i)),
+                            title: UiText(navLabel(i)),
+                            onTap: () => selectSection(i),
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: FilledButton.icon(
+                          onPressed: () => chooseKind(create: true),
+                          icon: const Icon(Icons.add),
+                          label: const UiText('Создать'),
                         ),
                       ),
-                      const SizedBox(height: 14),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final scale = MediaQuery.textScalerOf(context)
-                              .scale(1);
-                          final columns =
-                              constraints.maxWidth >= 800 && scale <= 1.3
-                              ? 4
-                              : constraints.maxWidth >=
-                                    (scale > 1.3 ? 600 : 300)
-                              ? 2
-                              : 1;
-                          final width =
-                              (constraints.maxWidth - 12 * (columns - 1)) /
-                              columns;
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              for (final kind in EditorKind.values)
-                                SizedBox(
-                                  width: width,
-                                  child: _EditorCard(
-                                    kind: kind,
-                                    enabled: !opening,
-                                    onTap: () => open(
-                                      kind,
-                                      launch: const EditorLaunch(create: true),
-                                    ),
-                                  ),
+                    ],
+                  ),
+                ),
+              ),
+            Expanded(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1100),
+                  child: ListView(
+                    key: const PageStorageKey('workspace-scroll'),
+                    padding: EdgeInsets.all(wide ? 32 : 20),
+                    children: [
+                      TextField(
+                        controller: search,
+                        onChanged: (_) => setState(_endSelection),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: tr(context, 'Найти файл'),
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: search.text.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: tr(context, 'Очистить поиск'),
+                                  onPressed: () => setState(() {
+                                    search.clear();
+                                    _endSelection();
+                                  }),
+                                  icon: const Icon(Icons.close),
                                 ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 28),
-                    ],
-                    if (section != 3 || searching) ...[
-                      UiText(
-                        searching
-                            ? 'Результаты поиска'
-                            : section == 2
-                            ? 'Избранное'
-                            : section == 1
-                            ? 'Файлы на устройстве'
-                            : 'Недавние файлы',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: opening ? null : chooseKind,
-                          icon: const Icon(Icons.folder_open_outlined),
-                          label: const UiText('Открыть файл с устройства'),
+                      if (section == 0 && !searching) ...recoveryWidgets(),
+                      if (!searching) ...[
+                        const SizedBox(height: 28),
+                        UiText(
+                          title,
+                          style: TextStyle(
+                            fontSize: wide ? 32 : 29,
+                            height: 1.15,
+                            letterSpacing: -.8,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (final k in <EditorKind?>[
-                              null,
-                              ...EditorKind.values,
-                            ])
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    minHeight: 52,
-                                  ),
-                                  child: ChoiceChip(
-                                    label: UiText(
-                                      k?.label ?? 'Все',
-                                      style: const TextStyle(fontSize: 15),
+                        const SizedBox(height: 12),
+                        UiText(
+                          section == 3
+                              ? 'Продуманные заготовки для ваших задач.'
+                              : 'Документы, расчёты и большие замыслы.\nВсё в одном пространстве.',
+                          style: TextStyle(
+                            fontSize: 16,
+                            height: 1.5,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                      if (!searching && section != 2 && section != 3) ...[
+                        const UiText(
+                          'Создать файл',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final scale = MediaQuery.textScalerOf(context)
+                                .scale(1);
+                            final columns =
+                                constraints.maxWidth >= 800 && scale <= 1.3
+                                ? 4
+                                : constraints.maxWidth >=
+                                      (scale > 1.3 ? 600 : 300)
+                                ? 2
+                                : 1;
+                            final width =
+                                (constraints.maxWidth - 12 * (columns - 1)) /
+                                columns;
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                for (final kind in EditorKind.values)
+                                  SizedBox(
+                                    width: width,
+                                    child: _EditorCard(
+                                      kind: kind,
+                                      enabled: !opening,
+                                      onTap: () => open(
+                                        kind,
+                                        launch: const EditorLaunch(
+                                          create: true,
+                                        ),
+                                      ),
                                     ),
-                                    selected: filter == k,
-                                    onSelected: (_) =>
-                                        setState(() => filter = k),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 12,
-                                    ),
                                   ),
-                                ),
-                              ),
-                          ],
+                              ],
+                            );
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      ...fileWidgets(colors),
-                      const SizedBox(height: 28),
-                    ],
-                    if (!searching) ...[
-                      const UiText(
-                        'С чистого листа — или с шаблона',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(height: 28),
+                      ],
+                      if (section != 3 || searching) ...[
+                        _fileHeader(searching),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: opening ? null : chooseKind,
+                            icon: const Icon(Icons.folder_open_outlined),
+                            label: const UiText('Открыть файл с устройства'),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final scale = MediaQuery.textScalerOf(context)
-                              .scale(1);
-                          final cols =
-                              constraints.maxWidth >= 750 && scale < 1.4
-                              ? 3
-                              : 1;
-                          final width =
-                              (constraints.maxWidth - 12 * (cols - 1)) / cols;
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
+                        const SizedBox(height: 12),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
                             children: [
-                              for (final k in [
-                                EditorKind.word,
-                                EditorKind.excel,
-                                EditorKind.slides,
+                              for (final k in <EditorKind?>[
+                                null,
+                                ...EditorKind.values,
                               ])
-                                SizedBox(
-                                  width: width,
-                                  child: _TemplateCard(
-                                    kind: k,
-                                    enabled: !opening,
-                                    onTap: () => open(
-                                      k,
-                                      launch: const EditorLaunch(
-                                        create: true,
-                                        template: true,
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 52,
+                                    ),
+                                    child: ChoiceChip(
+                                      label: UiText(
+                                        k?.label ?? 'Все',
+                                        style: const TextStyle(fontSize: 15),
+                                      ),
+                                      selected: filter == k,
+                                      onSelected: (_) => setState(() {
+                                        filter = k;
+                                        _endSelection();
+                                      }),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 12,
                                       ),
                                     ),
                                   ),
                                 ),
                             ],
-                          );
-                        },
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                    UiText(
-                      'Локальные рабочие копии хранятся внутри приложения. '
-                      'Исходники не перезаписываются; для переноса используйте «Сохранить копию».',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                    if (store.error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: UiText(
-                          store.error!,
-                          style: TextStyle(fontSize: 14, color: colors.error),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ...fileWidgets(colors),
+                        const SizedBox(height: 28),
+                      ],
+                      if (!searching) ...[
+                        const UiText(
+                          'С чистого листа — или с шаблона',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final scale = MediaQuery.textScalerOf(context)
+                                .scale(1);
+                            final cols =
+                                constraints.maxWidth >= 750 && scale < 1.4
+                                ? 3
+                                : 1;
+                            final width =
+                                (constraints.maxWidth - 12 * (cols - 1)) / cols;
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                for (final k in [
+                                  EditorKind.word,
+                                  EditorKind.excel,
+                                  EditorKind.slides,
+                                ])
+                                  SizedBox(
+                                    width: width,
+                                    child: _TemplateCard(
+                                      kind: k,
+                                      enabled: !opening,
+                                      onTap: () => open(
+                                        k,
+                                        launch: const EditorLaunch(
+                                          create: true,
+                                          template: true,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      UiText(
+                        'Локальные рабочие копии хранятся внутри приложения. '
+                        'Исходники не перезаписываются; для переноса используйте «Сохранить копию».',
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: colors.onSurfaceVariant,
                         ),
                       ),
-                  ],
+                      if (store.error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: UiText(
+                            store.error!,
+                            style: TextStyle(fontSize: 14, color: colors.error),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: wide ? null : bottomNav(context),
       ),
-      bottomNavigationBar: wide ? null : bottomNav(context),
     );
   }
 
   List<Widget> fileWidgets(ColorScheme colors) {
     final q = search.text.trim().toLowerCase();
-    final list = store.files
-        .where(
-          (f) =>
-              (filter == null || f.kind == filter) &&
-              (section != 2 || f.favorite) &&
-              f.name.toLowerCase().contains(q),
-        )
-        .toList();
+    final list = _visibleFiles;
     if (!store.loaded) {
       return [
         const Padding(
@@ -746,6 +912,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? 'Файлы не найдены'
                     : section == 2
                     ? 'Здесь будут избранные файлы'
+                    : _showingRecents
+                    ? 'Недавних файлов пока нет'
                     : 'Ваш первый файл появится здесь',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
@@ -757,6 +925,8 @@ class _HomeScreenState extends State<HomeScreen> {
               UiText(
                 section == 2
                     ? 'Нажмите звёздочку рядом с нужным файлом.'
+                    : _showingRecents
+                    ? 'Рабочие копии доступны во вкладке «Файлы».'
                     : 'Откройте документ с устройства или сохраните новый.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 15, color: colors.onSurfaceVariant),
@@ -769,6 +939,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return [
       for (final file in list)
         Card(
+          key: ValueKey('workspace-${file.id}'),
           margin: const EdgeInsets.only(bottom: 10),
           elevation: 0,
           color: colors.surface,
@@ -780,7 +951,18 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  onTap: opening ? null : () => open(file.kind, entry: file),
+                  onTap: opening || _historyBusy
+                      ? null
+                      : () {
+                          if (_selecting) {
+                            _toggleSelection(file.id);
+                          } else {
+                            open(file.kind, entry: file);
+                          }
+                        },
+                  onLongPress: !_showingRecents || opening || _historyBusy
+                      ? null
+                      : () => _toggleSelection(file.id),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 18, 4, 18),
                     child: Row(
@@ -816,19 +998,33 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: tr(
-                  context,
-                  file.favorite ? 'Убрать из избранного' : 'В избранное',
+              if (_selecting)
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Checkbox(
+                    key: ValueKey('select-${file.id}'),
+                    semanticLabel: file.name,
+                    value: _selected.contains(file.id),
+                    onChanged: _historyBusy
+                        ? null
+                        : (_) => _toggleSelection(file.id),
+                  ),
+                )
+              else
+                IconButton(
+                  tooltip: tr(
+                    context,
+                    file.favorite ? 'Убрать из избранного' : 'В избранное',
+                  ),
+                  onPressed: () => favorite(file),
+                  icon: Icon(
+                    file.favorite ? Icons.star : Icons.star_border,
+                    color: file.favorite
+                        ? const Color(0xffbc8b25)
+                        : colors.onSurfaceVariant,
+                  ),
                 ),
-                onPressed: () => favorite(file),
-                icon: Icon(
-                  file.favorite ? Icons.star : Icons.star_border,
-                  color: file.favorite
-                      ? const Color(0xffbc8b25)
-                      : colors.onSurfaceVariant,
-                ),
-              ),
               const SizedBox(width: 4),
             ],
           ),
