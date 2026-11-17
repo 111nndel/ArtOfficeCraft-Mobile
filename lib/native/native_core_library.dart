@@ -121,8 +121,9 @@ ffi.DynamicLibrary openNativeCore({String? libraryPath}) {
       Platform.operatingSystem,
       Platform.resolvedExecutable,
     );
-    if (path == null)
+    if (path == null) {
       throw UnsupportedError('Native document core unavailable');
+    }
     library = ffi.DynamicLibrary.open(path);
   }
   final abi = library.lookupFunction<_NativeAbi, _DartAbi>(
