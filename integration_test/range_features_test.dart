@@ -438,9 +438,28 @@ void main() {
 
       await tool(tester, 'Главная', 'Найти');
       await tester.enterText(query, '=sum(b1:b2)');
+      await tester.pumpAndSettle();
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('grid-find-whole-cell')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('grid-find-whole-cell')));
       await tester.pumpAndSettle();
+      expect(
+        tester.widget<SwitchListTile>(
+          find.byKey(const Key('grid-find-whole-cell'))).value,
+        true,
+      );
+      expect(
+        tester.widget<SwitchListTile>(
+          find.byKey(const Key('grid-find-match-case'))).value,
+        false,
+      );
+      expect(
+        tester.state<FormFieldState<bool>>(
+          find.byKey(const Key('grid-find-look-in'))).value,
+        true,
+      );
       await press(tester, 'Найти в Excel');
       await until(
         tester,
@@ -451,8 +470,14 @@ void main() {
       );
       await tool(tester, 'Главная', 'Найти');
       await tester.ensureVisible(find.byKey(const Key('grid-find-match-case')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('grid-find-match-case')));
       await tester.pumpAndSettle();
+      expect(
+        tester.widget<SwitchListTile>(
+          find.byKey(const Key('grid-find-match-case'))).value,
+        true,
+      );
       await press(tester, 'Найти в Excel');
       await until(
         tester,
@@ -460,7 +485,9 @@ void main() {
         'case-sensitive search rejects a different formula case',
       );
       await tester.ensureVisible(query);
+      await tester.pumpAndSettle();
       await tester.enterText(query, '=SUM(B1:B2)');
+      await tester.pumpAndSettle();
       await press(tester, 'Найти в Excel');
       await until(
         tester,
