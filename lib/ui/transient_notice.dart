@@ -23,18 +23,9 @@ SnackBar transientNotice(
       children: [
         UiText(message),
         if (action != null)
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor:
-                  Theme.of(context).snackBarTheme.actionTextColor ??
-                  Theme.of(context).colorScheme.inversePrimary,
-            ),
-            onPressed: () {
-              ScaffoldMessenger.of(context)
-                  .hideCurrentSnackBar(reason: SnackBarClosedReason.action);
-              action.onPressed();
-            },
-            child: UiText(action.label),
+          SnackBarAction(
+            label: tr(context, action.label),
+            onPressed: action.onPressed,
           ),
       ],
     ),
