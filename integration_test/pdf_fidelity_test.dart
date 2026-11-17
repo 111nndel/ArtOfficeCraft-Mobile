@@ -147,6 +147,7 @@ void main() {
       expect(native.nativeRenders, greaterThanOrEqualTo(15));
       expect(native.fallbackRenders, 0);
       binding.reportData = {
+        ...?binding.reportData,
         'rasters': images,
         'tiles': details,
         'fixtureSha256': manifest['pdfSha256'],

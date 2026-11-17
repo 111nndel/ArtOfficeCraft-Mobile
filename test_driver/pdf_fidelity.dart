@@ -9,6 +9,7 @@ Future<void> main() async {
   final manifest = jsonDecode(
     await File('${root.path}/fixture/manifest.json').readAsString(),
   ) as Map;
+  var screenshotSaved = false;
   await integrationDriver(
     onScreenshot: (name, pixels, [args]) async {
       if (name != 'pdf-detail-zoom-055' ||
@@ -18,11 +19,13 @@ Future<void> main() async {
         return false;
       }
       await File('${root.path}/$name.png').writeAsBytes(pixels, flush: true);
+      screenshotSaved = true;
       return true;
     },
     responseDataCallback: (data) async {
       final rasters = data?['rasters'];
-      if (rasters is! List ||
+      if (!screenshotSaved ||
+          rasters is! List ||
           rasters.length != 16 ||
           data?['fixtureSha256'] != manifest['pdfSha256']) {
         throw const FormatException('Missing Android raster evidence');
