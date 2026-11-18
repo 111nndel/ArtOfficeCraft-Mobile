@@ -26,7 +26,7 @@ Future<void> main() async {
       final rasters = data?['rasters'];
       if (!screenshotSaved ||
           rasters is! List ||
-          rasters.length != 16 ||
+          rasters.length != 8 ||
           data?['fixtureSha256'] != manifest['pdfSha256']) {
         throw const FormatException('Missing Android raster evidence');
       }
@@ -41,7 +41,7 @@ Future<void> main() async {
               'height': int height,
               'png': String encoded,
             }
-            when (renderer == 'android' || renderer == 'rust-android') &&
+            when renderer == 'rust-android' &&
                 page >= 1 &&
                 page <= 8 &&
                 encoded.length <= 12 * 1024 * 1024) {
@@ -76,7 +76,7 @@ Future<void> main() async {
         for (final tile in manifest['tiles'] as List)
           (tile as Map)['name']: tile,
       };
-      if (tiles is! List || tiles.length != expected.length * 2) {
+      if (tiles is! List || tiles.length != expected.length) {
         throw const FormatException('Missing Android zoom evidence');
       }
       for (final entry in tiles) {
@@ -87,7 +87,7 @@ Future<void> main() async {
               'png': String encoded,
               'preview': String preview,
             }
-            when (renderer == 'android' || renderer == 'rust-android') &&
+            when renderer == 'rust-android' &&
                 expected.containsKey(name)) {
           if (!seen.add('$renderer/tile/$name')) {
             throw const FormatException('Duplicate detail crop');

@@ -58,7 +58,7 @@ future tagged publication requires that job to pass. See
 | DOCX / WordCraft | Create/read DOCX, edit plain paragraphs directly on the page with cursor/selection, selected bold/italic/underline/font size/color and paragraph alignment/spacing/left indent; undo/redo; exact case-sensitive find/replace in text paragraphs, with run preservation; save a new copy. Tables are excluded from search. No complete paginated layout. Inline objects/revisions/protected paragraphs are read-only. |
 | XLSX / GridCraft | Create/read XLSX, edit cells/formulas with guarded Save As and undo/redo; persisted font/fill/borders/alignment/wrap/number formats. Two-axis virtual cells and bounded native window queries across A1–XFD1048576; edge headings with optional pinning and Go to cell inside View. Imported dimensions/hidden rows and columns/merged regions; finger-driven row/column resizing with undo/redo and saved XLSX sizes. Compact edge headings, imported shrink-to-fit and AutoSum/recalculate commands. Continuous 10–500% zoom, surrounding empty cells, exact visible-cell queries and touch inertia; no thumbnail/overview mode. Touch range handles with edge scrolling, range style/clear operations (4096 cells), named new sheets, sheet rename/reorder/hide/unhide/delete, positional undo/redo and reopening the saved active sheet are connected. Copy/paste ranges across files/sheets with rebased formulas and styles; values/formulas/formats-only modes and external TSV. Insert/delete whole rows and columns from the selected range, with adjusted references across sheets and undo/redo. Merge, merge-and-center and unmerge preserve styles and saved geometry; clearing other occupied cells requires confirmation. Structured Excel tables and array/spill ranges are excluded from merging. Charts and complex styles remain incomplete. |
 | PPTX / DeckCraft | Create/import PPTX, add/delete/reorder slides, add/edit text, undo/redo and Save As. Approximate position/shape geometry with direct RGB fills/strokes; embedded PNG/JPEG/WebP and graphical thumbnails; no full theme/chart/animation rendering. |
-| PDF / PDFCraft | Rust page rendering through a background worker; independent Rust image OCR adapter using the bundled Tesseract C API and an Android rendering compatibility fallback; thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page or adding a searchable text layer to the saved PDF. Document-wide text search supports embedded text and OCR layers, with match navigation and a highlighted region. Forms and digital signing remain in progress. |
+| PDF / PDFCraft | Rust page rendering through a background worker; independent Rust image OCR adapter using the bundled Tesseract C API; thumbnails and zoom; page ordering and rotation, text notes, supported paragraph edits and touch-positioned text insertion. Undo/redo and Save As. On-device Russian and English OCR for viewing and copying text from one page or adding a searchable text layer to the saved PDF. Document-wide text search supports embedded text and OCR layers, with match navigation and a highlighted region. Forms and digital signing remain in progress. |
 
 ### Architecture and current limits
 
@@ -159,13 +159,15 @@ The updater verifies SHA-256, package identity, increasing versionCode, device A
 and the installed signing certificate before offering the APK. No document upload,
 Wi-Fi control, network-state or broad storage permission is added.
 
-### PDF rasterization (0.42.0)
+### PDF rasterization (0.57.0)
 
 The viewer uses PDFCraft's CPU renderer through the existing C ABI and document
 worker. It keeps a parsed document between page requests, bounds raster memory,
-and closes sessions before draining the worker. No network service or new Kotlin
-handler is involved. The Android adapter is opened lazily for compatibility or
-local OCR; it is retained until broader replacement testing justifies removal.
+and closes sessions before draining the worker. Rust is the only application PDF
+renderer. The Android PdfRenderer adapter and Dart fallback lifecycle have been
+removed; unsupported pages report a rendering error. On-device image OCR consumes
+Rust page rasters through the bundled Tesseract C API. Dart no longer retains a
+second PDF byte snapshot for compatibility rendering.
 Other native platforms can use Rust rendering when their core library is packaged;
 this does not supply complete Windows/Linux Flutter applications.
 
@@ -299,7 +301,7 @@ XLSX uses native GridCraft for actual file operations and, since 0.17.0, windowe
 cell reads across the full Excel address range. Version 0.18.0 connects imported
 dimensions, hidden lines and merged regions, plus touch resizing. Conditional/table
 styles, images/charts and several other layout features remain incomplete. PPTX uses real DeckCraft operations with limited preview; PDF displays
-real page contents through the portable Rust renderer, with an Android compatibility fallback. Advanced PDF editing is unfinished.
+real page contents through the portable Rust renderer. Advanced PDF editing is unfinished.
 No format is yet fully featured.
 
 Never publish personal documents in issues, secret keys, signing files, source caches, third-party branding or third-party installers. Read NATIVE_INTEGRATION_STATUS.md for the exact integration status.

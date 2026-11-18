@@ -20,43 +20,29 @@ void _pdfRasterWorker((SendPort, Map<String, Object?>) args) {
 }
 
 class _Session {
-  _Session(this.bytes);
-  final Uint8List bytes;
-  int? native;
-  Future<int>? fallback;
+  _Session(this.native);
+  final int native;
   bool closed = false;
 }
 
-/// Rust rasterization on the existing serial document worker, independent of
-/// Android. Compatibility rendering and image OCR are independently injectable.
+/// Portable Rust rasterization on the serial document worker; image OCR is injectable.
 final class NativePdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
   NativePdfPageRenderer({
-    this.fallback,
     this.recognizeImage,
     this.workerEntry = _pdfRasterWorker,
   });
-  final PdfPageRenderer? fallback;
   final PdfImageOcr? recognizeImage;
   final DocumentWorkerEntry workerEntry;
   final _sessions = <int, _Session>{};
   DocumentWorker? _worker;
   int _next = 0, _opening = 0;
-  int nativeRenders = 0, fallbackRenders = 0;
+  int nativeRenders = 0;
 
   @override
   bool get supportsOcr => recognizeImage != null;
 
   _Session _get(int id) =>
       _sessions[id] ?? (throw StateError('PDF raster session is closed'));
-
-  Future<int> _fallback(_Session session) async {
-    final adapter = fallback;
-    if (adapter == null) throw StateError('No PDF compatibility renderer');
-    if (session.closed) throw StateError('PDF raster session is closed');
-    final token = await (session.fallback ??= adapter.open(session.bytes));
-    if (session.closed) throw StateError('PDF raster session is closed');
-    return token;
-  }
 
   Future<void> _idle() async {
     if (_sessions.isNotEmpty || _opening != 0) return;
@@ -72,29 +58,21 @@ final class NativePdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
         ascii.decode(pdf.sublist(0, 5), allowInvalid: true) != '%PDF-') {
       throw const FormatException('Invalid PDF bytes');
     }
-    final session = _Session(immutableDocumentBytes(pdf));
     final worker = _worker ??= DocumentWorker(workerEntry);
     _opening++;
     try {
-      try {
-        final bytes = await worker.request('raster', {
-          'op': 'open',
-          'bytes': session.bytes,
-        }) as Uint8List;
-        final info = jsonDecode(utf8.decode(bytes));
-        if (info case {'session': int token, 'pageCount': int count}
-            when token > 0 && count >= 1 && count <= 10000) {
-          session.native = token;
-        } else {
-          throw const FormatException('Invalid native PDF session response');
-        }
-      } catch (_) {
-        if (fallback == null) rethrow;
-        await _fallback(session);
+      final bytes = await worker.request('raster', {
+        'op': 'open',
+        'bytes': immutableDocumentBytes(pdf),
+      }) as Uint8List;
+      final info = jsonDecode(utf8.decode(bytes));
+      if (info case {'session': int token, 'pageCount': int count}
+          when token > 0 && count >= 1 && count <= 10000) {
+        final id = ++_next;
+        _sessions[id] = _Session(token);
+        return id;
       }
-      final id = ++_next;
-      _sessions[id] = session;
-      return id;
+      throw const FormatException('Invalid native PDF session response');
     } finally {
       _opening--;
       await _idle();
@@ -123,47 +101,30 @@ final class NativePdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
       throw RangeError('Invalid PDF raster page/width');
     }
     final state = _get(session);
-    if (state.native != null) {
-      try {
-        final png = await _worker!.request('raster', {
-          'op': tile == null ? 'page' : 'tile',
-          'session': state.native,
-          'page': page,
-          'width': width,
-          if (tile != null) 'tile': [tile.x, tile.y, tile.width, tile.height],
-        }) as Uint8List;
-        if (state.closed) throw StateError('PDF raster session is closed');
-        if (png.length < 24 ||
-            png.length > 24 * 1024 * 1024 ||
-            png.take(8).join(',') != '137,80,78,71,13,10,26,10') {
-          throw const FormatException('Invalid native PDF PNG');
-        }
-        final header = ByteData.sublistView(png);
-        final w = header.getUint32(16), h = header.getUint32(20);
-        if (w == 0 ||
-            h == 0 ||
-            w > maxPdfRasterSide ||
-            h > maxPdfRasterSide ||
-            w * h > maxPdfRasterPixels ||
-            (tile != null && (w != tile.width || h != tile.height))) {
-          throw const FormatException('Invalid native PDF raster dimensions');
-        }
-        nativeRenders++;
-        return png;
-      } catch (_) {
-        if (fallback == null || state.closed) rethrow;
-      }
-    }
-    final adapter = fallback;
-    if (tile != null && adapter is! PdfTileRenderer) {
-      throw UnsupportedError('PDF detail renderer is unavailable');
-    }
-    final token = await _fallback(state);
-    final png = tile == null
-        ? await adapter!.render(token, page, width: width)
-        : await (adapter as PdfTileRenderer).renderTile(token, page, tile);
+    final png = await _worker!.request('raster', {
+      'op': tile == null ? 'page' : 'tile',
+      'session': state.native,
+      'page': page,
+      'width': width,
+      if (tile != null) 'tile': [tile.x, tile.y, tile.width, tile.height],
+    }) as Uint8List;
     if (state.closed) throw StateError('PDF raster session is closed');
-    fallbackRenders++;
+    if (png.length < 24 ||
+        png.length > 24 * 1024 * 1024 ||
+        png.take(8).join(',') != '137,80,78,71,13,10,26,10') {
+      throw const FormatException('Invalid native PDF PNG');
+    }
+    final header = ByteData.sublistView(png);
+    final w = header.getUint32(16), h = header.getUint32(20);
+    if (w == 0 ||
+        h == 0 ||
+        w > maxPdfRasterSide ||
+        h > maxPdfRasterSide ||
+        w * h > maxPdfRasterPixels ||
+        (tile != null && (w != tile.width || h != tile.height))) {
+      throw const FormatException('Invalid native PDF raster dimensions');
+    }
+    nativeRenders++;
     return png;
   }
 
@@ -188,26 +149,12 @@ final class NativePdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
     if (state == null) return;
     state.closed = true;
     try {
-      if (state.native != null) {
-        await _worker!.request('raster', {
-          'op': 'close',
-          'session': state.native,
-        });
-      }
+      await _worker!.request('raster', {
+        'op': 'close',
+        'session': state.native,
+      });
     } finally {
-      try {
-        if (state.fallback != null) {
-          int? token;
-          try {
-            token = await state.fallback!;
-          } catch (_) {
-            /* Opening failed. */
-          }
-          if (token != null) await fallback!.close(token);
-        }
-      } finally {
-        await _idle();
-      }
+      await _idle();
     }
   }
 }

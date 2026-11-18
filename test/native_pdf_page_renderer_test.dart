@@ -20,6 +20,9 @@ void worker((SendPort, Map<String, Object?>) args) {
     final request = payload as Map;
     switch (request['op']) {
       case 'open':
+        if (ascii.decode(request['bytes'] as Uint8List).contains('reject')) {
+          throw const FormatException('Unsupported PDF document');
+        }
         sessions.add(++next);
         return Uint8List.fromList(
           utf8.encode(jsonEncode({'session': next, 'pageCount': 4})),
@@ -47,36 +50,25 @@ void worker((SendPort, Map<String, Object?>) args) {
   });
 }
 
-class Fallback implements PdfPageRenderer {
-  int opened = 0, rendered = 0;
-  final closed = <int>[];
-  Completer<int>? opening;
-  @override
-  bool get supportsOcr => true;
-  @override
-  Future<int> open(Uint8List bytes) async {
-    opened++;
-    final pending = opening;
-    if (pending != null) return pending.future;
-    return opened;
-  }
-
-  @override
-  Future<Uint8List> render(int session, int page, {int width = 1000}) async {
-    rendered++;
-    return image();
-  }
-
-  @override
-  Future<PdfOcrResult> recognize(int session, int page) async =>
-      throw StateError('PDF OCR must not be used');
-  @override
-  Future<void> close(int session) async {
-    closed.add(session);
-  }
-}
-
 void main() {
+  test(
+    'invalid and unsupported documents fail and a new session can still open',
+    () async {
+      final renderer = NativePdfPageRenderer(workerEntry: worker);
+      for (final bytes in [
+        Uint8List(0),
+        Uint8List.fromList(ascii.encode('wrong header')),
+        Uint8List.fromList(ascii.encode('%PDF-reject')),
+      ]) {
+        await expectLater(renderer.open(bytes), throwsFormatException);
+      }
+      final session = await renderer.open(pdf);
+      expect(await renderer.render(session, 0), image());
+      await renderer.close(session);
+      expect(renderer.nativeRenders, 1);
+    },
+  );
+
   test(
     'detail renders reuse the native session and keep tile allocations bounded',
     () async {
@@ -142,15 +134,10 @@ void main() {
       final rejected = expectLater(pending, throwsStateError);
       await renderer.close(session);
       await rejected;
-      expect(renderer.fallbackRenders, 0);
     },
   );
   test('Rust renders stay on one owned worker; replacement and reopen release sessions', () async {
-    final fallback = Fallback();
-    final renderer = NativePdfPageRenderer(
-      fallback: fallback,
-      workerEntry: worker,
-    );
+    final renderer = NativePdfPageRenderer(workerEntry: worker);
     final first = await renderer.open(pdf), second = await renderer.open(pdf);
     await renderer.render(first, 0);
     await renderer.close(first);
@@ -158,7 +145,6 @@ void main() {
     await renderer.close(second);
     await renderer.close(second);
     expect(renderer.nativeRenders, 2);
-    expect(fallback.opened, 0);
     await expectLater(renderer.render(first, 0), throwsStateError);
     final reopened = await renderer.open(pdf);
     await renderer.render(reopened, 0);
@@ -167,12 +153,10 @@ void main() {
   });
 
   test(
-    'unsupported page opens fallback once; OCR receives a Rust image',
+    'unsupported pages report errors; image OCR still receives Rust rasters',
     () async {
-      final fallback = Fallback();
       var images = 0;
       final renderer = NativePdfPageRenderer(
-        fallback: fallback,
         workerEntry: worker,
         recognizeImage: (png) async {
           expect(png, image());
@@ -182,18 +166,14 @@ void main() {
       );
       final session = await renderer.open(pdf);
       await Future.wait([
-        renderer.render(session, 3),
-        renderer.render(session, 3),
+        expectLater(renderer.render(session, 3), throwsFormatException),
+        expectLater(renderer.render(session, 3), throwsFormatException),
       ]);
       expect((await renderer.recognize(session, 0)).text, 'image OCR');
       expect(images, 1);
       expect(renderer.nativeRenders, 1);
       expect(renderer.supportsOcr, isTrue);
-      expect(fallback.opened, 1);
-      expect(fallback.rendered, 2);
-      expect(renderer.fallbackRenders, 2);
       await renderer.close(session);
-      expect(fallback.closed, [1]);
     },
   );
 
@@ -213,31 +193,6 @@ void main() {
     },
   );
 
-  test(
-    'close waits for late fallback open and never publishes its stale page',
-    () async {
-      final fallback = Fallback()..opening = Completer<int>();
-      final renderer = NativePdfPageRenderer(
-        fallback: fallback,
-        workerEntry: worker,
-      );
-      final session = await renderer.open(pdf);
-      final rendering = expectLater(
-        renderer.render(session, 3),
-        throwsStateError,
-      );
-      while (fallback.opened == 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      }
-      final closing = renderer.close(session);
-      fallback.opening!.complete(71);
-      await closing;
-      await rendering;
-      expect(fallback.closed, [71]);
-      expect(fallback.rendered, 0);
-    },
-  );
-
   test('image OCR works with Rust alone and rejects unavailable OCR', () async {
     final renderer = NativePdfPageRenderer(
       workerEntry: worker,
@@ -248,13 +203,9 @@ void main() {
     expect(renderer.supportsOcr, isTrue);
     expect((await renderer.recognize(session, 0)).text, 'portable image');
     expect(renderer.nativeRenders, 1);
-    expect(renderer.fallbackRenders, 0);
     await renderer.close(session);
     await expectLater(renderer.recognize(session, 0), throwsStateError);
-    final unavailable = NativePdfPageRenderer(
-      fallback: Fallback(),
-      workerEntry: worker,
-    );
+    final unavailable = NativePdfPageRenderer(workerEntry: worker);
     final other = await unavailable.open(pdf);
     expect(unavailable.supportsOcr, isFalse);
     await expectLater(unavailable.recognize(other, 0), throwsUnsupportedError);

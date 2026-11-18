@@ -45,6 +45,9 @@ void main() {
 
 // No Android channel: the editor only needs the renderer contract.
 class MemoryPdfRenderer implements PdfPageRenderer {
+  MemoryPdfRenderer({this.onRender});
+  final void Function(int)? onRender;
+  bool failNextOpen = false;
   @override
   bool get supportsOcr => true;
   int opened = 0;
@@ -53,9 +56,15 @@ class MemoryPdfRenderer implements PdfPageRenderer {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
   );
   @override
-  Future<int> open(Uint8List pdf) async => ++opened;
+  Future<int> open(Uint8List pdf) async {
+    if (failNextOpen) { failNextOpen = false; throw StateError('Renderer open failed'); }
+    return ++opened;
+  }
   @override
-  Future<Uint8List> render(int session, int page, {int width = 1000}) async => image;
+  Future<Uint8List> render(int session, int page, {int width = 1000}) async {
+    onRender?.call(page);
+    return image;
+  }
   @override
   Future<PdfOcrResult> recognize(int session, int page) async => (text: '', words: <PdfOcrWord>[]);
   @override

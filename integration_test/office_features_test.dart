@@ -1201,7 +1201,6 @@ void main() {
       expect(text, contains('ПРОВЕРКА ТЕКСТА'));
       expect(text, contains('OFFLINE TEST'));
       expect(renderer.nativeRenders, greaterThanOrEqualTo(2));
-      expect(renderer.fallbackRenders, 0);
       expect(panel(tester).undo, isNull);
       await capture(tester, 'pdf-ocr-033');
       await press(tester, 'Скопировать распознанный текст');

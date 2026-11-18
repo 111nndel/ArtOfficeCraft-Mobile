@@ -1,7 +1,11 @@
 # Portable PDF rendering: first feasibility check
 
-The current APK keeps Android PdfRenderer. The existing PDFCraft render crate
-was built and measured separately; it is not linked into the application.
+Historical evaluation. Since 0.57.0 the application uses Rust rendering only;
+the Android compatibility renderer has been removed. Current regression evidence
+compares the Linux and Android Rust paths with Poppler; see `tools/pdf_fidelity/`.
+
+At the time of this feasibility check the APK used Android PdfRenderer. PDFCraft
+was built and measured separately and had not yet been linked into the application.
 
 ## Source and method
 

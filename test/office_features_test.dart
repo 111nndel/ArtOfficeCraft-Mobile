@@ -1,10 +1,8 @@
-import 'dart:convert';
-
 import 'package:artofficecraft_mobile/native/native_word_screen.dart';
 import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
-import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
+import 'pdf_session_lifetime_test.dart' show MemoryPdfRenderer;
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
 import 'package:artofficecraft_mobile/ui/editor_tools.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
@@ -392,29 +390,7 @@ void main() {
   testWidgets(
     'PDF rotation uses displayed dimensions once and renderer failures do not consume undo',
     (tester) async {
-      const channel = MethodChannel('artofficecraft/pdf_renderer');
-      var session = 0, failRenderer = false;
-      final png = Uint8List.fromList(
-        base64Decode(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-        ),
-      );
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            if (call.method == 'openDocument') {
-              if (failRenderer) {
-                failRenderer = false;
-                throw PlatformException(code: 'open_failed');
-              }
-              return {'session': ++session, 'pageCount': 3};
-            }
-            if (call.method == 'renderPage') return png;
-            return null;
-          });
-      addTearDown(
-        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(channel, null),
-      );
+      final renderer = MemoryPdfRenderer();
       final backend = FeaturesBackend({
         'pages': [
           for (var i = 0; i < 3; i++)
@@ -427,7 +403,7 @@ void main() {
         1,
         NativePdfScreen(
           backend: backend,
-          renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
+          renderer: renderer,
           launch: EditorLaunch(bytes: await backend.create()),
         ),
       );
@@ -436,7 +412,7 @@ void main() {
       final page = tester.widget<PdfViewport>(find.byType(PdfViewport));
       expect(page.pageWidth, 842);
       expect(page.pageHeight, 595);
-      failRenderer = true;
+      renderer.failNextOpen = true;
       await historyAction(tester, true);
       expect(
         tester.widget<PdfViewport>(find.byType(PdfViewport)).pageWidth,

@@ -67,7 +67,7 @@ def compare_images(reference, candidate, expected_size, regions):
 
 
 def compare_suite(root, candidate='rust'):
-    if candidate not in ('rust', 'android', 'rust-android'):
+    if candidate not in ('rust', 'rust-android'):
         raise ValueError('Unknown candidate renderer')
     manifest = json.loads((root / 'fixture/manifest.json').read_text())
     report = {'schema': 1, 'policy': POLICY, 'scale': manifest['scale'],
@@ -92,7 +92,7 @@ def compare_suite(root, candidate='rust'):
             # Resizing is for the review sheet only. Metrics always use exact rasters.
             sheet = Image.new('RGB', (1200, 850), 'white')
             draw = ImageDraw.Draw(sheet)
-            label = 'Android PdfRenderer' if candidate == 'android' else 'PDFCraft C ABI ' + candidate
+            label = 'PDFCraft C ABI ' + candidate
             draw.text((14, 8), f"{page['name']}: Poppler reference / {label}", fill='black')
             for image, x in ((ref, 0), (actual, 600)):
                 preview = image.copy()
@@ -150,7 +150,7 @@ def compare_detail(reference, detail, preview, tile):
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('root', type=Path)
-    p.add_argument('--candidate', choices=('rust', 'android', 'rust-android'), default='rust')
+    p.add_argument('--candidate', choices=('rust', 'rust-android'), default='rust')
     args = p.parse_args()
     report = compare_suite(args.root, args.candidate)
     print(json.dumps(report, indent=2))

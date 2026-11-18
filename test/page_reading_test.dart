@@ -2,17 +2,16 @@ import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
-import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
+import 'pdf_session_lifetime_test.dart' show MemoryPdfRenderer;
 import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'package:artofficecraft_mobile/ui/page_reading.dart';
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'loaded_editors_test.dart' show setup;
-import 'mobile_viewports_test.dart' show pinch, pixel;
+import 'mobile_viewports_test.dart' show pinch;
 import 'office_features_backend.dart';
 import 'office_features_test.dart' show press, tool;
 
@@ -42,34 +41,14 @@ Future<void> changeMode(
 }
 
 void main() {
-  const rendererChannel = MethodChannel('artofficecraft/pdf_renderer');
   final preferences = <String, String>{};
   late _ReadingStorage storage;
   final renders = <int>[];
-  late TestDefaultBinaryMessenger messenger;
 
   setUp(() {
-    messenger =
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     preferences.clear();
     storage = _ReadingStorage(preferences);
     renders.clear();
-    var session = 0;
-    messenger.setMockMethodCallHandler(rendererChannel, (call) async {
-      if (call.method == 'openDocument') {
-        return {'session': ++session, 'pageCount': 40};
-      }
-      if (call.method == 'renderPage') {
-        final args = call.arguments as Map;
-        renders.add(args['page'] as int);
-        return pixel;
-      }
-      return null;
-    });
-  });
-
-  tearDown(() {
-    messenger.setMockMethodCallHandler(rendererChannel, null);
   });
 
   testWidgets('PDF searches the outline and jumps by bookmark or number', (
@@ -93,7 +72,7 @@ void main() {
       NativePdfScreen(
         storage: storage,
         backend: backend,
-        renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
+        renderer: MemoryPdfRenderer(onRender: renders.add),
         launch: EditorLaunch(bytes: await backend.create()),
       ),
     );
@@ -137,7 +116,7 @@ void main() {
       Widget pdf() => NativePdfScreen(
         storage: storage,
         backend: backend,
-        renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
+        renderer: MemoryPdfRenderer(onRender: renders.add),
         launch: EditorLaunch(bytes: bytes),
       );
       await setup(tester, const Size(393, 873), 1, pdf());

@@ -5,48 +5,17 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.PersistableBundle
-import android.graphics.Bitmap
-import android.graphics.Matrix
-import android.graphics.Color
-import android.graphics.pdf.PdfRenderer
-import android.os.ParcelFileDescriptor
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.Executors
-import kotlin.math.roundToInt
 
-/**
- * Android compatibility PDF rasterization and thin system adapters.
- * Rust PDFCraft owns primary rasterization and document edits.
- *
- * A single worker serializes all open/render/close operations. Only one
- * document is resident per FlutterActivity, with an opaque session token.
- * All temporary PDF data stays in app-private cache and is removed on close.
- * Document operations require no network or broad storage permissions.
- */
+/** Android storage, clipboard, incoming URI grants and installer handoff only. */
 class MainActivity : FlutterActivity() {
-    private data class PdfSession(
-        val id: Int,
-        val file: File,
-        val descriptor: ParcelFileDescriptor,
-        val renderer: PdfRenderer,
-    ) {
-        fun close() {
-            try { renderer.close() } finally {
-                try { descriptor.close() } finally { file.delete() }
-            }
-        }
-    }
-
     private val worker = Executors.newSingleThreadExecutor()
     private var incomingDocuments: IncomingDocuments? = null
     private var appUpdates: AppUpdates? = null
-    private var active: PdfSession? = null
-    private var nextId = 0
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -110,167 +79,7 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            "artofficecraft/pdf_renderer",
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "openDocument" -> {
-                    val data = call.argument<ByteArray>("pdf")
-                    if (data == null || data.size !in 5..64 * 1024 * 1024 ||
-                        !validHeader(data)
-                    ) {
-                        result.error("BAD_ARGS", "Invalid PDF document bytes", null)
-                        return@setMethodCallHandler
-                    }
-                    worker.execute {
-                        try {
-                            val info = open(data)
-                            runOnUiThread { result.success(info) }
-                        } catch (_: Exception) {
-                            runOnUiThread {
-                                result.error(
-                                    "PDF_OPEN",
-                                    "Cannot open this PDF (unsupported, encrypted or invalid)",
-                                    null,
-                                )
-                            }
-                        }
-                    }
-                }
-                "renderPage" -> {
-                    val id = call.argument<Int>("session")
-                    val pageIndex = call.argument<Int>("page")
-                    val width = call.argument<Int>("width")
-                    val tile = call.argument<List<*>>("tile")
-                    if (id == null || id <= 0 ||
-                        pageIndex == null || pageIndex < 0 ||
-                        width == null || width !in 96..(if (tile == null) 1600 else 16384) ||
-                        (tile != null && (tile.size != 4 || tile.any { it !is Int }))
-                    ) {
-                        result.error("BAD_ARGS", "Invalid page render request", null)
-                        return@setMethodCallHandler
-                    }
-                    worker.execute {
-                        try {
-                            val session = active
-                            require(session != null && session.id == id) {
-                                "PDF document session is no longer active"
-                            }
-                            val bitmap = renderPage(session, pageIndex, width, tile?.map { it as Int })
-                            val output = try {
-                                encodePng(bitmap)
-                            } finally {
-                                bitmap.recycle()
-                            }
-                            runOnUiThread { result.success(output) }
-                        } catch (error: Throwable) {
-                            if (error !is Exception && error !is LinkageError) throw error
-                            runOnUiThread {
-                                result.error(
-                                    "PDF_RENDER",
-                                    "Cannot render this page or the PDF session is closed",
-                                    null,
-                                )
-                            }
-                        }
-                    }
-                }
-                "closeDocument" -> {
-                    val id = call.argument<Int>("session")
-                    if (id == null) {
-                        result.error("BAD_ARGS", "Missing PDF session", null)
-                        return@setMethodCallHandler
-                    }
-                    worker.execute {
-                        if (active?.id == id) closeActive()
-                        runOnUiThread { result.success(null) }
-                    }
-                }
-                else -> result.notImplemented()
-            }
-        }
     }
-
-    private fun validHeader(bytes: ByteArray): Boolean =
-        bytes[0] == '%'.code.toByte() &&
-        bytes[1] == 'P'.code.toByte() &&
-        bytes[2] == 'D'.code.toByte() &&
-        bytes[3] == 'F'.code.toByte() &&
-        bytes[4] == '-'.code.toByte()
-
-    private fun closeActive() {
-        val previous = active
-        active = null
-        try { previous?.close() } catch (_: Exception) {
-            // A closed/invalid descriptor must not prevent the next document.
-        }
-    }
-
-    private fun open(data: ByteArray): Map<String, Int> {
-        val file = File.createTempFile("artofficecraft-session-", ".pdf", cacheDir)
-        var descriptor: ParcelFileDescriptor? = null
-        var renderer: PdfRenderer? = null
-        try {
-            FileOutputStream(file).use { output ->
-                output.write(data)
-                output.fd.sync()
-            }
-            descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            renderer = PdfRenderer(descriptor)
-            require(renderer.pageCount in 1..10000) { "Invalid page count" }
-            val newId = ++nextId
-            // The new document must open successfully before closing the old one.
-            closeActive()
-            active = PdfSession(newId, file, descriptor, renderer)
-            return mapOf("session" to newId, "pageCount" to renderer.pageCount)
-        } catch (e: Exception) {
-            try { renderer?.close() } catch (_: Exception) {}
-            try { descriptor?.close() } catch (_: Exception) {}
-            file.delete()
-            throw e
-        }
-    }
-
-    private fun renderPage(session: PdfSession, index: Int, widthRequest: Int, tile: List<Int>? = null): Bitmap {
-        require(index < session.renderer.pageCount) { "Invalid page" }
-        session.renderer.openPage(index).use { page ->
-            require(page.width > 0 && page.height > 0) { "Invalid page dimensions" }
-            val ratio = page.height.toDouble() / page.width.toDouble()
-            val width = tile?.get(2) ?: minOf(widthRequest, (2880.0 / ratio).toInt())
-            val height = tile?.get(3) ?: (width * ratio).roundToInt()
-            require(width in 1..2880 && height in 1..2880 && width.toLong() * height <= 4_200_000L) {
-                "Page exceeds raster memory limit"
-            }
-            val matrix = if (tile == null) null else {
-                require(tile[0] >= 0 && tile[1] >= 0 &&
-                    tile[0].toLong() + width <= widthRequest &&
-                    tile[1].toLong() + height <= kotlin.math.ceil(widthRequest * ratio).toLong()) {
-                    "Tile exceeds page bounds"
-                }
-                val scale = widthRequest.toFloat() / page.width
-                Matrix().apply {
-                    setScale(scale, scale)
-                    postTranslate(-tile[0].toFloat(), -tile[1].toFloat())
-                }
-            }
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            try {
-                bitmap.eraseColor(Color.WHITE)
-                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                return bitmap
-            } catch (error: Throwable) {
-                bitmap.recycle()
-                throw error
-            }
-        }
-    }
-
-    private fun encodePng(bitmap: Bitmap): ByteArray =
-        ByteArrayOutputStream().use { output ->
-            require(bitmap.compress(Bitmap.CompressFormat.PNG, 90, output)) { "Cannot encode PNG" }
-            output.toByteArray()
-        }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -281,7 +90,6 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         incomingDocuments?.close()
         appUpdates?.close()
-        worker.execute { closeActive() }
         worker.shutdown()
         super.onDestroy()
     }

@@ -35,5 +35,4 @@ with test_manifest(Path('android/app/src/debug/AndroidManifest.xml')):
          '--driver=test_driver/pdf_fidelity.dart', '-d', 'emulator-5554'],
         Path('build/pdf-renderer-fidelity/results/android-driver.txt'), timeout=600)
 PY
-python tools/pdf_fidelity/compare.py "$results" --candidate android
 python tools/pdf_fidelity/compare.py "$results" --candidate rust-android

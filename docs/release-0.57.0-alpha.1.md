@@ -13,6 +13,11 @@
 - Native Excel window responses move their owned cell maps, sheet list, selected
   cell and layout into the response. Full JSON window clones are removed without
   changing the cell/style protocol.
+- PDF now uses Rust exclusively. The Android PdfRenderer channel, Kotlin session
+  and rasterization implementation, Dart adapter and fallback lifecycle were
+  removed. Unsupported pages report an error. OCR still consumes Rust images.
+  Dart no longer retains PDF source bytes for a possible compatibility render.
+  Kotlin shrinks from 481 to 289 lines of system adapters.
 - The former separate add-sheet implementation now uses the same Rust commands.
   No new Kotlin, dependencies, plugins, permissions or native libraries.
   Processing remains local; the existing Android adapters are retained.

@@ -11,7 +11,7 @@ operations do not establish that the entire UI works on another OS.
 | Native core | `openNativeCore`, `DocumentBackend` | Bundled Rust library, ABI 1; ordered Dart isolates |
 | Open/export | `DocumentFiles` | Existing Android/iOS file-dialog plugin, isolated in `lib/platform/document_files.dart` |
 | Storage | `ApplicationStorage` | Shared Dart files; Android supplies its private directory and reads legacy preferences |
-| PDF display/OCR | `PdfPageRenderer`, `PdfImageOcr` | Rust worker renderer; lazy Android compatibility; Rust/C API image OCR worker |
+| PDF display/OCR | `PdfPageRenderer`, `PdfImageOcr` | Rust-only worker renderer; Rust/C API image OCR worker |
 | Spreadsheet clipboard | `SystemClipboard`, `GridClipboard` | Android identity-bearing clipboard; Flutter text-only fallback |
 | App updates | `AppUpdates`, `UpdateSource`, `UpdateInstaller` | Shared Dart policy/downloads/preferences; Android package verification and installer URI grants |
 
