@@ -282,6 +282,9 @@ void main() {
     await press(tester, 'Итог 2026');
     await until(tester, () => tabNames(tester).length == 2 && cellInput(tester) == '21',
       'unhidden sheet activated');
+    await until(tester, () => tester.state<EditorToolPanelState>(
+      find.byType(EditorToolPanel)).isShowing('Управление листами'),
+      'unhide returns to existing sheet menu');
     await tool(tester, 'Вид', 'Управление листами');
     await press(tester, 'Удалить лист');
     await tester.pumpAndSettle();

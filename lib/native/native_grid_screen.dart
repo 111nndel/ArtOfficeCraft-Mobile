@@ -1477,7 +1477,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     viewTimer?.cancel();
     await acceptEdit(previous, update, window, resetView: !preserveView);
     if (!mounted) return;
-    inputFocus.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (operation == 'unhide') toolPanel.currentState?.back();
     if (operation == 'add') newSheetName.clear();
     tip(switch (operation) {
       'add' => 'Лист создан', 'rename' => 'Лист переименован',
