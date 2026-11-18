@@ -1,8 +1,10 @@
 # ArtOfficeCraft Mobile 0.58.0
 
+## What's New
+
 - Files and Favorites can be sorted by newest, oldest, or filename. Filename
-  sorting ignores case. The selection applies to both tabs for the current
-  session and works alongside the format filter and filename search.
+  sorting ignores case. The selection applies to both tabs and works alongside
+  the format filter and filename search.
 - File lists build cards as you scroll. Large libraries no longer create a card
   for every document when the Home screen renders.
 - Favorite changes respect the same index checks as recent-history changes.
@@ -10,3 +12,9 @@
   the saved documents intact.
 - App 0.58.0+65, ARM64 versionCode 2065. Native core 0.57.0, ABI 1. APKs use
   the existing development preview certificate.
+
+## Known Limitations
+
+- Closing and restarting the app resets the sort order to newest first.
+  Home always shows recent documents in newest-first order.
+- The Android preview targets ARM64 devices.
