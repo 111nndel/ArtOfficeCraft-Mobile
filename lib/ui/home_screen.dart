@@ -24,6 +24,7 @@ import '../workspace/editor_kind.dart';
 import '../workspace/editor_launch.dart';
 import '../workspace/workspace_store.dart';
 import 'office_theme.dart';
+import 'transient_notice.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -63,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
   EditorKind? filter;
   bool _selecting = false;
   bool _historyBusy = false;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _historyNotice;
   final _selected = <String>{};
   bool get _showingRecents => section == 0 && search.text.trim().isEmpty;
   List<WorkspaceFile> get _visibleFiles {
@@ -132,6 +134,18 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: UiText(text)));
     }
+  }
+
+  void _dismissHistoryNotice() {
+    if (_historyNotice == null) return;
+    _historyNotice = null;
+    ScaffoldMessenger.of(context).removeCurrentSnackBar();
+  }
+
+  Future<void> _pushPage(Widget page) async {
+    _dismissHistoryNotice();
+    await Navigator.of(context)
+        .push(MaterialPageRoute<void>(builder: (_) => page));
   }
 
   Future<void> open(
@@ -215,8 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
           files: widget.files,
         ),
       };
-      await Navigator.of(context)
-          .push(MaterialPageRoute<void>(builder: (_) => screen));
+      await _pushPage(screen);
     } catch (_) {
       message(
         'Не удалось открыть рабочую копию. Попробуйте открыть исходный файл с устройства.',
@@ -385,10 +398,13 @@ class _HomeScreenState extends State<HomeScreen> {
     _selected.clear();
   }
 
-  void selectSection(int value) => setState(() {
-    section = value;
-    _endSelection();
-  });
+  void selectSection(int value) {
+    if (section != value) _dismissHistoryNotice();
+    setState(() {
+      section = value;
+      _endSelection();
+    });
+  }
 
   void _toggleSelection(String id) => setState(() {
     _selecting = true;
@@ -428,18 +444,25 @@ class _HomeScreenState extends State<HomeScreen> {
       final removed = await store.setRecent(ids, false);
       if (!mounted) return;
       setState(_endSelection);
-      if (removed.isNotEmpty) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: const UiText('Убрано из недавних'),
-              action: SnackBarAction(
-                label: tr(context, 'Отменить'),
-                onPressed: () => _undoHistory(removed),
-              ),
-            ),
-          );
+      if (removed.isNotEmpty &&
+          _showingRecents &&
+          ModalRoute.of(context)?.isCurrent != false) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger
+          ..clearSnackBars()
+          ..removeCurrentSnackBar();
+        final notice = messenger.showSnackBar(
+          transientNotice(
+            'Убрано из недавних',
+            action: (label: 'Отменить', onPressed: () => _undoHistory(removed)),
+          ),
+        );
+        _historyNotice = notice;
+        unawaited(
+          notice.closed.then((_) {
+            if (identical(_historyNotice, notice)) _historyNotice = null;
+          }),
+        );
       }
     } catch (_) {
       message('Не удалось изменить список недавних. Попробуйте ещё раз.');
@@ -589,11 +612,8 @@ class _HomeScreenState extends State<HomeScreen> {
               IconButton(
                 tooltip: tr(context, 'О проекте и лицензиях'),
                 icon: const Icon(Icons.info_outline),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => ProjectInfoScreen(updates: widget.updates),
-                  ),
-                ),
+                onPressed: () =>
+                    _pushPage(ProjectInfoScreen(updates: widget.updates)),
               ),
               IconButton(
                 tooltip: tr(context, 'Изменить тему'),

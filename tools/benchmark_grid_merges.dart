@@ -58,10 +58,47 @@ void main(List<String> args) {
   }
   double median(List<int> values) {
     final sorted = [...values]..sort();
-    return (sorted[14] + sorted[15]) / 2;
+    final middle = sorted.length ~/ 2;
+    return sorted.length.isOdd
+        ? sorted[middle].toDouble()
+        : (sorted[middle - 1] + sorted[middle]) / 2;
   }
 
   final medians = {for (final e in samples.entries) e.key: median(e.value)};
+  final points = List.generate(
+    30000,
+    (_) => (random.nextInt(500100), random.nextInt(60)),
+  );
+  GridMerge? previousPoint(int row, int column) =>
+      merges.first.contains(row, column)
+      ? merges.first
+      : layout.mergesIn(GridBounds(row, column, row, column)).firstOrNull;
+  for (final point in points) {
+    if (!identical(
+      previousPoint(point.$1, point.$2),
+      layout.mergeAt(point.$1, point.$2),
+    )) {
+      throw StateError('Point merge changed');
+    }
+  }
+  final pointSamples = {'previous': <int>[], 'current': <int>[]};
+  int? pointChecksum;
+  for (var i = 0; i < 7; i++) {
+    for (final mode
+        in i.isEven ? ['previous', 'current'] : ['current', 'previous']) {
+      clock.reset();
+      var checksum = 0;
+      for (final point in points) {
+        final hit = mode == 'previous'
+            ? previousPoint(point.$1, point.$2)
+            : layout.mergeAt(point.$1, point.$2);
+        if (hit != null) checksum += hit.row + hit.column;
+      }
+      pointSamples[mode]!.add(clock.elapsedMicroseconds);
+      pointChecksum ??= checksum;
+      if (pointChecksum != checksum) throw StateError('Point output changed');
+    }
+  }
   final report = {
     'scope': 'Dart AOT Linux; 10001 synthetic merges, including one spanning all rows; 256 window queries per sample; not Android FPS',
     'merges': merges.length,
@@ -71,6 +108,15 @@ void main(List<String> args) {
     'medianBatchUs': medians,
     'medianSpeedup': medians['linear']! / medians['indexed']!,
     'samplesUs': samples,
+    'pointLookup': {
+      'queriesPerSample': points.length,
+      'equalOutputs': true,
+      'previousMedianUs': median(pointSamples['previous']!),
+      'currentMedianUs': median(pointSamples['current']!),
+      'medianSpeedup':
+          median(pointSamples['previous']!) / median(pointSamples['current']!),
+      'samplesUs': pointSamples,
+    },
   };
   File(args.single).writeAsStringSync(
     '${const JsonEncoder.withIndent('  ').convert(report)}\n',

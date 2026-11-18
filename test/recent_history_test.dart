@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:artofficecraft_mobile/l10n/app_strings.dart';
+import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/ui/home_screen.dart';
 import 'package:artofficecraft_mobile/ui/office_theme.dart';
 import 'package:artofficecraft_mobile/workspace/draft_store.dart';
@@ -54,6 +55,7 @@ void main() {
     WidgetTester tester, {
     double scale = 1,
     String language = 'ru',
+    bool accessible = false,
   }) async {
     final values = (await tester.runAsync(() async {
       final directory = await Directory.systemTemp.createTemp(
@@ -102,8 +104,10 @@ void main() {
           ...GlobalMaterialLocalizations.delegates,
         ],
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            accessibleNavigation: accessible,
+          ),
           child: child!,
         ),
         home: HomeScreen(
@@ -192,6 +196,112 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(Checkbox), findsNothing);
       expect(store.files.singleWhere((f) => f.id == grid.id).recent, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final accessible in [false, true]) {
+    testWidgets(
+      'History feedback expires with accessible navigation $accessible',
+      (tester) async {
+        final (store, _, _, _) = await fixture(
+          tester,
+          scale: 2,
+          accessible: accessible,
+        );
+        await historyAction(tester, 'Очистить все недавние');
+        await historyTap(tester, store, find.text('Очистить'));
+        await tester.pumpAndSettle();
+        expect(find.text('Убрано из недавних'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 4));
+        expect(find.text('Убрано из недавних'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(find.text('Убрано из недавних'), findsNothing);
+        expect(store.files.every((file) => !file.recent), isTrue);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'History feedback can be closed without restoring removed entries',
+    (tester) async {
+      final (store, _, _, _) = await fixture(tester);
+      await historyAction(tester, 'Очистить все недавние');
+      await historyTap(tester, store, find.text('Очистить'));
+      await tester.pumpAndSettle();
+      final context = tester.element(find.byType(SnackBar));
+      await tester.tap(
+        find.byTooltip(MaterialLocalizations.of(context).closeButtonTooltip),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Убрано из недавних'), findsNothing);
+      expect(store.files.every((file) => !file.recent), isTrue);
+    },
+  );
+
+  testWidgets(
+    'History feedback does not follow a retained document into its editor',
+    (tester) async {
+      final (store, _, word, grid) = await fixture(tester);
+      await historyAction(tester, 'Выбрать документы');
+      await reveal(tester, find.byKey(ValueKey('select-${word.id}')));
+      await tester.tap(find.byKey(ValueKey('select-${word.id}')));
+      await tester.pumpAndSettle();
+      await historyTap(tester, store, find.byTooltip('Убрать из недавних'));
+      await tester.pumpAndSettle();
+      expect(find.text('Убрано из недавних'), findsOneWidget);
+      await reveal(tester, find.byKey(ValueKey('workspace-${grid.id}')));
+      await tester.tap(find.byKey(ValueKey('workspace-${grid.id}')));
+      for (
+        var i = 0;
+        i < 100 && find.byType(NativeGridScreen).evaluate().isEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(find.byType(NativeGridScreen), findsOneWidget);
+      expect(find.text('Убрано из недавних'), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Убрано из недавних'), findsNothing);
+      expect(store.files.singleWhere((f) => f.id == word.id).recent, isFalse);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'History feedback replaces queued messages and does not clear later app feedback',
+    (tester) async {
+      final (store, _, _, _) = await fixture(tester);
+      final messenger = ScaffoldMessenger.of(
+        tester.element(find.byType(HomeScreen)),
+      );
+      messenger.showSnackBar(const SnackBar(content: Text('Previous message')));
+      messenger.showSnackBar(const SnackBar(content: Text('Queued message')));
+      await tester.pumpAndSettle();
+      await historyAction(tester, 'Очистить все недавние');
+      await historyTap(tester, store, find.text('Очистить'));
+      await tester.tap(find.byTooltip('О проекте и лицензиях'));
+      await tester.pumpAndSettle();
+      expect(find.text('Убрано из недавних'), findsNothing);
+      expect(find.text('Previous message'), findsNothing);
+      expect(find.text('Queued message'), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Application feedback')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('О проекте и лицензиях'));
+      await tester.pumpAndSettle();
+      expect(find.text('Application feedback'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

@@ -240,6 +240,19 @@ class GridLayout {
   GridMerge? mergeAt(int row, int column) {
     if (merges.isEmpty) return null;
     if (merges.first.contains(row, column)) return merges.first;
-    return mergesIn(GridBounds(row, column, row, column)).firstOrNull;
+    final index = _mergeAt(0, merges.length, row, column, merges.length);
+    return index == merges.length ? null : merges[index];
+  }
+
+  // A point lookup needs only the first imported match, not a sorted result list.
+  int _mergeAt(int lo, int hi, int row, int column, int first) {
+    if (lo >= hi) return first;
+    final mid = (lo + hi) ~/ 2;
+    if (_mergeEnds[mid] < row) return first;
+    first = _mergeAt(lo, mid, row, column, first);
+    final index = _mergeOrder[mid], merge = merges[index];
+    if (merge.row > row) return first;
+    if (index < first && merge.contains(row, column)) first = index;
+    return _mergeAt(mid + 1, hi, row, column, first);
   }
 }

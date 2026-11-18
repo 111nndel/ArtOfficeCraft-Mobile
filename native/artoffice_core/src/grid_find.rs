@@ -5,9 +5,14 @@ use gridcraft_model::Workbook;
 use serde_json::{Value as Json, json};
 
 pub(super) fn find(wb: &Workbook, req: &Json) -> Result<Json, String> {
+    let match_case = req.get("matchCase").map_or(Ok(false), |value|
+        value.as_bool().ok_or("Invalid Excel match-case option"))?;
+    let whole_cell = req.get("wholeCell").map_or(Ok(false), |value|
+        value.as_bool().ok_or("Invalid Excel whole-cell option"))?;
     let query = req["query"].as_str()
         .filter(|text| !text.trim().is_empty() && text.len() <= 1024)
-        .ok_or("Enter up to 256 characters to find")?.to_lowercase();
+        .ok_or("Enter up to 256 characters to find")?;
+    let query = if match_case { query.to_owned() } else { query.to_lowercase() };
     let values = match req["lookIn"].as_str() {
         Some("values") => true,
         Some("formulas") => false,
@@ -54,7 +59,9 @@ pub(super) fn find(wb: &Workbook, req: &Json) -> Result<Json, String> {
             } else {
                 cell.input_text()
             };
-            if text.to_lowercase().contains(&query)
+            let text = if match_case { text } else { text.to_lowercase() };
+            let matches = if whole_cell { text == query } else { text.contains(&query) };
+            if matches
                 && !sh.merge_at(at).is_some_and(|merge| merge.start != at) {
                 hits.push(json!({
                     "sheet":index, "address":at.a1(),
@@ -81,6 +88,50 @@ mod tests {
 
     fn request(query: &str) -> Json {
         json!({"query":query,"sheet":0,"lookIn":"values","workbook":true,"limit":512})
+    }
+
+    #[test]
+    fn exact_and_case_sensitive_search_preserve_unicode_spaces_and_formula_modes() {
+        let mut wb = Workbook::new();
+        for (row, value) in ["Кот", "кот", "Котёнок", " Кот "].iter().enumerate() {
+            wb.sheet_mut(0).unwrap().set_value(CellRef::new(row as u32, 0), Value::text(*value));
+        }
+        wb.sheet_mut(0).unwrap().set_cell(CellRef::new(4, 0), Cell {
+            value: Value::number(42.0), ..Cell::formula(Formula::new("=SUM(B1:B2)"))
+        });
+        let before = super::super::grid::write(&wb).unwrap();
+        let addresses = |req: &Json| -> Vec<String> {
+            find(&wb, req).unwrap()["hits"].as_array().unwrap().iter()
+                .map(|hit| hit["address"].as_str().unwrap().to_owned()).collect()
+        };
+        assert_eq!(addresses(&request("кот")), ["A1", "A2", "A3", "A4"]);
+        let mut req = request("Кот");
+        req["matchCase"] = json!(true);
+        assert_eq!(addresses(&req), ["A1", "A3", "A4"]);
+        req["wholeCell"] = json!(true);
+        assert_eq!(addresses(&req), ["A1"]);
+        req["matchCase"] = json!(false);
+        assert_eq!(addresses(&req), ["A1", "A2"]);
+        req["matchCase"] = json!(true);
+        req["query"] = json!(" Кот ");
+        assert_eq!(addresses(&req), ["A4"]);
+        req["query"] = json!("=SUM(B1:B2)");
+        assert!(addresses(&req).is_empty());
+        req["lookIn"] = json!("formulas");
+        assert_eq!(addresses(&req), ["A5"]);
+        req["query"] = json!("=sum(b1:b2)");
+        assert!(addresses(&req).is_empty());
+        req["matchCase"] = json!(false);
+        assert_eq!(addresses(&req), ["A5"]);
+        req["lookIn"] = json!("values");
+        req["query"] = json!("42");
+        assert_eq!(addresses(&req), ["A5"]);
+        for option in ["matchCase", "wholeCell"] {
+            req[option] = json!("true");
+            assert!(find(&wb, &req).is_err());
+            req[option] = json!(false);
+        }
+        assert_eq!(super::super::grid::write(&wb).unwrap(), before);
     }
 
     #[test]

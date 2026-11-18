@@ -17,6 +17,10 @@ import 'package:integration_test/integration_test.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  var surfaceConverted = false;
+  setUp(() {
+    surfaceConverted = false;
+  });
   Future<void> until(
     WidgetTester tester,
     bool Function() done,
@@ -26,7 +30,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       if (done()) return;
     }
-    throw StateError('Timed out: $label');
+    final labels = tester.widgetList<Text>(find.byType(Text))
+        .map((widget) => widget.data ?? widget.textSpan?.toPlainText() ?? '')
+        .join(' | ');
+    final fields = tester.widgetList<TextField>(find.byType(TextField))
+        .map((widget) => widget.controller?.text ?? '').join(' | ');
+    throw StateError('Timed out: $label\nLabels: $labels\nFields: $fields');
   }
 
   EditorToolPanel panel(WidgetTester tester) =>
@@ -62,6 +71,7 @@ void main() {
 
   Future<void> press(WidgetTester tester, String label) async {
     await tester.ensureVisible(find.text(label).last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text(label).last);
     await tester.pump();
   }
@@ -109,7 +119,10 @@ void main() {
   }
 
   Future<void> capture(WidgetTester tester, String name) async {
-    await binding.convertFlutterSurfaceToImage();
+    if (!surfaceConverted) {
+      await binding.convertFlutterSurfaceToImage();
+      surfaceConverted = true;
+    }
     await tester.pumpAndSettle();
     final bytes = await binding.takeScreenshot(name);
     final path = '${Directory.systemTemp.path}/aoc-$name.png';
@@ -435,6 +448,87 @@ void main() {
       await tester.tap(find.byTooltip('Закрыть поиск'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('grid-find-count')), findsNothing);
+
+      final exact = await backend.findGridCells(saved, {
+        'query': '=sum(b1:b2)', 'sheet': 0, 'lookIn': 'formulas',
+        'workbook': true, 'matchCase': false, 'wholeCell': true, 'limit': 512,
+      });
+      expect(exact.hits.map((hit) => hit.address), ['C6']);
+      expect(exact.hits.single.sheet, 0);
+      Future<void> enterQuery(String value) async {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.ensureVisible(query);
+        await tester.pumpAndSettle();
+        await until(tester,
+            () => !tester.widget<TextField>(query).readOnly,
+            'search input editable');
+        // Deliver the native input callback to this field instead of relying
+        // on the harness's global keyboard-client selection after reopening.
+        tester.state<EditableTextState>(find.descendant(
+          of: query, matching: find.byType(EditableText),
+        )).updateEditingValue(TextEditingValue(
+          text: value,
+          selection: TextSelection.collapsed(offset: value.length),
+        ));
+        await tester.pumpAndSettle();
+        expect(tester.widget<TextField>(query).controller!.text, value);
+      }
+      await tool(tester, 'Главная', 'Найти');
+      await enterQuery('=sum(b1:b2)');
+      await tester.ensureVisible(find.byKey(const Key('grid-find-whole-cell')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('grid-find-whole-cell')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<SwitchListTile>(
+          find.byKey(const Key('grid-find-whole-cell'))).value,
+        true,
+      );
+      expect(
+        tester.widget<SwitchListTile>(
+          find.byKey(const Key('grid-find-match-case'))).value,
+        false,
+      );
+      expect(
+        tester.state<FormFieldState<bool>>(
+          find.byKey(const Key('grid-find-look-in'))).value,
+        true,
+      );
+      expect(tester.widget<TextField>(query).controller!.text, '=sum(b1:b2)');
+      await press(tester, 'Найти в Excel');
+      await until(
+        tester,
+        () =>
+            cellInput(tester) == '=SUM(B1:B2)' &&
+            find.text('Результат 1 из 1').evaluate().isNotEmpty,
+        'exact formula search without case sensitivity',
+      );
+      await tool(tester, 'Главная', 'Найти');
+      await tester.ensureVisible(find.byKey(const Key('grid-find-match-case')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('grid-find-match-case')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<SwitchListTile>(
+          find.byKey(const Key('grid-find-match-case'))).value,
+        true,
+      );
+      await press(tester, 'Найти в Excel');
+      await until(
+        tester,
+        () => find.text('Совпадений не найдено').evaluate().isNotEmpty,
+        'case-sensitive search rejects a different formula case',
+      );
+      await enterQuery('=SUM(B1:B2)');
+      await press(tester, 'Найти в Excel');
+      await until(
+        tester,
+        () => find.text('Результат 1 из 1').evaluate().isNotEmpty,
+        'case-sensitive exact formula search',
+      );
+      await capture(tester, 'grid-find-options-056');
+      await tester.tap(find.byTooltip('Закрыть поиск'));
+      await tester.pumpAndSettle();
 
       await history(tester, true);
       final undo = await save(tester, 'Сохранить копию');

@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.55.0.**
+**Current preview — alpha 0.56.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -17,7 +17,8 @@ Excel sorts selected rows and filters them by values or blank cells. Home / Cell
 Merge cells provides merge, merge-and-center and unmerge. Clearing other occupied
 cells requires confirmation; pending input and the operation form one undo step.
 Find searches displayed values or formulas across the current sheet or the workbook,
-including populated cells beyond the viewport.
+including populated cells beyond the viewport. Match case and Match entire cell
+work with both displayed values and formula text.
 PDF searches document text, including OCR layers, and highlights the matching text area.
 PDF bookmarks are also searchable. PDF and PowerPoint can jump by page or slide number.
 PowerPoint can move and resize supported objects. PDF can save notes, edit
@@ -39,11 +40,12 @@ stay unchanged; pending input and fill share one undo step. Fill is limited to
 Home / Recent file actions can remove selected records or clear all recents, with
 Undo. Long-press a recent document to select it. Clearing history keeps working
 copies in Files, favorites and recovery drafts; opening a retained copy adds it
-back to Home without creating another working copy.
+back to Home without creating another working copy. Recent-history feedback expires
+automatically after five seconds and closes when leaving the recent-list context.
 PDF refines the visible page area at the current screen density and zoom instead
 of stretching a fixed 1000-pixel preview. Single-page and continuous modes retain
 the preview while a bounded detail crop is drawn; obsolete results are ignored.
-See the [0.55.0 release notes and limits](docs/release-0.55.0-alpha.1.md).
+See the [0.56.0 release notes and limits](docs/release-0.56.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

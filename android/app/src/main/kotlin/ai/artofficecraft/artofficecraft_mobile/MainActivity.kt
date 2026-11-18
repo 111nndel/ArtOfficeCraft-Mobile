@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.PersistableBundle
 import android.graphics.Bitmap
 import android.graphics.Matrix
@@ -90,9 +89,7 @@ class MainActivity : FlutterActivity() {
                             require(text != null && text.length <= 256 * 1024 &&
                                 token != null && token.matches(Regex("[0-9a-f]{32}"))) { "Invalid clipboard data" }
                             val clip = ClipData.newPlainText("ArtOfficeCraft cells", text)
-                            if (Build.VERSION.SDK_INT >= 24) {
-                                clip.description.extras = PersistableBundle().apply { putString("ai.artofficecraft.gridToken", token) }
-                            }
+                            clip.description.extras = PersistableBundle().apply { putString("ai.artofficecraft.gridToken", token) }
                             manager.setPrimaryClip(clip)
                             result.success(null)
                         }
@@ -102,7 +99,7 @@ class MainActivity : FlutterActivity() {
                             if (text == null) result.success(null)
                             else {
                                 require(text.length <= 256 * 1024) { "Clipboard text too large" }
-                                val token = if (Build.VERSION.SDK_INT >= 24) clip?.description?.extras?.getString("ai.artofficecraft.gridToken") else null
+                                val token = clip?.description?.extras?.getString("ai.artofficecraft.gridToken")
                                 result.success(mapOf("text" to text, "token" to token))
                             }
                         }

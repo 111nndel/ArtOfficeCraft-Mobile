@@ -194,6 +194,20 @@ async function clearHistory() {
   await reveal(n=>n.label.split('\n').includes('No recent files yet'));
   shot('single-reopened-copy-removed');
 
-  const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened','clear cancellation retains history','long press and batch removal with undo','clear all with undo','cleared history survives restart','favorites retained','hidden copy reopened from Files','reopened copy returns to recents without a duplicate','single entry removal']};
+  tap(await waitFor(/^Files(?:\n|$)/));
+  tap(await reveal(n=>n.label.startsWith(first)));
+  await waitFor(/Imported merged title/);
+  if(nodes().some(n=>n.label.includes('Removed from recents')))throw Error('History feedback followed the document into its editor');
+  shot('history-feedback-absent-in-editor');
+  command(['shell','input','keyevent','4']);
+  tap(await waitFor(/^Home(?:\n|$)/));
+  await clearHistory();
+  await pause(6000);
+  const expired=nodes();
+  if(expired.some(n=>n.label.includes('Removed from recents') || n.label==='Undo'))throw Error('History feedback did not expire');
+  await reveal(n=>n.label.split('\n').includes('No recent files yet'));
+  shot('history-feedback-expired');
+
+  const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened','clear cancellation retains history','long press and batch removal with undo','clear all with undo','cleared history survives restart','favorites retained','hidden copy reopened from Files','reopened copy returns to recents without a duplicate','single entry removal','history feedback absent in editors','history feedback expires without restoring entries']};
   fs.writeFileSync(path.join(proof,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});

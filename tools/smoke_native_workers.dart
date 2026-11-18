@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:artofficecraft_mobile/native/document_backend.dart';
 import 'package:artofficecraft_mobile/native/native_build_info.dart';
@@ -23,6 +24,13 @@ Future<void> main() async {
       final backend = NativeDocumentBackend.tryOpen(kind);
       if (backend == null) throw StateError('Cannot open ${kind.name}');
       try {
+        var rejected = false;
+        try {
+          await backend.inspect(Uint8List.fromList([1, 2, 3]));
+        } on FormatException {
+          rejected = true;
+        }
+        check(rejected, '${kind.name} accepted an invalid document');
         final created = await backend.create('Portable document');
         final request = switch (kind) {
           NativeDocumentKind.word => <String, dynamic>{
