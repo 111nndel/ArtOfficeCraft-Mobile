@@ -1,5 +1,22 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
+  "Данные листа будут удалены, ссылки на него станут #REF!. Действие можно отменить.": "Sheet data will be removed and references to it will become #REF!. You can undo this action.",
+  "Лист показан": "Sheet shown",
+  "Лист скрыт": "Sheet hidden",
+  "Лист удалён": "Sheet deleted",
+  "Лист перемещён": "Sheet moved",
+  "Лист переименован": "Sheet renamed",
+  "В книге должен остаться хотя бы один видимый лист": "The workbook must keep at least one visible sheet",
+  "Структура книги защищена": "Workbook structure is protected",
+  "Скрытые листы": "Hidden sheets",
+  "Скрыть лист": "Hide sheet",
+  "Переместить лист вправо": "Move sheet right",
+  "Переместить лист влево": "Move sheet left",
+  "Удалить лист": "Delete sheet",
+  "Удалить лист?": "Delete sheet?",
+  "Переименовать": "Rename",
+  "Введите имя листа": "Enter a sheet name",
+  "Переименовать лист": "Rename sheet",
   "Заполнить диапазон": "Fill range",
   "Заполнить вниз": "Fill down",
   "Заполнить вправо": "Fill right",
@@ -551,7 +568,7 @@ const english = <String, String>{
   "Страница {0} из {1} · действия листаются вбок":
       "Page {0} of {1} · scroll actions sideways",
   "Стр. {0} · {1}°": "Page {0} · {1}°",
-  "Android не смог показать страницу. PDF может быть зашифрован или поврежден.": "Android could not display this page. The PDF may be encrypted or damaged.",
+  "Не удалось показать страницу PDF. Формат может не поддерживаться, либо файл зашифрован или повреждён.": "Could not display this PDF page. Its format may be unsupported, or the file may be encrypted or damaged.",
   "Rust недоступен": "Rust is unavailable",
   "PDFCraft Rust недоступен": "PDFCraft Rust is unavailable",
   "DeckCraft Rust недоступен на этом устройстве":

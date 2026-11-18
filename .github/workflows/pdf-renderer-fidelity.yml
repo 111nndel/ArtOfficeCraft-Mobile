@@ -38,7 +38,7 @@ jobs:
           retention-days: 7
 
   android-reference:
-    name: Compare real Rust FFI and Android on the shared fixture
+    name: Compare Rust FFI on Android with Poppler
     needs: fidelity
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -76,7 +76,7 @@ jobs:
           bash tools/ci/build_native.sh x86_64-linux-android
           mkdir -p android/app/src/main/jniLibs/x86_64
           cp build/native-candidate/libartoffice_core.so android/app/src/main/jniLibs/x86_64/
-      - name: Render fixture pages through both real adapters
+      - name: Render fixture pages through the Rust adapter
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 36
@@ -90,7 +90,7 @@ jobs:
           disable-spellchecker: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -camera-front none
           script: bash tools/pdf_fidelity/run_android.sh
-      - name: Retain three-renderer comparisons
+      - name: Retain Linux and Android Rust comparisons
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

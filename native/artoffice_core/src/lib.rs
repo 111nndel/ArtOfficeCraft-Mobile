@@ -13,6 +13,7 @@ mod grid_find;
 mod grid_fill;
 mod grid_merge;
 mod grid_sort;
+mod grid_sheets;
 mod grid_structure;
 mod deck;
 mod pdf;

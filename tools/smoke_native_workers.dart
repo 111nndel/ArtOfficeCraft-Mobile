@@ -116,7 +116,7 @@ Future<void> main() async {
             try {
               final png = await renderer.render(session, 1, width: 600);
               check(png.take(8).join(',') == '137,80,78,71,13,10,26,10' &&
-                renderer.nativeRenders == 1 && renderer.fallbackRenders == 0,
+                renderer.nativeRenders == 1,
                 'Portable PDF worker raster failed');
             } finally { await renderer.close(session); }
             stdout.writeln('PASS PDF raster: portable worker, real FFI, no OS fallback');

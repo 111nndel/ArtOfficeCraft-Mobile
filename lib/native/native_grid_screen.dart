@@ -89,7 +89,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   Uint8List? book;
   String filename = 'Книга.xlsx', selected = 'A1';
   int sheetIndex = 0;
-  bool modified = false, busy = false;
+  bool modified = false, busy = false, structureProtected = false;
   final input = TextEditingController();
   final history = DocumentHistory();
   final _findText = TextEditingController();
@@ -384,6 +384,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (widget.draft != null) unawaited(widget.draft!.close());
     inputFocus.dispose();
     newSheetName.dispose();
+    renameSheetName.dispose();
     rangeInput.dispose();
     viewTimer?.cancel();
     addressInput.dispose();
@@ -436,16 +437,17 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     data = immutableDocumentBytes(data);
     var window = GridWindow(index ?? 0, 0, 0);
     var parsed = await bridge!.inspectGrid(data, window, 'A1');
-    final active = index ?? (parsed['activeSheet'] as int? ?? 0);
+    final tabs = parsedSheets(parsed);
+    var active = index ?? (parsed['activeSheet'] as int? ?? 0);
+    if (active < 0 || active >= tabs.length || tabs[active]['visible'] == false) {
+      active = tabs.indexWhere((tab) => tab['visible'] != false);
+      if (active < 0) throw const FormatException('Нет видимых листов');
+    }
     if (active != window.sheet) {
       window = GridWindow(active, 0, 0);
       parsed = await bridge!.inspectGrid(data, window, 'A1');
     }
     if (!mounted) return;
-    final list = parsed['sheets'];
-    if (list is! List || list.isEmpty) {
-      throw const FormatException('Листы не найдены');
-    }
     setState(() {
       book = data;
       visibleRegion = null;
@@ -453,8 +455,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       _findText.clear();
       rangeSelection = null;
       rangeInput.clear();
-      sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
-      sheetIndex = window.sheet.clamp(0, sheets.length - 1);
+      sheetIndex = window.sheet;
       selected = 'A1';
       acceptView(parsed, window);
       wantedWindow = window;
@@ -580,6 +581,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
         ? layout
         : GridLayout.fromJson(parsed['layout'] as Map?);
     sheets = parsedSheets(parsed);
+    structureProtected = parsed['structureProtected'] == true;
     refreshCells();
     final selectedRecord = Map<String, dynamic>.from(
       parsed['selection'] as Map? ?? {},
@@ -717,12 +719,19 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   Future<void> acceptEdit(
     Uint8List previous,
     DocumentSnapshot updated,
-    GridWindow window,
-  ) async {
+    GridWindow window, {
+    bool resetView = false,
+  }) async {
     parsedSheets(updated.preview);
     if (!mounted) return;
+    if (resetView) {
+      visibleRegion = null;
+      rangeSelection = null;
+      rangeInput.clear();
+    }
     history.push(previous, position: sheetIndex);
     install(updated.bytes, updated.preview, window);
+    if (resetView) gridViewport.currentState?.reset();
     await rememberCurrent();
   }
 
@@ -844,7 +853,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   }
 
   Future<void> chooseSheet(int idx) => run(() async {
-    if (idx == sheetIndex) return;
+    if (idx == sheetIndex || idx < 0 || idx >= sheets.length || sheets[idx]['visible'] == false) return;
     await flushInput();
     final window = GridWindow(idx, 0, 0);
     final parsed = await bridge!.inspectGrid(book!, window, 'A1');
@@ -1416,32 +1425,119 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   });
 
   final newSheetName = TextEditingController();
-  Future<void> addSheet() => run(() async {
+  final renameSheetName = TextEditingController();
+  List<int> get visibleSheets => [
+    for (var i = 0; i < sheets.length; i++)
+      if (sheets[i]['visible'] != false) i,
+  ];
+  bool get canEditSheets => !busy && !structureProtected &&
+      book != null && book!.length <= history.byteBudget;
+
+  Future<void> editSheet(String operation, {String? name, int? target}) async {
     if (book == null) return;
-    await flushInput();
-    final previous = book!, previousSheet = sheetIndex;
-    final window = GridWindow(sheets.length, 0, 0);
-    final name = newSheetName.text.trim();
-    final update = await bridge!.editAndInspectGrid(
-      previous,
-      {
-        'action': 'add_sheet',
-        'sheet': sheetIndex,
-        'address': selected,
-        if (name.isNotEmpty) 'name': name,
-      },
-      window,
-      'A1',
-    );
-    parsedSheets(update.preview);
-    if (!mounted) return;
-    history.push(previous, position: previousSheet);
+    if (structureProtected) { tip('Структура книги защищена'); return; }
+    final previous = book!;
+    if (previous.length > history.byteBudget) {
+      tip('Для отмены изменений размер книги должен быть не больше 24 МиБ');
+      return;
+    }
+    final visible = visibleSheets;
+    if ((operation == 'delete' || operation == 'hide') && visible.length <= 1) {
+      tip('В книге должен остаться хотя бы один видимый лист');
+      return;
+    }
+    final preserveView = operation == 'rename' || operation == 'move';
+    final next = switch (operation) {
+      'add' => sheets.length,
+      'move' || 'unhide' => target!,
+      'hide' => visible.firstWhere((i) => i != sheetIndex),
+      'delete' => visible.any((i) => i > sheetIndex)
+          ? visible.firstWhere((i) => i > sheetIndex) - 1
+          : visible.lastWhere((i) => i < sheetIndex),
+      _ => sheetIndex,
+    };
+    final oldWindow = loadedWindow;
+    final window = !preserveView ? GridWindow(next, 0, 0)
+        : oldWindow.rowIndices != null
+        ? GridWindow.visible(next, oldWindow.rowIndices!, oldWindow.columnIndices!)
+        : GridWindow(next, oldWindow.row, oldWindow.column,
+            rows: oldWindow.rows, columns: oldWindow.columns);
+    final update = await bridge!.editAndInspectGrid(previous, {
+      'action': 'sheet_structure', 'operation': operation,
+      'sheet': sheetIndex, 'address': selected,
+      if (inputDirty) 'value': input.text,
+      'name': ?name,
+      if (operation == 'move') 'to': target,
+      if (operation == 'unhide') 'target': target,
+    }, window, preserveView ? selected : 'A1');
+    if (update.bytes.length > history.byteBudget) {
+      tip('Результат превышает 24 МиБ и не помещается в историю отмены');
+      return;
+    }
     viewTimer?.cancel();
-    install(update.bytes, update.preview, window);
-    gridViewport.currentState?.reset();
-    newSheetName.clear();
-    await rememberCurrent();
-    tip('Лист создан');
+    await acceptEdit(previous, update, window, resetView: !preserveView);
+    if (!mounted) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (operation == 'unhide') toolPanel.currentState?.back();
+    if (operation == 'add') newSheetName.clear();
+    tip(switch (operation) {
+      'add' => 'Лист создан', 'rename' => 'Лист переименован',
+      'move' => 'Лист перемещён', 'delete' => 'Лист удалён',
+      'hide' => 'Лист скрыт', _ => 'Лист показан',
+    });
+  }
+
+  Future<void> addSheet() => run(() async {
+    final name = newSheetName.text.trim();
+    await editSheet('add', name: name.isEmpty ? null : name);
+  });
+
+  Future<void> renameSheet() => run(() async {
+    if (book == null) return;
+    final previous = book!, draft = input.text;
+    final form = GlobalKey<FormState>();
+    renameSheetName.text = sheets[sheetIndex]['name'].toString();
+    renameSheetName.selection = TextSelection(baseOffset: 0,
+        extentOffset: renameSheetName.text.length);
+    final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: const UiText('Переименовать лист'),
+      content: Form(key: form, child: TextFormField(
+        key: const Key('grid-rename-sheet'), controller: renameSheetName,
+        autofocus: true, maxLength: 31,
+        decoration: InputDecoration(labelText: tr(ctx, 'Имя листа')),
+        validator: (value) => value == null || value.trim().isEmpty
+            ? tr(ctx, 'Введите имя листа') : null,
+        onFieldSubmitted: (_) {
+          if (form.currentState!.validate()) Navigator.pop(ctx, renameSheetName.text.trim());
+        },
+      )),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const UiText('Отмена')),
+        FilledButton(onPressed: () {
+          if (form.currentState!.validate()) Navigator.pop(ctx, renameSheetName.text.trim());
+        }, child: const UiText('Переименовать')),
+      ],
+    ));
+    if (name == null || !mounted || !identical(previous, book) || draft != input.text) return;
+    if (name == sheets[sheetIndex]['name'] && !inputDirty) return;
+    await editSheet('rename', name: name);
+  });
+
+  Future<void> deleteSheet() => run(() async {
+    if (book == null) return;
+    final previous = book!, draft = input.text;
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const UiText('Удалить лист?'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+        children: [Text(sheets[sheetIndex]['name'].toString()), const SizedBox(height: 12),
+          const UiText('Данные листа будут удалены, ссылки на него станут #REF!. Действие можно отменить.')]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const UiText('Отмена')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const UiText('Удалить')),
+      ],
+    )) ?? false;
+    if (!confirmed || !mounted || !identical(previous, book) || draft != input.text) return;
+    await editSheet('delete');
   });
   String? mergeBlockReason(GridSelection range) =>
       undoableEditBlocked ??
@@ -1902,7 +1998,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (state == null) return;
     final sheet = state['sheet'] as int;
     final address = state['selected'] as String;
-    if (sheet < 0 || sheet >= sheets.length || gridAddress(address) == null) {
+    if (sheet < 0 || sheet >= sheets.length || sheets[sheet]['visible'] == false || gridAddress(address) == null) {
       throw const FormatException(
         'Не удалось восстановить выбранную ячейку. Черновик сохранён.',
       );
@@ -2268,12 +2364,12 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                     hintText: tr(context, 'Автоматически, если пусто'),
                   ),
                   onSubmitted: (_) {
-                    if (!busy) addSheet();
+                    if (canEditSheets && sheets.length < 256) addSheet();
                   },
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: busy ? null : addSheet,
+                  onPressed: canEditSheets && sheets.length < 256 ? addSheet : null,
                   icon: const Icon(Icons.add),
                   label: const UiText('Создать лист'),
                 ),
@@ -2372,15 +2468,36 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             'Управление листами',
             Icons.tab,
             children: [
-              for (var i = 0; i < sheets.length; i++)
+              for (final i in visibleSheets)
                 EditorTool(
                   sheets[i]['name']?.toString() ?? tr(context, 'Лист'),
-                  i == sheetIndex
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off,
+                  i == sheetIndex ? Icons.radio_button_checked : Icons.radio_button_off,
                   localize: false,
                   onPressed: busy ? null : () => chooseSheet(i),
                 ),
+              EditorTool('Переименовать лист', Icons.edit_outlined,
+                onPressed: canEditSheets ? renameSheet : null),
+              EditorTool('Переместить лист влево', Icons.arrow_back,
+                onPressed: canEditSheets && visibleSheets.first != sheetIndex
+                    ? () => run(() => editSheet('move', target:
+                        visibleSheets[visibleSheets.indexOf(sheetIndex) - 1])) : null),
+              EditorTool('Переместить лист вправо', Icons.arrow_forward,
+                onPressed: canEditSheets && visibleSheets.last != sheetIndex
+                    ? () => run(() => editSheet('move', target:
+                        visibleSheets[visibleSheets.indexOf(sheetIndex) + 1])) : null),
+              EditorTool('Скрыть лист', Icons.visibility_off_outlined,
+                onPressed: canEditSheets && visibleSheets.length > 1
+                    ? () => run(() => editSheet('hide')) : null),
+              if (sheets.any((s) => s['visible'] == false))
+                EditorTool('Скрытые листы', Icons.visibility_outlined, children: [
+                  for (var i = 0; i < sheets.length; i++)
+                    if (sheets[i]['visible'] == false)
+                      EditorTool(sheets[i]['name'].toString(), Icons.visibility,
+                        localize: false, onPressed: canEditSheets
+                            ? () => run(() => editSheet('unhide', target: i)) : null),
+                ]),
+              EditorTool('Удалить лист', Icons.delete_outline,
+                onPressed: canEditSheets && visibleSheets.length > 1 ? deleteSheet : null),
             ],
           ),
         },
@@ -2561,7 +2678,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            for (var i = 0; i < sheets.length; i++)
+                            for (final i in visibleSheets)
                               TextButton(
                                 onPressed: busy ? null : () => chooseSheet(i),
                                 style: TextButton.styleFrom(

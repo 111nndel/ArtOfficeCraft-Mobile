@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/native_word_screen.dart';
@@ -7,7 +6,7 @@ import 'package:artofficecraft_mobile/native/native_grid_screen.dart';
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
 import 'package:artofficecraft_mobile/native/document_backend.dart';
-import 'package:artofficecraft_mobile/platform/android_pdf_page_renderer.dart';
+import 'pdf_session_lifetime_test.dart' show MemoryPdfRenderer;
 import 'package:artofficecraft_mobile/ui/editor_tools.dart';
 import 'package:artofficecraft_mobile/workspace/editor_kind.dart';
 import 'package:artofficecraft_mobile/workspace/editor_launch.dart';
@@ -43,31 +42,14 @@ void main() {
         );
         await tester.runAsync(() => second.writeAsBytes(backend.bytes()));
         const files = MethodChannel('flutter_file_dialog');
-        const pdf = MethodChannel('artofficecraft/pdf_renderer');
         final calls = <String>[];
         final initialRemember = Completer<void>();
         String? pick = second.path;
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(files, (call) async => pick);
-        final png = Uint8List.fromList(
-          base64Decode(
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-          ),
-        );
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(
-              pdf,
-              (call) async => switch (call.method) {
-                'openDocument' => {'session': 1, 'pageCount': 1},
-                'renderPage' => png,
-                _ => null,
-              },
-            );
         addTearDown(() {
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
               .setMockMethodCallHandler(files, null);
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-              .setMockMethodCallHandler(pdf, null);
         });
         void changed() {
           calls.add('replace');
@@ -105,7 +87,7 @@ void main() {
           ),
           EditorKind.pdf => NativePdfScreen(
             backend: backend,
-            renderer: AndroidPdfPageRenderer(allowNonAndroidForTesting: true),
+            renderer: MemoryPdfRenderer(),
             launch: launch,
             onDocumentChanged: changed,
             onRemember: remember,

@@ -1,9 +1,8 @@
 # PDF renderer fidelity harness
 
 The harness exercises the application C ABI on Linux and the existing Dart worker
-and FFI on an API 36 x86_64 Android emulator. Native evidence deliberately has no
-OS fallback. Android PdfRenderer renders the identical generated fixture as a
-separate baseline. Poppler is the independent reference; all three candidates use
+and FFI on an API 36 x86_64 Android emulator. Both application paths use Rust only.
+Poppler is the independent reference; the Linux and Android candidates use
 the same fixed numerical policy in `compare.py`.
 
 Eight original pages cover embedded Cyrillic TTF styles, JPEG, RGBA/PDF alpha,
@@ -32,7 +31,7 @@ second test-only renderer implementation or modification of staged engine code.
 Android builds the real x86_64 core from the same pinned sources and dependency
 lock. Fixture assets and the local driver network permission exist only in the
 isolated debug build; the runner restores both pubspec and manifest on exit.
-The driver bounds PNG transfers and separates `android` from `rust-android`
-evidence. `comparison-rust-android.json` proves native output rather than silently
-accepting the OS fallback. Python/reference tools are development dependencies,
+The driver bounds PNG transfers and accepts only `rust-android` evidence.
+`comparison-rust-android.json` compares all eight pages and three detail crops
+with Poppler; it also requires the displayed zoom detail to finish decoding. Python/reference tools are development dependencies,
 not shipped application dependencies. The signed app remains offline.

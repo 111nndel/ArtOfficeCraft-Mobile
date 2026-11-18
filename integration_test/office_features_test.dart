@@ -701,7 +701,7 @@ void main() {
   );
 
   testWidgets(
-    'New XLSX tab commits pending input, restores sheet on undo and opens saved active tab',
+    'New XLSX tab and pending input share one undo step; saved active tab reopens',
     (tester) async {
       final backend = NativeDocumentBackend(NativeDocumentKind.grid);
       addTearDown(backend.close);
@@ -746,7 +746,7 @@ void main() {
       );
       expect(
         tester.widget<TextField>(formula()).controller!.text,
-        'Native pending input',
+        'Imported merged title',
       );
       await history(tester, false);
       await present(
@@ -1184,7 +1184,10 @@ void main() {
       await readingMode(tester, 'Чтение', 'По одной, горизонтально');
       final raster = find.descendant(
         of: find.byKey(const Key('pdf-page-canvas')),
-        matching: find.byType(Image),
+        // The high-resolution detail is a second Image; compare the stable
+        // full-page preview before/after adding the invisible OCR text layer.
+        matching: find.byWidgetPredicate((widget) => widget is Image &&
+            widget.key != const Key('pdf-page-detail')),
       );
       await until(
         tester,
@@ -1201,7 +1204,6 @@ void main() {
       expect(text, contains('ПРОВЕРКА ТЕКСТА'));
       expect(text, contains('OFFLINE TEST'));
       expect(renderer.nativeRenders, greaterThanOrEqualTo(2));
-      expect(renderer.fallbackRenders, 0);
       expect(panel(tester).undo, isNull);
       await capture(tester, 'pdf-ocr-033');
       await press(tester, 'Скопировать распознанный текст');

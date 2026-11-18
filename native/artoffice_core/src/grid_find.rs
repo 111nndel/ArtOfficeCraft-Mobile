@@ -1,7 +1,7 @@
 //! Bounded, read-only search over GridCraft's sparse cells and display formatting.
 use gridcraft_core::{CellRef, RangeRef, MAX_COLS, MAX_ROWS};
 use gridcraft_engine::display::{formula_hidden, value_text};
-use gridcraft_model::Workbook;
+use gridcraft_model::{Visibility, Workbook};
 use serde_json::{Value as Json, json};
 
 pub(super) fn find(wb: &Workbook, req: &Json) -> Result<Json, String> {
@@ -44,6 +44,11 @@ pub(super) fn find(wb: &Workbook, req: &Json) -> Result<Json, String> {
     let mut next = None;
     for index in start..end {
         let sh = wb.sheet(index).ok_or("Sheet not found")?;
+        if sh.visibility != Visibility::Visible {
+            next = (index + 1 < end).then(|| json!({"sheet":index + 1,"after":null}));
+            if index - start >= 23 || timer.elapsed().as_millis() >= 150 { break; }
+            continue;
+        }
         let after = if index == start { after } else { None };
         let range = RangeRef {
             start: CellRef::new(after.map_or(0, |c| c.row), 0),
@@ -88,6 +93,29 @@ mod tests {
 
     fn request(query: &str) -> Json {
         json!({"query":query,"sheet":0,"lookIn":"values","workbook":true,"limit":512})
+    }
+
+    #[test]
+    fn hidden_sheets_are_skipped_without_repeating_or_losing_search_batches() {
+        let mut wb = Workbook::new();
+        for i in 1..5 { wb.sheets.push(Arc::new(Sheet::new(format!("Tab{i}")))); }
+        for i in 0..5 {
+            wb.sheet_mut(i).unwrap().set_value(CellRef::new(0, 0), Value::text("needle"));
+            if i % 2 == 0 { wb.sheet_mut(i).unwrap().visibility = Visibility::Hidden; }
+        }
+        let mut req = request("needle"); req["sheet"] = json!(1); req["limit"] = json!(1);
+        let mut found = Vec::new();
+        for _ in 0..8 {
+            let batch = find(&wb, &req).unwrap();
+            found.extend(batch["hits"].as_array().unwrap().iter().map(|h| h["sheet"].as_u64().unwrap()));
+            if batch["next"].is_null() { break; }
+            assert_ne!(batch["next"], req["cursor"]);
+            req["cursor"] = batch["next"].clone();
+        }
+        assert_eq!(found, [1, 3]);
+        assert!(find(&wb, &request("needle" )).unwrap()["hits"].as_array().unwrap().iter().all(|h| h["sheet"] != 0));
+        let mut only_hidden = request("needle"); only_hidden["workbook"] = json!(false);
+        assert!(find(&wb, &only_hidden).unwrap()["hits"].as_array().unwrap().is_empty());
     }
 
     #[test]

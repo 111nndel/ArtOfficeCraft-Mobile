@@ -23,7 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from verify_android_apk import verify_release_manifest, verify_update_permissions
 
 ROOT = Path(__file__).resolve().parents[2]
-SUITES = ('native_editors', 'office_features', 'range_features', 'clipboard_features')
+# Fail early on sheet/range regressions; every suite remains required.
+SUITES = ('range_features', 'native_editors', 'office_features', 'clipboard_features')
 PNG = b'\x89PNG\r\n\x1a\n'
 
 

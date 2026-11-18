@@ -1,7 +1,7 @@
 //! GridCraft: real XLSX create/read/edit/write bridge.
 //! Preview is bounded and does not pretend to render full Excel features.
 use gridcraft_core::{CellRef, RangeRef, Value};
-use gridcraft_model::{Cell, Formula, Workbook};
+use gridcraft_model::{Cell, Formula, Visibility, Workbook};
 use gridcraft_engine::display::formula_hidden;
 use gridcraft_model::style::{Color, Fill, HAlign, NumFmt, PatternType, Underline, Borders, BorderLine, VAlign};
 use gridcraft_numfmt::{NumberFormat, format_value};
@@ -213,11 +213,11 @@ pub extern "C" fn ac_xlsx_inspect(data:*const u8, n:usize) -> AcResult {
                 cells.insert(loc.a1(),json!({"input":input,"display":displayed.text,"numeric":displayed.numeric,
                     "formula":c.formula.is_some(),"style":style_json(&wb,c.style)}));
             }
-            sheets.push(json!({"index":index,"name":sh.name,"cells":cells,"truncated":sh.cells.len()>1600}));
+            sheets.push(json!({"index":index,"name":sh.name,"cells":cells,"truncated":sh.cells.len()>1600,"visible":sh.visibility==Visibility::Visible}));
         }
         serde_json::to_vec(&json!({
             "type":"xlsx", "engine":"gridcraft", "sheets":sheets,
-            "totalCells":total,"warnings":report.warnings,
+            "totalCells":total,"warnings":report.warnings,"structureProtected":wb.protected_structure,
             "note":"Only first 1600 populated cells per sheet appear in preview. Formula results may be stale if the source workbook has not been recalculated."
         })).map_err(|e|e.to_string())
     })
@@ -227,7 +227,7 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
     protect(||{
         let bytes=decode(data,n,MAX_INPUT_BYTES)?;
         let req:Json=serde_json::from_str(input(request,req_len)?).map_err(|e|format!("Invalid cell edit JSON: {e}"))?;
-        let idx=req.get("sheet").and_then(Json::as_u64).ok_or("Missing sheet index")? as usize;
+        let idx=req.get("sheet").and_then(Json::as_u64).and_then(|i|usize::try_from(i).ok()).ok_or("Missing or invalid sheet index")?;
         let address=req.get("address").and_then(Json::as_str).ok_or("Missing A1 address")?;
         let mut wb=workbook(bytes)?;
         let action=req.get("action").and_then(Json::as_str).unwrap_or("value");
@@ -246,8 +246,11 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
         if action == "filter_range" {
             return super::grid_filter::edit(wb, idx, &req);
         }
-        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"add_sheet"|"format_range"|"clear_range"|"paste_text") {return Err("Unknown cell action".into())}
-        if matches!(action,"autosum"|"recalculate"|"add_sheet") && req.get("value").is_some() {
+        if matches!(action, "sheet_structure" | "add_sheet") {
+            return super::grid_sheets::edit(wb, idx, address, &req);
+        }
+        if !matches!(action,"value"|"format"|"rowHeight"|"columnWidth"|"autosum"|"recalculate"|"format_range"|"clear_range"|"paste_text") {return Err("Unknown cell action".into())}
+        if matches!(action,"autosum"|"recalculate") && req.get("value").is_some() {
             return Err("Calculation actions do not accept a cell value".into())
         }
         if action=="paste_text" {return super::grid_clipboard::paste_text(wb,&req)}
@@ -255,17 +258,6 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
             edit_range(&mut wb,idx,&req,action=="clear_range")?;
             if action=="clear_range" {gridcraft_calc::Calc::new().recalc_all(&mut wb);}
             return write(&wb)
-        }
-        if action=="add_sheet" {
-            wb.sheet(idx).ok_or("Sheet index out of bounds")?;
-            CellRef::parse(address).ok_or("Invalid A1 reference")?;
-            if wb.protected_structure {return Err("Workbook structure is protected".into())}
-            if wb.sheets.len()>=256 {return Err("Mobile editor supports at most 256 sheets".into())}
-            let name=match req.get("name") {None=>wb.next_sheet_name(),Some(v)=>v.as_str().ok_or("Sheet name must be text")?.to_owned()};
-            if name.chars().any(char::is_control) {return Err("Sheet name contains control characters".into())}
-            wb.check_sheet_name(&name,None)?;
-            wb.sheets.push(std::sync::Arc::new(gridcraft_model::Sheet::new(name)));
-            wb.set_active_sheet(wb.sheets.len()-1);
         }
         if action=="autosum" {autosum(&mut wb,idx,address)?;}
         if action=="recalculate" {
@@ -402,19 +394,29 @@ fn inspect_window(wb: &Workbook, warnings: &Json, req: &Json) -> Result<Vec<u8>,
         used[0]=used[0].min(m.start.row);used[1]=used[1].min(m.start.col);
         used[2]=used[2].max(m.end.row);used[3]=used[3].max(m.end.col);
     }
-    let sheets:Vec<_>=wb.sheets.iter().enumerate().map(|(i,s)|json!({"index":i,"name":s.name,
-        "cells":if i as u64==idx {Json::Object(cells.clone())} else {json!({})},
-        "protected":s.protection.is_some() || wb.protected_structure})).collect();
+    let mut sheets=Vec::with_capacity(wb.sheets.len());
+    for (i,s) in wb.sheets.iter().enumerate() {
+        let mut sheet=json!({"index":i,"name":s.name,"visible":s.visibility==Visibility::Visible,
+            "protected":s.protection.is_some() || wb.protected_structure});
+        // Move the active window once; serializing owned JSON through json! would clone it.
+        sheet["cells"]=if i as u64==idx {Json::Object(std::mem::take(&mut cells))} else {json!({})};
+        sheets.push(sheet);
+    }
     let layout=json!({"defaultRowHeight":valid_extent(sh.default_row_height,20.0),
         "defaultColumnWidth":valid_extent(sh.default_col_width,64.0),
         "rows":axis_runs(&sh.rows,sh.default_row_height),"columns":axis_runs(&sh.cols,sh.default_col_width),
         "merges":sh.merges.iter().map(|m|[m.start.row,m.start.col,m.end.row,m.end.col]).collect::<Vec<_>>(),
         "tables":sh.tables.iter().map(|t|[t.range.start.row,t.range.start.col,t.range.end.row,t.range.end.col]).collect::<Vec<_>>(),
         "showGridlines":sh.show_gridlines,"usedRange":used});
-    serde_json::to_vec(&json!({"type":"xlsx","engine":"gridcraft","sheets":sheets,
-        "selection":selection,"defaultCellStyle":style_json(wb,Default::default()),"window":req,"layout":layout,"activeSheet":wb.active_sheet(),"warnings":warnings,
+    let mut result=json!({"type":"xlsx","engine":"gridcraft","window":req,
+        "activeSheet":wb.active_sheet(),"structureProtected":wb.protected_structure,"warnings":warnings,
         "filterRange":sh.autofilter.as_ref().map(|f|f.range.a1()),
-        "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."})).map_err(|e|e.to_string())
+        "note":"Windowed cell view; imported layout is approximate and cached formula values may be stale."});
+    result["sheets"]=Json::Array(sheets);
+    result["selection"]=selection;
+    result["layout"]=layout;
+    result["defaultCellStyle"]=style_json(wb,Default::default());
+    serde_json::to_vec(&result).map_err(|e|e.to_string())
 }
 
 #[cfg(test)]
