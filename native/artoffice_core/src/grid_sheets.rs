@@ -80,7 +80,7 @@ mod tests {
         let req = req.to_string();
         let result = ac_xlsx_set_cell(bytes.as_ptr(), bytes.len(), req.as_ptr(), req.len());
         let data = unsafe { std::slice::from_raw_parts(result.ptr, result.len) }.to_vec();
-        let status = result.status; super::super::super::ac_result_free(result);
+        let status = result.status; crate::ac_result_free(result);
         if status == 0 { Ok(data) } else { Err(String::from_utf8_lossy(&data).into_owned()) }
     }
     #[test]

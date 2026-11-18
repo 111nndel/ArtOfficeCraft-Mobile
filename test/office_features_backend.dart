@@ -64,6 +64,15 @@ class FeaturesBackend implements DocumentBackend {
             .map((b) => b['text'])
             .toList();
       case 'add_sheet':
+      case 'sheet_structure':
+        if (request['action'] == 'sheet_structure' && request['operation'] != 'add') {
+          throw UnsupportedError('Sheet actions use real-engine integration tests');
+        }
+        if (request['value'] != null) {
+          data['sheets'][request['sheet']]['cells'][request['address']] = {
+            'input': request['value'], 'display': request['value'],
+          };
+        }
         final sheets = data['sheets'] as List;
         sheets.add({
           'name': request['name'] ?? 'Sheet${sheets.length + 1}',

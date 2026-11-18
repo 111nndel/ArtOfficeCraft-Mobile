@@ -568,7 +568,7 @@ const english = <String, String>{
   "Страница {0} из {1} · действия листаются вбок":
       "Page {0} of {1} · scroll actions sideways",
   "Стр. {0} · {1}°": "Page {0} · {1}°",
-  "Android не смог показать страницу. PDF может быть зашифрован или поврежден.": "Android could not display this page. The PDF may be encrypted or damaged.",
+  "Не удалось показать страницу PDF. Формат может не поддерживаться, либо файл зашифрован или повреждён.": "Could not display this PDF page. Its format may be unsupported, or the file may be encrypted or damaged.",
   "Rust недоступен": "Rust is unavailable",
   "PDFCraft Rust недоступен": "PDFCraft Rust is unavailable",
   "DeckCraft Rust недоступен на этом устройстве":

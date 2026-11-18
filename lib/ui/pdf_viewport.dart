@@ -189,7 +189,7 @@ class PdfPageImage extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.all(20),
               child: UiText(
-                'Android не смог показать страницу. PDF может быть зашифрован или поврежден.',
+                'Не удалось показать страницу PDF. Формат может не поддерживаться, либо файл зашифрован или повреждён.',
                 textAlign: TextAlign.center,
               ),
             ),
@@ -331,7 +331,7 @@ class _PdfPageDetailState extends State<_PdfPageDetail> {
       if (mounted && generation == _generation && _wanted == tile) {
         _failed = tile;
       }
-      // Keep the preview and any previous detail while compatibility is unavailable.
+      // Keep the Rust preview and previous detail if this higher-resolution crop fails.
     } finally {
       _active = null;
       if (mounted &&

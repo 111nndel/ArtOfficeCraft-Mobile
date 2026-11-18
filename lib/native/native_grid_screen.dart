@@ -448,10 +448,6 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       parsed = await bridge!.inspectGrid(data, window, 'A1');
     }
     if (!mounted) return;
-    final list = parsed['sheets'];
-    if (list is! List || list.isEmpty) {
-      throw const FormatException('Листы не найдены');
-    }
     setState(() {
       book = data;
       visibleRegion = null;
@@ -459,8 +455,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       _findText.clear();
       rangeSelection = null;
       rangeInput.clear();
-      sheets = list.map((x) => Map<String, dynamic>.from(x as Map)).toList();
-      sheetIndex = window.sheet.clamp(0, sheets.length - 1);
+      sheetIndex = window.sheet;
       selected = 'A1';
       acceptView(parsed, window);
       wantedWindow = window;

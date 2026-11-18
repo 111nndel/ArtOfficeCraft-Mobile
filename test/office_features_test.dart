@@ -210,7 +210,7 @@ void main() {
   );
 
   testWidgets(
-    'New sheet flushes cell input, undo/redo restores sheet context, reopening uses saved active sheet',
+    'New sheet and pending input share one undo step; reopening uses saved active sheet',
     (tester) async {
       final backend = FeaturesBackend({
         'sheets': [
@@ -240,7 +240,7 @@ void main() {
       expect(tester.widget<TextField>(formula).controller!.text, '');
       await historyAction(tester, true);
       expect(backend.viewed!['sheets'], hasLength(1));
-      expect(tester.widget<TextField>(formula).controller!.text, 'Keep A1');
+      expect(tester.widget<TextField>(formula).controller!.text, '');
       await historyAction(tester, false);
       expect(backend.viewed!['sheets'], hasLength(2));
       final saved = backend.encode(backend.viewed!);
