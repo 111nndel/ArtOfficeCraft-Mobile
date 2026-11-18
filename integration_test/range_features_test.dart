@@ -266,6 +266,10 @@ void main() {
     final hidden = await save(tester, 'Сохранить как XLSX');
     final hiddenView = await backend.inspectGrid(hidden, const GridWindow(0,0,0), 'A1');
     expect((hiddenView['sheets'] as List)[1]['visible'], false);
+    final hiddenSearch = await backend.findGridCells(hidden, {
+      'query':'21','sheet':0,'lookIn':'values','workbook':true,'limit':512,
+    });
+    expect(hiddenSearch.hits, isEmpty);
     await present(tester, NativeGridScreen(backend:backend,
       launch:EditorLaunch(bytes:hidden, name:'Hidden-sheet.xlsx')));
     expect(tabNames(tester), ['Summary']);

@@ -724,12 +724,19 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   Future<void> acceptEdit(
     Uint8List previous,
     DocumentSnapshot updated,
-    GridWindow window,
-  ) async {
+    GridWindow window, {
+    bool resetView = false,
+  }) async {
     parsedSheets(updated.preview);
     if (!mounted) return;
+    if (resetView) {
+      visibleRegion = null;
+      rangeSelection = null;
+      rangeInput.clear();
+    }
     history.push(previous, position: sheetIndex);
     install(updated.bytes, updated.preview, window);
+    if (resetView) gridViewport.currentState?.reset();
     await rememberCurrent();
   }
 
@@ -851,7 +858,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
   }
 
   Future<void> chooseSheet(int idx) => run(() async {
-    if (idx == sheetIndex) return;
+    if (idx == sheetIndex || idx < 0 || idx >= sheets.length || sheets[idx]['visible'] == false) return;
     await flushInput();
     final window = GridWindow(idx, 0, 0);
     final parsed = await bridge!.inspectGrid(book!, window, 'A1');
@@ -1464,7 +1471,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       'action': 'sheet_structure', 'operation': operation,
       'sheet': sheetIndex, 'address': selected,
       if (inputDirty) 'value': input.text,
-      if (name != null) 'name': name,
+      'name': ?name,
       if (operation == 'move') 'to': target,
       if (operation == 'unhide') 'target': target,
     }, window, preserveView ? selected : 'A1');
@@ -1473,9 +1480,8 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
       return;
     }
     viewTimer?.cancel();
-    await acceptEdit(previous, update, window);
+    await acceptEdit(previous, update, window, resetView: !preserveView);
     if (!mounted) return;
-    if (!preserveView) gridViewport.currentState?.reset();
     inputFocus.unfocus();
     if (operation == 'add') newSheetName.clear();
     tip(switch (operation) {
@@ -1996,7 +2002,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     if (state == null) return;
     final sheet = state['sheet'] as int;
     final address = state['selected'] as String;
-    if (sheet < 0 || sheet >= sheets.length || gridAddress(address) == null) {
+    if (sheet < 0 || sheet >= sheets.length || sheets[sheet]['visible'] == false || gridAddress(address) == null) {
       throw const FormatException(
         'Не удалось восстановить выбранную ячейку. Черновик сохранён.',
       );
