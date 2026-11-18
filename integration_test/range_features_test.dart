@@ -210,10 +210,18 @@ void main() {
     expect(tester.widget<EditableText>(editable).controller.text, value);
   }
 
-  List<String> tabNames(WidgetTester tester) => tester.widgetList<Text>(
-    find.descendant(of: find.byKey(const Key('grid-sheet-tabs')),
-      matching: find.byType(Text)),
-  ).map((text) => text.data!).toList();
+  List<String> sheetNames(WidgetTester tester) {
+    final tabs = find.byKey(const Key('grid-sheet-tabs'));
+    if (tabs.evaluate().isNotEmpty) {
+      return tester.widgetList<Text>(find.descendant(of: tabs,
+        matching: find.byType(Text))).map((text) => text.data!).toList();
+    }
+    // Opening tools intentionally hides the tab strip. Check the visible sheet
+    // chooser during actions, then the actual tabs after saving and reopening.
+    return panel(tester).sections.expand((s) => s.tools)
+        .firstWhere((t) => t.label == 'Управление листами').children!
+        .where((t) => !t.localize).map((t) => t.label).toList();
+  }
 
   testWidgets('Excel sheet actions preserve references, pending input, undo and saved visibility', (tester) async {
     final backend = NativeDocumentBackend(NativeDocumentKind.grid);
@@ -242,26 +250,26 @@ void main() {
     await tester.pumpAndSettle();
     await nativeInput(tester, find.byKey(const Key('grid-rename-sheet')), 'Итог 2026');
     await press(tester, 'Переименовать');
-    await until(tester, () => tabNames(tester).contains('Итог 2026'), 'renamed sheet');
+    await until(tester, () => sheetNames(tester).contains('Итог 2026'), 'renamed sheet');
     expect(cellInput(tester), '21');
     final renamed = await save(tester, 'Сохранить как XLSX');
     expect((await inspectCell(backend, renamed, 'A1', sheet:1))['input'],
       "='Итог 2026'!A1*2");
     expect((await inspectCell(backend, renamed, 'A1', sheet:1))['display'], '42');
     await history(tester, true);
-    await until(tester, () => tabNames(tester).contains('Source') && cellInput(tester) == '12',
+    await until(tester, () => sheetNames(tester).contains('Source') && cellInput(tester) == '12',
       'one undo restores both name and pending input');
     await history(tester, false);
-    await until(tester, () => tabNames(tester).contains('Итог 2026') && cellInput(tester) == '21',
+    await until(tester, () => sheetNames(tester).contains('Итог 2026') && cellInput(tester) == '21',
       'redo rename and cell input');
 
     await tool(tester, 'Вид', 'Управление листами');
     await press(tester, 'Переместить лист вправо');
-    await until(tester, () => tabNames(tester).first == 'Summary', 'tab order moved');
+    await until(tester, () => sheetNames(tester).first == 'Summary', 'tab order moved');
     expect(cellInput(tester), '21');
     await tool(tester, 'Вид', 'Управление листами');
     await press(tester, 'Скрыть лист');
-    await until(tester, () => tabNames(tester).length == 1 && cellInput(tester) == "='Итог 2026'!A1*2",
+    await until(tester, () => sheetNames(tester).length == 1 && cellInput(tester) == "='Итог 2026'!A1*2",
       'hidden sheet removed from tabs');
     final hidden = await save(tester, 'Сохранить как XLSX');
     final hiddenView = await backend.inspectGrid(hidden, const GridWindow(0,0,0), 'A1');
@@ -272,7 +280,7 @@ void main() {
     expect(hiddenSearch.hits, isEmpty);
     await present(tester, NativeGridScreen(backend:backend,
       launch:EditorLaunch(bytes:hidden, name:'Hidden-sheet.xlsx')));
-    expect(tabNames(tester), ['Summary']);
+    expect(sheetNames(tester), ['Summary']);
     await tool(tester, 'Вид', 'Управление листами');
     final management = panel(tester).sections.expand((s) => s.tools)
       .firstWhere((t) => t.label == 'Управление листами');
@@ -280,7 +288,7 @@ void main() {
     expect(management.children!.firstWhere((t) => t.label == 'Скрыть лист').onPressed, isNull);
     await press(tester, 'Скрытые листы');
     await press(tester, 'Итог 2026');
-    await until(tester, () => tabNames(tester).length == 2 && cellInput(tester) == '21',
+    await until(tester, () => sheetNames(tester).length == 2 && cellInput(tester) == '21',
       'unhidden sheet activated');
     await until(tester, () => tester.state<EditorToolPanelState>(
       find.byType(EditorToolPanel)).isShowing('Управление листами'),
@@ -289,20 +297,20 @@ void main() {
     await press(tester, 'Удалить лист');
     await tester.pumpAndSettle();
     await press(tester, 'Отмена');
-    expect(tabNames(tester), ['Summary', 'Итог 2026']);
+    expect(sheetNames(tester), ['Summary', 'Итог 2026']);
     await tool(tester, 'Вид', 'Управление листами');
     await press(tester, 'Удалить лист');
     await tester.pumpAndSettle();
     await press(tester, 'Удалить');
-    await until(tester, () => tabNames(tester).length == 1 && cellInput(tester).contains('#REF!'),
+    await until(tester, () => sheetNames(tester).length == 1 && cellInput(tester).contains('#REF!'),
       'deleted sheet references invalidated');
     await history(tester, true);
-    await until(tester, () => tabNames(tester).length == 2 && cellInput(tester) == '21',
+    await until(tester, () => sheetNames(tester).length == 2 && cellInput(tester) == '21',
       'undo restores removed sheet');
     final saved = await save(tester, 'Сохранить как XLSX');
     await present(tester, NativeGridScreen(backend:backend,
       launch:EditorLaunch(bytes:saved, name:'Sheet-actions-saved.xlsx')));
-    expect(tabNames(tester), ['Summary', 'Итог 2026']);
+    expect(sheetNames(tester), ['Summary', 'Итог 2026']);
     expect(cellInput(tester), '21');
     expect((await inspectCell(backend, original, 'A1'))['input'], '12');
     expect((await inspectCell(backend, saved, 'A1', sheet:0))['display'], '42');
