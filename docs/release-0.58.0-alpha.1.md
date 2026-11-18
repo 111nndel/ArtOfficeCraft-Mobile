@@ -10,6 +10,8 @@
 - Favorite changes respect the same index checks as recent-history changes.
   If the local file index is damaged, toggling a favorite leaves that index and
   the saved documents intact.
+- The update panel confirms a mode change after writing the preference.
+  Rapid switches keep the latest selection across restarts.
 - App 0.58.0+65, ARM64 versionCode 2065. Native core 0.57.0, ABI 1. APKs use
   the existing development preview certificate.
 

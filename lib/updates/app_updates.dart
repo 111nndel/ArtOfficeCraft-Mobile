@@ -116,6 +116,7 @@ class AppUpdates extends ChangeNotifier {
   }
 
   Future<void> _save() {
+    final revision = _preferenceRevision;
     final contents = jsonEncode({
       'automatic': automatic,
       'checkedAt': checkedAt?.millisecondsSinceEpoch,
@@ -131,7 +132,7 @@ class AppUpdates extends ChangeNotifier {
       } catch (_) {
         preferenceError = true;
       }
-      _notify();
+      if (revision == _preferenceRevision) _notify();
     });
     _writes = next;
     return next;
@@ -149,7 +150,6 @@ class AppUpdates extends ChangeNotifier {
           ? UpdatePhase.idle
           : UpdatePhase.available;
     }
-    _notify();
     await _save();
     if (enabled) await automaticCheck(force: true);
   }
