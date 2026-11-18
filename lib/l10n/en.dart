@@ -1,6 +1,7 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
   "Сортировка файлов": "Sort files",
+  "Загрузка файлов…": "Loading files…",
   "Сначала новые": "Newest first",
   "Сначала старые": "Oldest first",
   "По имени": "Name",

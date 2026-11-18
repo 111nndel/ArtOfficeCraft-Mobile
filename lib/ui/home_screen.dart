@@ -956,7 +956,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return const SliverToBoxAdapter(
         child: Padding(
           padding: EdgeInsets.all(24),
-          child: LinearProgressIndicator(),
+          child: UiText('Загрузка файлов…', textAlign: TextAlign.center),
         ),
       );
     }

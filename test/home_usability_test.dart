@@ -106,7 +106,12 @@ void main() {
     Future<void> sort(String label) async {
       await tester.tap(find.byTooltip('Сортировка файлов'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(label));
+      await tester.tap(
+        find.ancestor(
+          of: find.text(label),
+          matching: find.byWidgetPredicate((w) => w is CheckedPopupMenuItem),
+        ),
+      );
       await tester.pumpAndSettle();
     }
 
