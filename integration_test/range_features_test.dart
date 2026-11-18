@@ -252,7 +252,7 @@ void main() {
     await press(tester, 'Переименовать');
     await until(tester, () => sheetNames(tester).contains('Итог 2026'), 'renamed sheet');
     expect(cellInput(tester), '21');
-    final renamed = await save(tester, 'Сохранить как XLSX');
+    final renamed = await save(tester, 'Сохранить копию');
     expect((await inspectCell(backend, renamed, 'A1', sheet:1))['input'],
       "='Итог 2026'!A1*2");
     expect((await inspectCell(backend, renamed, 'A1', sheet:1))['display'], '42');
@@ -271,7 +271,7 @@ void main() {
     await press(tester, 'Скрыть лист');
     await until(tester, () => sheetNames(tester).length == 1 && cellInput(tester) == "='Итог 2026'!A1*2",
       'hidden sheet removed from tabs');
-    final hidden = await save(tester, 'Сохранить как XLSX');
+    final hidden = await save(tester, 'Сохранить копию');
     final hiddenView = await backend.inspectGrid(hidden, const GridWindow(0,0,0), 'A1');
     expect((hiddenView['sheets'] as List)[1]['visible'], false);
     final hiddenSearch = await backend.findGridCells(hidden, {
@@ -307,7 +307,7 @@ void main() {
     await history(tester, true);
     await until(tester, () => sheetNames(tester).length == 2 && cellInput(tester) == '21',
       'undo restores removed sheet');
-    final saved = await save(tester, 'Сохранить как XLSX');
+    final saved = await save(tester, 'Сохранить копию');
     await present(tester, NativeGridScreen(backend:backend,
       launch:EditorLaunch(bytes:saved, name:'Sheet-actions-saved.xlsx')));
     expect(sheetNames(tester), ['Summary', 'Итог 2026']);
