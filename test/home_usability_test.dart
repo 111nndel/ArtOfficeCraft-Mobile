@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:artofficecraft_mobile/workspace/draft_store.dart';
-import 'package:artofficecraft_mobile/workspace/editor_kind.dart';
-import 'package:artofficecraft_mobile/workspace/workspace_store.dart';
 import 'package:artofficecraft_mobile/main.dart';
+import 'package:artofficecraft_mobile/workspace/draft_store.dart';
+import 'package:artofficecraft_mobile/workspace/workspace_store.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,11 +47,11 @@ void main() {
           favorite: i == 1 || i == 200,
         ),
     ];
-    final files = WorkspaceStore(directory: directory);
-    final drafts = DraftStore(directory: Directory('${directory.path}/drafts'));
-    addTearDown(files.dispose);
-    addTearDown(drafts.dispose);
-    await tester.runAsync(() async {
+    final (files, drafts) = (await tester.runAsync(() async {
+      final files = WorkspaceStore(directory: directory);
+      final drafts = DraftStore(
+        directory: Directory('${directory.path}/drafts'),
+      );
       for (final copy in copies) {
         File('${directory.path}/${copy.id}.xlsx').writeAsBytesSync([1]);
       }
@@ -61,7 +60,10 @@ void main() {
       );
       await files.load();
       await drafts.load();
-    });
+      return (files, drafts);
+    }))!;
+    addTearDown(files.dispose);
+    addTearDown(drafts.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
