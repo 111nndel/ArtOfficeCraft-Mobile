@@ -68,8 +68,8 @@ class WorkspaceStore extends ChangeNotifier {
   });
   final ApplicationStorage storage;
   Directory? _directory;
-  final List<WorkspaceFile> _files = [];
-  List<WorkspaceFile> get files => List.unmodifiable(_files);
+  List<WorkspaceFile> _files = const [];
+  List<WorkspaceFile> get files => _files;
   bool loaded = false;
   String? error;
   Future<void> _queue = Future.value();
@@ -79,7 +79,7 @@ class WorkspaceStore extends ChangeNotifier {
     return _directory = await storage.workspaceDirectory();
   }
 
-  Future<void> load() async {
+  Future<void> load() => _serialize(() async {
     try {
       final root = await _root();
       final index = File('${root.path}/index.json');
@@ -95,10 +95,10 @@ class WorkspaceStore extends ChangeNotifier {
             next.add(entry);
           }
         }
-        _files
-          ..clear()
-          ..addAll(next);
-        _sort();
+        next.sort(_newestFirst);
+        _files = List.unmodifiable(next);
+      } else {
+        _files = const [];
       }
       error = null;
     } on MissingPluginException {
@@ -109,9 +109,17 @@ class WorkspaceStore extends ChangeNotifier {
     }
     loaded = true;
     notifyListeners();
+  });
+
+  static int _newestFirst(WorkspaceFile a, WorkspaceFile b) =>
+      b.modified.compareTo(a.modified);
+
+  void _requireWritable() {
+    if (!loaded || error != null) {
+      throw StateError(error ?? 'История ещё загружается');
+    }
   }
 
-  void _sort() => _files.sort((a, b) => b.modified.compareTo(a.modified));
   Future<void> _writeIndex(Directory root, List<WorkspaceFile> values) async {
     final target = File('${root.path}/index.json');
     final temporary = File('${target.path}.tmp');
@@ -134,9 +142,7 @@ class WorkspaceStore extends ChangeNotifier {
     String name, {
     String? id,
   }) => _serialize(() async {
-    if (!loaded || error != null) {
-      throw StateError(error ?? 'История ещё загружается');
-    }
+    _requireWritable();
     final root = await _root();
     if (bytes.isEmpty || bytes.length > 128 * 1024 * 1024) {
       throw const FormatException('Размер файла вне допустимых границ');
@@ -156,23 +162,22 @@ class WorkspaceStore extends ChangeNotifier {
     final tmp = File('${file.path}.tmp');
     await tmp.writeAsBytes(bytes, flush: true);
     await tmp.rename(file.path);
-    final next = [..._files.where((f) => f.id != entry.id), entry];
+    final next = [..._files.where((f) => f.id != entry.id), entry]
+      ..sort(_newestFirst);
     await _writeIndex(root, next);
-    _files
-      ..clear()
-      ..addAll(next);
-    _sort();
+    _files = List.unmodifiable(next);
     notifyListeners();
     return entry;
   });
   Future<void> toggleFavorite(WorkspaceFile file) => _serialize(() async {
-    final next = _files
-        .map((f) => f.id == file.id ? f.copyWith(favorite: !f.favorite) : f)
-        .toList();
+    _requireWritable();
+    final index = _files.indexWhere((entry) => entry.id == file.id);
+    if (index == -1) return;
+    final current = _files[index];
+    final next = [..._files]
+      ..[index] = current.copyWith(favorite: !current.favorite);
     await _writeIndex(await _root(), next);
-    _files
-      ..clear()
-      ..addAll(next);
+    _files = List.unmodifiable(next);
     notifyListeners();
   });
 
@@ -181,9 +186,7 @@ class WorkspaceStore extends ChangeNotifier {
   Future<Set<String>> setRecent(Iterable<String> ids, bool value) {
     final targets = Set<String>.of(ids);
     return _serialize(() async {
-      if (!loaded || error != null) {
-        throw StateError(error ?? 'История ещё загружается');
-      }
+      _requireWritable();
       final changed = _files
           .where((f) => targets.contains(f.id) && f.recent != value)
           .map((f) => f.id)
@@ -193,9 +196,7 @@ class WorkspaceStore extends ChangeNotifier {
           .map((f) => changed.contains(f.id) ? f.copyWith(recent: value) : f)
           .toList();
       await _writeIndex(await _root(), next);
-      _files
-        ..clear()
-        ..addAll(next);
+      _files = List.unmodifiable(next);
       notifyListeners();
       return Set<String>.unmodifiable(changed);
     });

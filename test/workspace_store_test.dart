@@ -251,10 +251,20 @@ void main() {
       );
       addTearDown(() => directory.delete(recursive: true));
       final index = File('${directory.path}/index.json');
-      await index.writeAsString('[broken');
       final store = WorkspaceStore(directory: directory);
       await store.load();
+      final file = await store.remember(
+        EditorKind.word,
+        Uint8List.fromList([9]),
+        'Kept.docx',
+      );
+      final snapshot = store.files;
+      await index.writeAsString('[broken');
+      await store.load();
       expect(store.error, isNotNull);
+      expect(store.files, same(snapshot));
+      await expectLater(store.toggleFavorite(file), throwsStateError);
+      expect(await store.read(file), [9]);
       await expectLater(
         store.remember(EditorKind.word, Uint8List.fromList([1]), 'File.docx'),
         throwsStateError,

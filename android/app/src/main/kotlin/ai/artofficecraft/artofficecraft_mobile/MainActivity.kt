@@ -25,9 +25,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 if (call.method == "directory") {
                     try {
-                        val directory = File(filesDir, "workspace")
-                        check(directory.isDirectory || directory.mkdirs()) { "Workspace unavailable" }
-                        result.success(directory.absolutePath)
+                        result.success(File(filesDir, "workspace").absolutePath)
                     } catch (_: Exception) {
                         result.error("WORKSPACE_UNAVAILABLE", "Cannot open private workspace", null)
                     }
@@ -78,7 +76,6 @@ class MainActivity : FlutterActivity() {
                     result.error("CLIPBOARD_UNAVAILABLE", "Cannot access Android clipboard", null)
                 }
             }
-
     }
 
     override fun onNewIntent(intent: Intent) {

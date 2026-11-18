@@ -45,7 +45,10 @@ async function chooseMode(label){
  await launch();await about();await reveal('Check for updates');
  await wait('Version '+fixture.nextVersion+' is ready to install');
  if(requests().length!==before)throw Error('Auto restart repeated a check inside the daily interval');
- await chooseMode('Manually');await launch();await about();await reveal('Check for updates');
+ await chooseMode('Manually');
+ await wait('The app contacts GitHub only when you check or download an update.');
+ await launch();await about();await reveal('Check for updates');
+ await wait(/^Update mode\nManually$/);
  if(requests().length!==before)throw Error('Manual restart accessed network');
  await wait('Version '+fixture.nextVersion+' is ready to install');
  tap(await reveal('Install'));

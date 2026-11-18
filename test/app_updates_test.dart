@@ -160,15 +160,25 @@ void main() {
     source.candidate = null;
     final updates = controller();
     await updates.load();
+    final preferences = File('${root.path}/updates.json');
+    final reportedModes = <bool?>[];
+    updates.addListener(() {
+      reportedModes.add(
+        preferences.existsSync()
+            ? jsonDecode(preferences.readAsStringSync())['automatic'] as bool
+            : null,
+      );
+    });
     await Future.wait([
       updates.selectAutomatic(true),
       updates.selectAutomatic(false),
     ]);
+    expect(reportedModes, [false]);
     final restored = controller();
     await restored.load();
     expect(restored.automatic, false);
     final before = source.checks;
-    await File('${root.path}/updates.json').writeAsString('{broken');
+    await preferences.writeAsString('{broken');
     await controller().load();
     expect(source.checks, before);
   });
