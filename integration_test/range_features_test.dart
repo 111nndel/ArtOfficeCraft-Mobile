@@ -17,6 +17,10 @@ import 'package:integration_test/integration_test.dart';
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  var surfaceConverted = false;
+  setUp(() {
+    surfaceConverted = false;
+  });
   Future<void> until(
     WidgetTester tester,
     bool Function() done,
@@ -115,7 +119,10 @@ void main() {
   }
 
   Future<void> capture(WidgetTester tester, String name) async {
-    await binding.convertFlutterSurfaceToImage();
+    if (!surfaceConverted) {
+      await binding.convertFlutterSurfaceToImage();
+      surfaceConverted = true;
+    }
     await tester.pumpAndSettle();
     final bytes = await binding.takeScreenshot(name);
     final path = '${Directory.systemTemp.path}/aoc-$name.png';
