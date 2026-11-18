@@ -54,6 +54,15 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+enum _FileOrder {
+  newest('Сначала новые'),
+  oldest('Сначала старые'),
+  name('По имени');
+
+  const _FileOrder(this.label);
+  final String label;
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   late final WorkspaceStore store =
       widget.workspace ?? WorkspaceStore(storage: widget.storage);
@@ -62,22 +71,51 @@ class _HomeScreenState extends State<HomeScreen> {
   final search = TextEditingController();
   int section = 0;
   EditorKind? filter;
+  _FileOrder _fileOrder = _FileOrder.newest;
   bool _selecting = false;
   bool _historyBusy = false;
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _historyNotice;
   final _selected = <String>{};
   bool get _showingRecents => section == 0 && search.text.trim().isEmpty;
   List<WorkspaceFile> get _visibleFiles {
-    final q = search.text.trim().toLowerCase();
-    return store.files
-        .where(
-          (f) =>
-              (filter == null || f.kind == filter) &&
-              (section != 2 || f.favorite) &&
-              (!_showingRecents || f.recent) &&
-              f.name.toLowerCase().contains(q),
-        )
-        .toList();
+    final query = search.text.trim().toLowerCase();
+    final recents = _showingRecents;
+    final ordering = section == 1 || section == 2
+        ? _fileOrder
+        : _FileOrder.newest;
+    final files = store.files;
+    if (ordering == _FileOrder.newest &&
+        section != 2 &&
+        !recents &&
+        filter == null &&
+        query.isEmpty) {
+      return files;
+    }
+    final ordered = ordering == _FileOrder.oldest ? files.reversed : files;
+    final matches = ordered.where(
+      (file) =>
+          (filter == null || file.kind == filter) &&
+          (section != 2 || file.favorite) &&
+          (!recents || file.recent) &&
+          (query.isEmpty || file.name.toLowerCase().contains(query)),
+    );
+    return ordering == _FileOrder.name
+        ? _filesByName(matches)
+        : matches.toList();
+  }
+
+  List<WorkspaceFile> _filesByName(Iterable<WorkspaceFile> files) {
+    final names =
+        [
+          for (final file in files)
+            (key: file.name.toLowerCase().replaceAll('ё', 'е'), file: file),
+        ]..sort((a, b) {
+          final byName = a.key.compareTo(b.key);
+          if (byName != 0) return byName;
+          final byDate = b.file.modified.compareTo(a.file.modified);
+          return byDate != 0 ? byDate : a.file.id.compareTo(b.file.id);
+        });
+    return names.map((entry) => entry.file).toList();
   }
 
   int _editors = 0;
@@ -497,6 +535,22 @@ class _HomeScreenState extends State<HomeScreen> {
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
       ),
+      if (section == 1 || section == 2)
+        PopupMenuButton<_FileOrder>(
+          tooltip: tr(context, 'Сортировка файлов'),
+          icon: const Icon(Icons.sort),
+          enabled: store.loaded && store.files.isNotEmpty,
+          initialValue: _fileOrder,
+          onSelected: (order) => setState(() => _fileOrder = order),
+          itemBuilder: (_) => [
+            for (final order in _FileOrder.values)
+              CheckedPopupMenuItem(
+                value: order,
+                checked: order == _fileOrder,
+                child: UiText(order.label),
+              ),
+          ],
+        ),
       if (_showingRecents)
         PopupMenuButton<String>(
           tooltip: tr(context, 'Действия с недавними'),
@@ -674,220 +728,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1100),
-                  child: ListView(
+                  child: CustomScrollView(
                     key: const PageStorageKey('workspace-scroll'),
-                    padding: EdgeInsets.all(wide ? 32 : 20),
-                    children: [
-                      TextField(
-                        controller: search,
-                        onChanged: (_) => setState(_endSelection),
-                        textInputAction: TextInputAction.search,
-                        decoration: InputDecoration(
-                          hintText: tr(context, 'Найти файл'),
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: search.text.isEmpty
-                              ? null
-                              : IconButton(
-                                  tooltip: tr(context, 'Очистить поиск'),
-                                  onPressed: () => setState(() {
-                                    search.clear();
-                                    _endSelection();
-                                  }),
-                                  icon: const Icon(Icons.close),
-                                ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.all(wide ? 32 : 20),
+                        sliver: SliverMainAxisGroup(
+                          slivers: [
+                            SliverList.list(
+                              children: _workspaceHeader(
+                                wide,
+                                searching,
+                                colors,
+                              ),
+                            ),
+                            if (section != 3 || searching)
+                              _fileList(colors, searching),
+                            SliverList.list(
+                              children: _workspaceFooter(searching, colors),
+                            ),
+                          ],
                         ),
                       ),
-                      if (section == 0 && !searching) ...recoveryWidgets(),
-                      if (!searching) ...[
-                        const SizedBox(height: 28),
-                        UiText(
-                          title,
-                          style: TextStyle(
-                            fontSize: wide ? 32 : 29,
-                            height: 1.15,
-                            letterSpacing: -.8,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        UiText(
-                          section == 3
-                              ? 'Продуманные заготовки для ваших задач.'
-                              : 'Документы, расчёты и большие замыслы.\nВсё в одном пространстве.',
-                          style: TextStyle(
-                            fontSize: 16,
-                            height: 1.5,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                      if (!searching && section != 2 && section != 3) ...[
-                        const UiText(
-                          'Создать файл',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final scale = MediaQuery.textScalerOf(context)
-                                .scale(1);
-                            final columns =
-                                constraints.maxWidth >= 800 && scale <= 1.3
-                                ? 4
-                                : constraints.maxWidth >=
-                                      (scale > 1.3 ? 600 : 300)
-                                ? 2
-                                : 1;
-                            final width =
-                                (constraints.maxWidth - 12 * (columns - 1)) /
-                                columns;
-                            return Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                for (final kind in EditorKind.values)
-                                  SizedBox(
-                                    width: width,
-                                    child: _EditorCard(
-                                      kind: kind,
-                                      enabled: !opening,
-                                      onTap: () => open(
-                                        kind,
-                                        launch: const EditorLaunch(
-                                          create: true,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 28),
-                      ],
-                      if (section != 3 || searching) ...[
-                        _fileHeader(searching),
-                        const SizedBox(height: 10),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: opening ? null : chooseKind,
-                            icon: const Icon(Icons.folder_open_outlined),
-                            label: const UiText('Открыть файл с устройства'),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final k in <EditorKind?>[
-                                null,
-                                ...EditorKind.values,
-                              ])
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      minHeight: 52,
-                                    ),
-                                    child: ChoiceChip(
-                                      label: UiText(
-                                        k?.label ?? 'Все',
-                                        style: const TextStyle(fontSize: 15),
-                                      ),
-                                      selected: filter == k,
-                                      onSelected: (_) => setState(() {
-                                        filter = k;
-                                        _endSelection();
-                                      }),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ...fileWidgets(colors),
-                        const SizedBox(height: 28),
-                      ],
-                      if (!searching) ...[
-                        const UiText(
-                          'С чистого листа — или с шаблона',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final scale = MediaQuery.textScalerOf(context)
-                                .scale(1);
-                            final cols =
-                                constraints.maxWidth >= 750 && scale < 1.4
-                                ? 3
-                                : 1;
-                            final width =
-                                (constraints.maxWidth - 12 * (cols - 1)) / cols;
-                            return Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                for (final k in [
-                                  EditorKind.word,
-                                  EditorKind.excel,
-                                  EditorKind.slides,
-                                ])
-                                  SizedBox(
-                                    width: width,
-                                    child: _TemplateCard(
-                                      kind: k,
-                                      enabled: !opening,
-                                      onTap: () => open(
-                                        k,
-                                        launch: const EditorLaunch(
-                                          create: true,
-                                          template: true,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-                      UiText(
-                        'Локальные рабочие копии хранятся внутри приложения. '
-                        'Исходники не перезаписываются; для переноса используйте «Сохранить копию».',
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.5,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                      if (store.error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: UiText(
-                            store.error!,
-                            style: TextStyle(fontSize: 14, color: colors.error),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -900,157 +762,347 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  List<Widget> fileWidgets(ColorScheme colors) {
-    final q = search.text.trim().toLowerCase();
-    final list = _visibleFiles;
+  List<Widget> _workspaceHeader(
+    bool wide,
+    bool searching,
+    ColorScheme colors,
+  ) => [
+    TextField(
+      controller: search,
+      onChanged: (_) => setState(_endSelection),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: tr(context, 'Найти файл'),
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: search.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: tr(context, 'Очистить поиск'),
+                onPressed: () => setState(() {
+                  search.clear();
+                  _endSelection();
+                }),
+                icon: const Icon(Icons.close),
+              ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    ),
+    if (section == 0 && !searching) ...recoveryWidgets(),
+    if (!searching) ...[
+      const SizedBox(height: 28),
+      UiText(
+        title,
+        style: TextStyle(
+          fontSize: wide ? 32 : 29,
+          height: 1.15,
+          letterSpacing: -.8,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 12),
+      UiText(
+        section == 3 ? 'Продуманные заготовки для ваших задач.' : 'Документы, расчёты и большие замыслы.\nВсё в одном пространстве.',
+        style: TextStyle(
+          fontSize: 16,
+          height: 1.5,
+          color: colors.onSurfaceVariant,
+        ),
+      ),
+      const SizedBox(height: 24),
+    ],
+    if (!searching && section != 2 && section != 3) ...[
+      const UiText(
+        'Создать файл',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 14),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final scale = MediaQuery.textScalerOf(context).scale(1);
+          final columns = constraints.maxWidth >= 800 && scale <= 1.3
+              ? 4
+              : constraints.maxWidth >= (scale > 1.3 ? 600 : 300)
+              ? 2
+              : 1;
+          final width = (constraints.maxWidth - 12 * (columns - 1)) / columns;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final kind in EditorKind.values)
+                SizedBox(
+                  width: width,
+                  child: _EditorCard(
+                    kind: kind,
+                    enabled: !opening,
+                    onTap: () =>
+                        open(kind, launch: const EditorLaunch(create: true)),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+      const SizedBox(height: 28),
+    ],
+    if (section != 3 || searching) ...[
+      _fileHeader(searching),
+      const SizedBox(height: 10),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: opening ? null : chooseKind,
+          icon: const Icon(Icons.folder_open_outlined),
+          label: const UiText('Открыть файл с устройства'),
+        ),
+      ),
+      const SizedBox(height: 12),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final k in <EditorKind?>[null, ...EditorKind.values])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 52),
+                  child: ChoiceChip(
+                    label: UiText(
+                      k?.label ?? 'Все',
+                      style: const TextStyle(fontSize: 15),
+                    ),
+                    selected: filter == k,
+                    onSelected: (_) => setState(() {
+                      filter = k;
+                      _endSelection();
+                    }),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+    ],
+  ];
+
+  List<Widget> _workspaceFooter(bool searching, ColorScheme colors) => [
+    if (section != 3 || searching) const SizedBox(height: 28),
+    if (!searching) ...[
+      const UiText(
+        'С чистого листа — или с шаблона',
+        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 16),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final scale = MediaQuery.textScalerOf(context).scale(1);
+          final cols = constraints.maxWidth >= 750 && scale < 1.4 ? 3 : 1;
+          final width = (constraints.maxWidth - 12 * (cols - 1)) / cols;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final k in [
+                EditorKind.word,
+                EditorKind.excel,
+                EditorKind.slides,
+              ])
+                SizedBox(
+                  width: width,
+                  child: _TemplateCard(
+                    kind: k,
+                    enabled: !opening,
+                    onTap: () => open(
+                      k,
+                      launch: const EditorLaunch(create: true, template: true),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    ],
+    const SizedBox(height: 24),
+    UiText(
+      'Локальные рабочие копии хранятся внутри приложения. '
+      'Исходники не перезаписываются; для переноса используйте «Сохранить копию».',
+      style: TextStyle(
+        fontSize: 14,
+        height: 1.5,
+        color: colors.onSurfaceVariant,
+      ),
+    ),
+    if (store.error != null)
+      Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: UiText(
+          store.error!,
+          style: TextStyle(fontSize: 14, color: colors.error),
+        ),
+      ),
+  ];
+
+  Widget _fileList(ColorScheme colors, bool searching) {
     if (!store.loaded) {
-      return [
-        const Padding(
+      return const SliverToBoxAdapter(
+        child: Padding(
           padding: EdgeInsets.all(24),
           child: LinearProgressIndicator(),
         ),
-      ];
+      );
     }
-    if (list.isEmpty) {
-      return [
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                section == 2 ? Icons.star_border : Icons.folder_open_outlined,
-                size: 36,
-                color: colors.onSurfaceVariant,
-              ),
-              const SizedBox(height: 12),
-              UiText(
-                q.isNotEmpty
-                    ? 'Файлы не найдены'
-                    : section == 2
-                    ? 'Здесь будут избранные файлы'
-                    : _showingRecents
-                    ? 'Недавних файлов пока нет'
-                    : 'Ваш первый файл появится здесь',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              UiText(
-                section == 2
-                    ? 'Нажмите звёздочку рядом с нужным файлом.'
-                    : _showingRecents
-                    ? 'Рабочие копии доступны во вкладке «Файлы».'
-                    : 'Откройте документ с устройства или сохраните новый.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, color: colors.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-      ];
+    final files = _visibleFiles;
+    if (files.isNotEmpty) {
+      return SliverList.builder(
+        itemCount: files.length,
+        findChildIndexCallback: (key) {
+          final id = (key as ValueKey<String>).value.substring(
+            'workspace-'.length,
+          );
+          final index = files.indexWhere((file) => file.id == id);
+          return index < 0 ? null : index;
+        },
+        itemBuilder: (context, index) => _fileCard(files[index], colors),
+      );
     }
-    return [
-      for (final file in list)
-        Card(
-          key: ValueKey('workspace-${file.id}'),
-          margin: const EdgeInsets.only(bottom: 10),
-          elevation: 0,
+    return SliverToBoxAdapter(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
           color: colors.surface,
-          shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              section == 2 ? Icons.star_border : Icons.folder_open_outlined,
+              size: 36,
+              color: colors.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            UiText(
+              searching
+                  ? 'Файлы не найдены'
+                  : section == 2
+                  ? 'Здесь будут избранные файлы'
+                  : _showingRecents
+                  ? 'Недавних файлов пока нет'
+                  : 'Ваш первый файл появится здесь',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            UiText(
+              section == 2
+                  ? 'Нажмите звёздочку рядом с нужным файлом.'
+                  : _showingRecents
+                  ? 'Рабочие копии доступны во вкладке «Файлы».'
+                  : 'Откройте документ с устройства или сохраните новый.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, color: colors.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fileCard(WorkspaceFile file, ColorScheme colors) => Card(
+    key: ValueKey('workspace-${file.id}'),
+    margin: const EdgeInsets.only(bottom: 10),
+    elevation: 0,
+    color: colors.surface,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    child: Row(
+      children: [
+        Expanded(
+          child: InkWell(
             borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: opening || _historyBusy
-                      ? null
-                      : () {
-                          if (_selecting) {
-                            _toggleSelection(file.id);
-                          } else {
-                            open(file.kind, entry: file);
-                          }
-                        },
-                  onLongPress: !_showingRecents || opening || _historyBusy
-                      ? null
-                      : () => _toggleSelection(file.id),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 18, 4, 18),
-                    child: Row(
+            onTap: opening || _historyBusy
+                ? null
+                : () {
+                    if (_selecting) {
+                      _toggleSelection(file.id);
+                    } else {
+                      open(file.kind, entry: file);
+                    }
+                  },
+            onLongPress: !_showingRecents || opening || _historyBusy
+                ? null
+                : () => _toggleSelection(file.id),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 18, 4, 18),
+              child: Row(
+                children: [
+                  FormatIcon(kind: file.kind),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        FormatIcon(kind: file.kind),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                file.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              UiText(
-                                '${file.kind.format} · ${file.modified.day}.${file.modified.month} · рабочая копия',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: colors.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
+                        Text(
+                          file.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        UiText(
+                          '${file.kind.format} · ${file.modified.day}.${file.modified.month} · рабочая копия',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: colors.onSurfaceVariant,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                ],
               ),
-              if (_selecting)
-                SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Checkbox(
-                    key: ValueKey('select-${file.id}'),
-                    semanticLabel: file.name,
-                    value: _selected.contains(file.id),
-                    onChanged: _historyBusy
-                        ? null
-                        : (_) => _toggleSelection(file.id),
-                  ),
-                )
-              else
-                IconButton(
-                  tooltip: tr(
-                    context,
-                    file.favorite ? 'Убрать из избранного' : 'В избранное',
-                  ),
-                  onPressed: () => favorite(file),
-                  icon: Icon(
-                    file.favorite ? Icons.star : Icons.star_border,
-                    color: file.favorite
-                        ? const Color(0xffbc8b25)
-                        : colors.onSurfaceVariant,
-                  ),
-                ),
-              const SizedBox(width: 4),
-            ],
+            ),
           ),
         ),
-    ];
-  }
+        if (_selecting)
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: Checkbox(
+              key: ValueKey('select-${file.id}'),
+              semanticLabel: file.name,
+              value: _selected.contains(file.id),
+              onChanged: _historyBusy ? null : (_) => _toggleSelection(file.id),
+            ),
+          )
+        else
+          IconButton(
+            tooltip: tr(
+              context,
+              file.favorite ? 'Убрать из избранного' : 'В избранное',
+            ),
+            onPressed: () => favorite(file),
+            icon: Icon(
+              file.favorite ? Icons.star : Icons.star_border,
+              color: file.favorite
+                  ? const Color(0xffbc8b25)
+                  : colors.onSurfaceVariant,
+            ),
+          ),
+        const SizedBox(width: 4),
+      ],
+    ),
+  );
 
   IconData navIcon(int i) => [
     Icons.home_outlined,

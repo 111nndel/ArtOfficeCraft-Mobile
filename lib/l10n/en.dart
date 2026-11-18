@@ -1,5 +1,9 @@
 // English UI catalog. Placeholders preserve user data verbatim.
 const english = <String, String>{
+  "Сортировка файлов": "Sort files",
+  "Сначала новые": "Newest first",
+  "Сначала старые": "Oldest first",
+  "По имени": "Name",
   "Данные листа будут удалены, ссылки на него станут #REF!. Действие можно отменить.": "Sheet data will be removed and references to it will become #REF!. You can undo this action.",
   "Лист показан": "Sheet shown",
   "Лист скрыт": "Sheet hidden",
