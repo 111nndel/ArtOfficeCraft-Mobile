@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.58.0.**
+**Current preview — alpha 0.59.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -48,7 +48,12 @@ automatically after five seconds and closes when leaving the recent-list context
 PDF refines the visible page area at the current screen density and zoom instead
 of stretching a fixed 1000-pixel preview. Single-page and continuous modes retain
 the preview while a bounded detail crop is drawn; obsolete results are ignored.
-See the [0.58.0 release notes and limits](docs/release-0.58.0-alpha.1.md).
+Word navigation counts body words, including the current paragraph draft. Excel's
+Formulas menu inserts AVERAGE, COUNT, MIN and MAX for adjacent numbers. PowerPoint
+can search titles and text boxes across slides. PDF and PowerPoint can jump to the
+beginning or end from the page or slide number panel. Files and Favorites remember
+their shared sort order across restarts.
+See the [0.59.0 release notes and limits](docs/release-0.59.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

@@ -7,6 +7,38 @@ import 'package:artofficecraft_mobile/workspace/workspace_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('Large legacy indexes keep matching files and skip missing copies and directories', () async {
+    final root = await Directory.systemTemp.createTemp('aoc-directory-index-');
+    addTearDown(() => root.delete(recursive: true));
+    final entries = [
+      for (var i = 0; i < 40; i++)
+        WorkspaceFile(
+          id: 'f$i',
+          name: 'Same.pdf',
+          kind: EditorKind.pdf,
+          modified: DateTime.utc(2026, 1, i + 1),
+          favorite: i == 1,
+        ),
+    ];
+    for (final e in entries.skip(1).take(38)) {
+      await File('${root.path}/${e.id}.pdf').writeAsBytes([1]);
+    }
+    await Directory('${root.path}/f0.pdf').create();
+    await File('${root.path}/f39.docx').writeAsBytes([2]);
+    await File('${root.path}/index.json').writeAsString(
+      jsonEncode(entries.map((e) => e.toJson()..remove('recent')).toList()),
+    );
+    final store = WorkspaceStore(directory: root);
+    await store.load();
+    expect(store.error, isNull);
+    expect(
+      store.files.map((e) => e.id),
+      entries.skip(1).take(38).map((e) => e.id).toList().reversed,
+    );
+    expect(store.files.every((e) => e.recent), isTrue);
+    expect(store.files.last.favorite, isTrue);
+  });
+
   test(
     'Local copy and favorite survive restart; updates keep stable identity',
     () async {

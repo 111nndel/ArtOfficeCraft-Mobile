@@ -1,3 +1,4 @@
+import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -70,6 +71,7 @@ void main() {
         home: HomeScreen(
           toggleTheme: () {},
           theme: ThemeMode.light,
+          storage: DirectoryApplicationStorage(directory),
           workspace: files,
           drafts: drafts,
         ),

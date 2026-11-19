@@ -29,17 +29,6 @@ async function waitFor(pattern,label=String(pattern)){
 function rect(n){const m=/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/.exec(n.bounds||'');if(!m)throw Error('Missing bounds');return {x:+m[1],y:+m[2],w:+m[3]-m[1],h:+m[4]-m[2]};}
 function tap(n){const r=rect(n);command(['shell','input','tap',String(Math.round(r.x+r.w/2)),String(Math.round(r.y+r.h/2))]);}
 function shot(name){fs.writeFileSync(path.join(proof,name+'.png'),command(['exec-out','screencap','-p'],true));}
-async function dragHeld(n,dx,dy){
-  const r=rect(n),x=Math.round(r.x+r.w/2),y=Math.round(r.y+r.h/2);
-  command(['shell','input','touchscreen','motionevent','DOWN',String(x),String(y)]);
-  try {
-    await pause(800); // Stay still until long press wins the gesture arena.
-    command(['shell','input','touchscreen','motionevent','MOVE',String(x+dx),String(y+dy)]);
-    await pause(150);
-  } finally {
-    command(['shell','input','touchscreen','motionevent','UP',String(x+dx),String(y+dy)]);
-  }
-}
 async function openPicker(kind){
   tap(await waitFor(/^Files(?:\n|$)/));
   let button;
@@ -208,6 +197,28 @@ async function clearHistory() {
   await reveal(n=>n.label.split('\n').includes('No recent files yet'));
   shot('history-feedback-expired');
 
-  const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened','clear cancellation retains history','long press and batch removal with undo','clear all with undo','cleared history survives restart','favorites retained','hidden copy reopened from Files','reopened copy returns to recents without a duplicate','single entry removal','history feedback absent in editors','history feedback expires without restoring entries']};
+  async function findTestCopies() {
+    tap(await waitFor(/^Files(?:\n|$)/));
+    tap(await reveal(n => n.class === 'android.widget.EditText'));
+    command(['shell', 'input', 'text', runKey]);
+    command(['shell', 'input', 'keyevent', '4']);
+    await waitFor(n => n.label.startsWith(first));
+    await waitFor(n => n.label.startsWith(second));
+  }
+  async function expectOlderFirst() {
+    const older = rect(await waitFor(n => n.label.startsWith(second)));
+    const newer = rect(await waitFor(n => n.label.startsWith(first)));
+    if (older.y >= newer.y) throw Error('Oldest-first order was not applied');
+  }
+  await freshHome();
+  await findTestCopies();
+  tap(await reveal('Sort files'));
+  tap(await waitFor(n => n.label.split('\n').includes('Oldest first')));
+  await expectOlderFirst();
+  await freshHome();
+  await findTestCopies();
+  await expectOlderFirst();
+
+  const result={passed:true,device,api:36,installedUpdate:Boolean(update),files:[first,second],checks:['real Android file picker','second import from inside editor','force-stop and fresh process','both recent copies retained','both copies reopened','clear cancellation retains history','long press and batch removal with undo','clear all with undo','cleared history survives restart','favorites retained','hidden copy reopened from Files','reopened copy returns to recents without a duplicate','single entry removal','history feedback absent in editors','history feedback expires without restoring entries','file sort survives force-stop']};
   fs.writeFileSync(path.join(proof,'result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});

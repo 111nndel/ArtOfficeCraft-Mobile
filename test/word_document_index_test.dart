@@ -2,6 +2,17 @@ import 'package:artofficecraft_mobile/native/word_document_index.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('Words use body paragraphs and include the active draft once', () {
+    final index = WordDocumentIndex([
+      {'block': 2, 'text': 'Отчёт — по-русски, 42.'},
+      {'block': 5, 'text': "Don't stop 😀"},
+    ]);
+    expect(index.wordCount(), 5);
+    expect(index.wordCount(draftBlock: 2, draft: '💬'), 2);
+    expect(index.wordCount(draftBlock: 5, draft: 'а б в'), 6);
+    expect(index.wordCount(), 5);
+  });
+
   test(
     'Navigation uses paragraph positions despite non-paragraph block gaps',
     () {

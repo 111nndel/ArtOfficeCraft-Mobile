@@ -569,6 +569,7 @@ void main() {
         'Первый раздел изменён',
       );
       await tool(tester, 'Вид', 'Навигация');
+      expect(find.textContaining('Слов в основном тексте:'), findsOneWidget);
       await tester.enterText(
         find.byKey(const Key('word-heading-filter')),
         'последний',
@@ -1357,8 +1358,11 @@ void main() {
       expect(find.text('Страница 1 из 5'), findsOneWidget);
       await readingMode(tester, 'Чтение', 'По одной, горизонтально');
       await tool(tester, 'Чтение', 'Перейти к странице');
-      await tester.enterText(find.byKey(const Key('reader-jump-number')), '5');
-      await press(tester, 'Перейти к странице');
+      await press(tester, 'Перейти в начало');
+      await tester.pumpAndSettle();
+      expect(find.text('Страница 1 из 5'), findsOneWidget);
+      await tool(tester, 'Чтение', 'Перейти к странице');
+      await press(tester, 'Перейти в конец');
       await tester.pumpAndSettle();
       expect(find.text('Страница 5 из 5'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -1414,10 +1418,17 @@ void main() {
       await readingMode(tester, 'Вид', 'По одной, горизонтально');
       expect(tester.takeException(), isNull);
       await tool(tester, 'Вид', 'Перейти к слайду');
-      await tester.enterText(find.byKey(const Key('reader-jump-number')), '1');
-      await press(tester, 'Перейти к слайду');
+      await press(tester, 'Перейти в начало');
       await tester.pumpAndSettle();
       expect(find.text('Слайд 1 из 5'), findsOneWidget);
+      await tool(tester, 'Вид', 'Поиск по слайдам');
+      await tester.enterText(find.byKey(const Key('deck-search')), 'SLIDE 4');
+      await tester.pumpAndSettle();
+      final result = find.byKey(const ValueKey(('slide-match', 3)));
+      await tester.ensureVisible(result);
+      await tester.tap(result);
+      await tester.pumpAndSettle();
+      expect(find.text('Слайд 4 из 5'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

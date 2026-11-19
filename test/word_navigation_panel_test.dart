@@ -40,6 +40,7 @@ void main() {
           ),
         ),
       );
+      expect(find.text('Слов в основном тексте: 28000'), findsOneWidget);
       expect(find.byType(ListTile).evaluate().length, lessThan(20));
       await tester.enterText(find.byKey(const Key('word-jump-number')), '0');
       await tester.ensureVisible(find.byTooltip('Перейти к абзацу'));
