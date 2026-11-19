@@ -647,6 +647,8 @@ const english = <String, String>{
   "Лист создан": "Sheet created",
   "На один слайд выше": "Move slide up",
   "На один слайд ниже": "Move slide down",
+  "Перейти в начало": "Go to start",
+  "Перейти в конец": "Go to end",
   "В начало": "Move to beginning",
   "В конец": "Move to end",
   "На одну страницу выше": "Move page up",

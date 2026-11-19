@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import '../platform/stored_choice.dart';
 
 class LanguageSettings extends StoredChoice<String> {
-  LanguageSettings({super.directory, String initial = 'system', super.storage})
+  LanguageSettings({super.directory, super.initial = 'system', super.storage})
     : super(
-        initial: initial,
         fileName: 'language.json',
         field: 'language',
         options: {for (final code in choices) code: code},

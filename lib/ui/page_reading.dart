@@ -86,13 +86,13 @@ class _PageJumpState extends State<_PageJump> {
           OutlinedButton.icon(
             onPressed: widget.current > 0 && widget.onJump != null ? () => go(0) : null,
             icon: const Icon(Icons.first_page),
-            label: const UiText('В начало'),
+            label: const UiText('Перейти в начало'),
           ),
           OutlinedButton.icon(
             onPressed: widget.current + 1 < widget.count && widget.onJump != null
                 ? () => go(widget.count - 1) : null,
             icon: const Icon(Icons.last_page),
-            label: const UiText('В конец'),
+            label: const UiText('Перейти в конец'),
           ),
         ],
       ),

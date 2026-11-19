@@ -1358,11 +1358,11 @@ void main() {
       expect(find.text('Страница 1 из 5'), findsOneWidget);
       await readingMode(tester, 'Чтение', 'По одной, горизонтально');
       await tool(tester, 'Чтение', 'Перейти к странице');
-      await press(tester, 'В начало');
+      await press(tester, 'Перейти в начало');
       await tester.pumpAndSettle();
       expect(find.text('Страница 1 из 5'), findsOneWidget);
       await tool(tester, 'Чтение', 'Перейти к странице');
-      await press(tester, 'В конец');
+      await press(tester, 'Перейти в конец');
       await tester.pumpAndSettle();
       expect(find.text('Страница 5 из 5'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -1418,7 +1418,7 @@ void main() {
       await readingMode(tester, 'Вид', 'По одной, горизонтально');
       expect(tester.takeException(), isNull);
       await tool(tester, 'Вид', 'Перейти к слайду');
-      await press(tester, 'В начало');
+      await press(tester, 'Перейти в начало');
       await tester.pumpAndSettle();
       expect(find.text('Слайд 1 из 5'), findsOneWidget);
       await tool(tester, 'Вид', 'Поиск по слайдам');
