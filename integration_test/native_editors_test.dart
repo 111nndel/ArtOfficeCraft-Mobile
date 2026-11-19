@@ -1092,6 +1092,17 @@ void main() {
       await tester.tap(find.byTooltip('Повторить'));
       await tester.pumpAndSettle();
       expect(tester.widget<TextField>(formula).controller!.text, '=SUM(A1:A2)');
+      await tester.tap(find.byTooltip('Отменить'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('ƒx Функции'));
+      await tester.tap(find.text('ƒx Функции'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Среднее'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(formula).controller!.text, '=AVERAGE(A1:A2)');
+      await tester.tap(find.byTooltip('Назад к инструментам'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Пересчитать'));
       await tester.tap(find.text('Пересчитать'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Свернуть инструменты'));
@@ -1113,8 +1124,8 @@ void main() {
           const GridWindow(0, 0, 0),
           'A3',
         );
-        expect(reopened['selection']['input'], '=SUM(A1:A2)');
-        expect(reopened['selection']['display'], '20');
+        expect(reopened['selection']['input'], '=AVERAGE(A1:A2)');
+        expect(reopened['selection']['display'], '10');
         expect(reopened['sheets'][0]['cells']['B1']['style']['shrink'], true);
         expect(
           (await backend.inspectGrid(

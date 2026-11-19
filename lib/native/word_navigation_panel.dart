@@ -8,10 +8,14 @@ class WordNavigationPanel extends StatefulWidget {
     super.key,
     required this.index,
     required this.enabled,
+    this.draftBlock,
+    this.draftText,
     required this.onJump,
   });
   final WordDocumentIndex index;
   final bool enabled;
+  final int? draftBlock;
+  final String? draftText;
   final ValueChanged<int> onJump;
   @override
   State<WordNavigationPanel> createState() => _WordNavigationPanelState();
@@ -49,6 +53,7 @@ class _WordNavigationPanelState extends State<WordNavigationPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         UiText('Абзацев основного текста: $count'),
+        UiText('Слов в основном тексте: ${widget.index.wordCount(draftBlock: widget.draftBlock, draft: widget.draftText)}'),
         const UiText('Таблицы и колонтитулы не включены'),
         const SizedBox(height: 8),
         Wrap(

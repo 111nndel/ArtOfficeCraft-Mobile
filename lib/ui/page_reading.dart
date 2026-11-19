@@ -68,14 +68,35 @@ class _PageJumpState extends State<_PageJump> {
       setState(() => invalid = true);
       return;
     }
+    go(target - 1);
+  }
+
+  void go(int index) {
     FocusManager.instance.primaryFocus?.unfocus();
-    widget.onJump?.call(target - 1);
+    widget.onJump?.call(index);
   }
 
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      Wrap(
+        spacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: widget.current > 0 && widget.onJump != null ? () => go(0) : null,
+            icon: const Icon(Icons.first_page),
+            label: const UiText('В начало'),
+          ),
+          OutlinedButton.icon(
+            onPressed: widget.current + 1 < widget.count && widget.onJump != null
+                ? () => go(widget.count - 1) : null,
+            icon: const Icon(Icons.last_page),
+            label: const UiText('В конец'),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
       TextField(
         key: const Key('reader-jump-number'),
         controller: input,

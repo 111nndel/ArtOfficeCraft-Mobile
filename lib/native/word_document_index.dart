@@ -23,6 +23,23 @@ class WordDocumentIndex {
   final List<Map<String, dynamic>> blocks;
   final _positions = <int, int>{};
   late final List<WordHeading> headings;
+  static final _word = RegExp(
+    r"[\p{L}\p{N}][\p{L}\p{M}\p{N}]*(?:['’‐‑-][\p{L}\p{N}][\p{L}\p{M}\p{N}]*)*",
+    unicode: true,
+  );
+  static int _countWords(String text) => _word.allMatches(text).length;
+  late final int _bodyWords = blocks.fold<int>(
+    0,
+    (sum, block) => sum + _countWords(block['text']?.toString() ?? ''),
+  );
+
+  int wordCount({int? draftBlock, String? draft}) {
+    final position = _positions[draftBlock];
+    if (position == null || draft == null) return _bodyWords;
+    final saved = blocks[position]['text']?.toString() ?? '';
+    return _bodyWords - _countWords(saved) + _countWords(draft);
+  }
+
   int? positionOf(int block) => _positions[block];
   (String, int?, String?)? _findKey;
   List<WordFindMatch> _matches = const [];

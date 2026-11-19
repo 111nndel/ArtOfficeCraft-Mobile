@@ -781,6 +781,8 @@ class _NativeWordScreenState extends State<NativeWordScreen> {
             Icons.list_alt,
             builder: (_) => WordNavigationPanel(
               index: textIndex,
+              draftBlock: inlineDirty ? activeBlock : null,
+              draftText: inlineDirty ? inline.text : null,
               enabled: !busy && !operationPending,
               onJump: (position) => jumpToParagraph(position),
             ),

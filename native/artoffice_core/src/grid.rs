@@ -65,9 +65,14 @@ pub(super) fn put(w: &mut Workbook, sheet_index: usize, a1: &str, value: &str) -
     Ok(())
 }
 
-/// Insert a SUM only into a vacant, unmerged cell. Prefer the contiguous
+/// Insert an aggregate only into a vacant, unmerged cell. Prefer the contiguous
 /// numeric range above, then the one to the left; never replace user content.
-fn autosum(w: &mut Workbook, idx: usize, address: &str) -> Result<(),String> {
+fn insert_aggregate(w: &mut Workbook, idx: usize, address: &str, function: Option<&Json>) -> Result<(),String> {
+    let function = match function {
+        None => "SUM",
+        Some(value) => value.as_str().filter(|name| matches!(*name, "SUM" | "AVERAGE" | "COUNT" | "MIN" | "MAX"))
+            .ok_or("Unknown aggregate function")?,
+    };
     if w.protected_structure {return Err("Workbook is protected".into())}
     let loc=CellRef::parse(address).ok_or("Invalid A1 reference")?;
     let sh=w.sheet(idx).ok_or("Sheet index out of bounds")?;
@@ -84,7 +89,7 @@ fn autosum(w: &mut Workbook, idx: usize, address: &str) -> Result<(),String> {
         if first==loc {return Err("No adjacent numeric range for AutoSum".into())}
         CellRef::new(loc.row,loc.col-1)
     };
-    let formula=Formula::new(&format!("=SUM({}:{})",first.a1(),last.a1()));
+    let formula=Formula::new(&format!("={function}({}:{})",first.a1(),last.a1()));
     let style=sh.style_id(loc);
     w.sheet_mut(idx).unwrap().set_cell(loc,Cell {style,..Cell::formula(formula)});
     Ok(())
@@ -259,7 +264,7 @@ pub extern "C" fn ac_xlsx_set_cell(data:*const u8,n:usize, request:*const u8,req
             if action=="clear_range" {gridcraft_calc::Calc::new().recalc_all(&mut wb);}
             return write(&wb)
         }
-        if action=="autosum" {autosum(&mut wb,idx,address)?;}
+        if action=="autosum" {insert_aggregate(&mut wb,idx,address,req.get("function"))?;}
         if action=="recalculate" {
             CellRef::parse(address).ok_or("Invalid A1 reference")?;
             if wb.protected_structure || wb.sheets.iter().any(|s|s.protection.is_some()) {
@@ -635,12 +640,30 @@ mod formatting_tests {
         assert!(workbook(&styled).unwrap().sheet(0).unwrap().input_text(CellRef::parse("A3").unwrap()).is_empty());
     }
     #[test]
+    fn quick_functions_reopen_with_formula_value_and_style() {
+        let mut wb = Workbook::new();
+        for (address, value) in [("A1", "2"), ("A2", "8")] {
+            put(&mut wb, 0, address, value).unwrap();
+        }
+        let initial = edit(&write(&wb).unwrap(), json!({"action":"format","sheet":0,"address":"A3","style":{"numFmt":"0.00"}}));
+        for (name, result) in [("AVERAGE", 5.0), ("COUNT", 2.0), ("MIN", 2.0), ("MAX", 8.0)] {
+            let bytes = edit(&initial, json!({"action":"autosum","function":name,"sheet":0,"address":"A3"}));
+            let reopened = workbook(&bytes).unwrap();
+            let sheet = reopened.sheet(0).unwrap();
+            let at = CellRef::parse("A3").unwrap();
+            assert_eq!(sheet.input_text(at), format!("={name}(A1:A2)"));
+            assert_eq!(sheet.cell(at).unwrap().value, Value::number(result));
+            assert_eq!(reopened.styles.get(sheet.style_id(at)).num_fmt.as_str(), "0.00");
+        }
+    }
+    #[test]
     fn calculation_actions_reject_nonempty_missing_range_and_protection_without_mutation() {
         let mut wb=Workbook::new();put(&mut wb,0,"A1","12").unwrap();put(&mut wb,0,"B1","=0").unwrap();
         let bytes=write(&wb).unwrap();
         for request in [json!({"action":"autosum","sheet":0,"address":"A1"}),
             json!({"action":"autosum","sheet":0,"address":"B1"}),
             json!({"action":"autosum","sheet":0,"address":"Z99"}),
+            json!({"action":"autosum","function":"invalid","sheet":0,"address":"A2"}),
             json!({"action":"recalculate","sheet":0,"address":"XFE1"}),
             json!({"action":"autosum","sheet":0,"address":"A2","value":"erase"})] {
             let req=request.to_string();let r=ac_xlsx_set_cell(bytes.as_ptr(),bytes.len(),req.as_ptr(),req.len());

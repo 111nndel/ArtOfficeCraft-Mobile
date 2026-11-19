@@ -759,7 +759,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     await flushInput();
     inputFocus.unfocus();
   });
-  Future<void> autoSum() => run(() async {
+  Future<void> insertAggregate([String function = 'SUM']) => run(() async {
     if (book == null) return;
     if (input.text.isNotEmpty || currentInput.isNotEmpty) {
       tip('Выберите пустую ячейку под числами или справа от них');
@@ -767,6 +767,7 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
     }
     await applyEdit({
       'action': 'autosum',
+      if (function != 'SUM') 'function': function,
       'sheet': sheetIndex,
       'address': selected,
     });
@@ -2377,10 +2378,24 @@ class _NativeGridScreenState extends State<NativeGridScreen> {
             ),
           ),
 
+          'ƒx Функции': EditorTool(
+            'ƒx Функции',
+            Icons.functions,
+            children: [
+              for (final (label, function) in const [
+                ('Среднее', 'AVERAGE'),
+                ('Количество чисел', 'COUNT'),
+                ('Минимум', 'MIN'),
+                ('Максимум', 'MAX'),
+              ])
+                EditorTool(label, Icons.functions, onPressed: busy || book == null
+                    ? null : () => insertAggregate(function)),
+            ],
+          ),
           '∑ Автосумма': EditorTool(
             '∑ Автосумма',
             Icons.functions,
-            onPressed: busy || book == null ? null : autoSum,
+            onPressed: busy || book == null ? null : insertAggregate,
           ),
           'Пересчитать': EditorTool(
             'Пересчитать',

@@ -12,6 +12,7 @@ import '../ui/office_tool_sections.dart';
 import '../ui/editor_tools.dart';
 import '../ui/page_reading.dart';
 import 'document_backend.dart';
+import 'deck_search_panel.dart';
 import 'document_history.dart';
 import '../ui/editor_file_title.dart';
 import '../workspace/editor_launch.dart';
@@ -327,6 +328,12 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     'slide': index,
     'shape': shape['id'],
   }, initial: shape['text']?.toString() ?? '');
+
+  void jumpToSlide(int slide) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    selectSlide(slide);
+    toolPanel.currentState?.setExpanded(false);
+  }
 
   void selectSlide(int slide) {
     if (busy || slide == index || slide < 0 || slide >= slides.length) return;
@@ -889,12 +896,12 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
             fieldLabel: 'Номер слайда',
             current: index,
             count: slides.length,
-            onJump: busy
-                ? null
-                : (target) {
-                    selectSlide(target);
-                    toolPanel.currentState?.setExpanded(false);
-                  },
+            onJump: busy ? null : jumpToSlide,
+          ),
+          EditorTool(
+            'Поиск по слайдам',
+            Icons.search,
+            builder: (_) => DeckSearchPanel(slides: slides, onJump: busy ? null : jumpToSlide),
           ),
         ],
         'Главная': [

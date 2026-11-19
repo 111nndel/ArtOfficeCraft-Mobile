@@ -1,5 +1,6 @@
 import '../native/grid_clipboard.dart';
 import '../platform/application_storage.dart';
+import '../platform/stored_choice.dart';
 import '../platform/document_files.dart';
 import '../platform/incoming_documents.dart';
 import '../native/pdf_page_renderer.dart';
@@ -71,7 +72,13 @@ class _HomeScreenState extends State<HomeScreen> {
   final search = TextEditingController();
   int section = 0;
   EditorKind? filter;
-  _FileOrder _fileOrder = _FileOrder.newest;
+  late final _fileOrder = StoredChoice<_FileOrder>(
+    initial: _FileOrder.newest,
+    storage: widget.storage,
+    fileName: 'file-order.json',
+    field: 'order',
+    options: {for (final order in _FileOrder.values) order.name: order},
+  );
   bool _selecting = false;
   bool _historyBusy = false;
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _historyNotice;
@@ -81,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final query = search.text.trim().toLowerCase();
     final recents = _showingRecents;
     final ordering = section == 1 || section == 2
-        ? _fileOrder
+        ? _fileOrder.value
         : _FileOrder.newest;
     final files = store.files;
     if (ordering == _FileOrder.newest &&
@@ -124,6 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _fileOrder.addListener(refresh);
+    unawaited(_fileOrder.load());
     store.addListener(refresh);
     recoveryStore.addListener(refresh);
     final ready = Future.wait([
@@ -159,6 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     incoming.dispose();
+    _fileOrder.dispose();
     store.removeListener(refresh);
     recoveryStore.removeListener(refresh);
     if (widget.drafts == null) recoveryStore.dispose();
@@ -540,13 +550,17 @@ class _HomeScreenState extends State<HomeScreen> {
           tooltip: tr(context, 'Сортировка файлов'),
           icon: const Icon(Icons.sort),
           enabled: store.loaded && store.files.isNotEmpty,
-          initialValue: _fileOrder,
-          onSelected: (order) => setState(() => _fileOrder = order),
+          initialValue: _fileOrder.value,
+          onSelected: (order) async {
+            if (!await _fileOrder.select(order)) {
+              message('Не удалось сохранить сортировку. Повторите выбор.');
+            }
+          },
           itemBuilder: (_) => [
             for (final order in _FileOrder.values)
               CheckedPopupMenuItem(
                 value: order,
-                checked: order == _fileOrder,
+                checked: order == _fileOrder.value,
                 child: UiText(order.label),
               ),
           ],

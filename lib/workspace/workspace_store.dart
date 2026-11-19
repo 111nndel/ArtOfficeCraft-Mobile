@@ -85,13 +85,18 @@ class WorkspaceStore extends ChangeNotifier {
       final index = File('${root.path}/index.json');
       if (await index.exists()) {
         final raw = jsonDecode(await index.readAsString()) as List;
+        // For a large index a single directory listing avoids a stat per copy.
+        final existing = raw.length >= 32
+            ? await root.list().where((file) => file is File)
+                .map((file) => file.uri.pathSegments.last).toSet()
+            : null;
         final next = <WorkspaceFile>[];
         for (final item in raw) {
           final entry = WorkspaceFile.fromJson(
             Map<String, dynamic>.from(item as Map),
           );
-          if (await File('${root.path}/${entry.id}.${entry.kind.extension}')
-              .exists()) {
+          final name = '${entry.id}.${entry.kind.extension}';
+          if (existing?.contains(name) ?? await File('${root.path}/$name').exists()) {
             next.add(entry);
           }
         }
