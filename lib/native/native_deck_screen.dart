@@ -756,6 +756,10 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
               if (shape['imageId'] case final int id)
                 _DeckPicture(
                   source: (slides, slide, id),
+                  displaySize: Size(
+                    original.width * width / pageW,
+                    original.height * height / pageH,
+                  ),
                   load: () => _picture(slide, id),
                 ),
               if (text.isNotEmpty)
@@ -1253,9 +1257,14 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
 
 // Keep mounted images stable even as thumbnails evict older cache entries.
 class _DeckPicture extends StatefulWidget {
-  const _DeckPicture({required this.source, required this.load});
+  const _DeckPicture({
+    required this.source,
+    required this.displaySize,
+    required this.load,
+  });
 
   final (List<Map<String, dynamic>>, int, int) source;
+  final Size displaySize;
   final Future<Uint8List?> Function() load;
 
   @override
@@ -1272,28 +1281,30 @@ class _DeckPictureState extends State<_DeckPicture> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
-    // A different file or slide must not show the previous image while loading.
-    key: ObjectKey(image),
-    future: image,
-    builder: (context, snapshot) {
-      final bytes = snapshot.data;
-      if (bytes == null) {
-        return const Center(
-          child: Icon(Icons.image_outlined, color: Colors.black26, size: 18),
-        );
-      }
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final ratio = MediaQuery.devicePixelRatioOf(context);
-          // Round up to avoid a fresh decode for every pixel during object resize.
-          int pixels(double extent) => ((extent * ratio / 64).ceil() * 64)
-              .clamp(64, 1200);
+  Widget build(BuildContext context) {
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    // Use the committed geometry so a drag can reuse the same decoded image.
+    int pixels(double extent) =>
+        ((extent * ratio / 64).ceil() * 64).clamp(64, 1200);
+    return Semantics(
+      image: true,
+      excludeSemantics: true,
+      child: FutureBuilder<Uint8List?>(
+        // A replaced document must not show the previous image while loading.
+        key: ObjectKey(image),
+        future: image,
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null) {
+            return const Center(
+              child: Icon(Icons.image_outlined, color: Colors.black26, size: 18),
+            );
+          }
           return Image(
             image: ResizeImage(
               MemoryImage(bytes),
-              width: pixels(constraints.maxWidth),
-              height: pixels(constraints.maxHeight),
+              width: pixels(widget.displaySize.width),
+              height: pixels(widget.displaySize.height),
               policy: ResizeImagePolicy.fit,
             ),
             fit: BoxFit.cover,
@@ -1302,7 +1313,7 @@ class _DeckPictureState extends State<_DeckPicture> {
             ),
           );
         },
-      );
-    },
-  );
+      ),
+    );
+  }
 }
