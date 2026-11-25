@@ -239,6 +239,8 @@ class DraftStore extends ChangeNotifier {
       workspaceId: workspaceId,
     );
     _publish(info, id);
+    // An input-only checkpoint didn't create an obsolete document.
+    if (reusable) return info;
     await for (final entry in root.list()) {
       if (entry is File &&
           !entry.path.endsWith('/$base') &&

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'document_backend.dart' show immutableDocumentBytes;
 import 'document_worker.dart';
 import 'pdf_page_renderer.dart';
 import 'pdfcraft_bridge.dart';
@@ -14,8 +13,9 @@ void _pdfRasterWorker((SendPort, Map<String, Object?>) args) {
     final engine = bridge;
     if (engine == null) throw StateError('Native PDF renderer is unavailable');
     final request = (payload as Map).cast<String, dynamic>();
-    final input = request.remove('bytes') as Uint8List? ?? Uint8List(0);
-    return engine.raster(input, request);
+    final transfer = request.remove('bytes') as TransferableTypedData?;
+    final input = transfer?.materialize().asUint8List() ?? Uint8List(0);
+    return TransferableTypedData.fromList([engine.raster(input, request)]);
   });
 }
 
@@ -63,9 +63,9 @@ final class NativePdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
     try {
       final bytes = await worker.request('raster', {
         'op': 'open',
-        'bytes': immutableDocumentBytes(pdf),
-      }) as Uint8List;
-      final info = jsonDecode(utf8.decode(bytes));
+        'bytes': TransferableTypedData.fromList([pdf]),
+      }) as TransferableTypedData;
+      final info = jsonDecode(utf8.decode(bytes.materialize().asUint8List()));
       if (info case {'session': int token, 'pageCount': int count}
           when token > 0 && count >= 1 && count <= 10000) {
         final id = ++_next;
@@ -101,14 +101,15 @@ final class NativePdfPageRenderer implements PdfPageRenderer, PdfTileRenderer {
       throw RangeError('Invalid PDF raster page/width');
     }
     final state = _get(session);
-    final png = await _worker!.request('raster', {
+    final result = await _worker!.request('raster', {
       'op': tile == null ? 'page' : 'tile',
       'session': state.native,
       'page': page,
       'width': width,
       if (tile != null) 'tile': [tile.x, tile.y, tile.width, tile.height],
-    }) as Uint8List;
+    }) as TransferableTypedData;
     if (state.closed) throw StateError('PDF raster session is closed');
+    final png = result.materialize().asUint8List();
     if (png.length < 24 ||
         png.length > 24 * 1024 * 1024 ||
         png.take(8).join(',') != '137,80,78,71,13,10,26,10') {

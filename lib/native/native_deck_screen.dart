@@ -98,9 +98,8 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   int index = 0;
   double pageW = 960, pageH = 540;
   bool busy = false, modified = false;
-  // Bounded per-document Future cache. Parsing and extracting image bytes
-  // runs off the Flutter UI isolate, and never performs network requests.
-  final Map<String, Future<Uint8List?>> _pictures = {};
+  // Reuse a bounded set of recently viewed images between thumbnails and slides.
+  final _pictures = <(int, int), Future<Uint8List?>>{};
   bool get loaded => data != null;
   void message(String value) {
     if (mounted) {
@@ -655,21 +654,16 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   }
 
   Future<Uint8List?> _picture(int slide, int mediaId) {
-    final key = '$slide:$mediaId';
-    final old = _pictures[key];
-    if (old != null) return old;
-    // Bounded pending/completed cache; avoid decoding a large media catalogue.
-    if (_pictures.length >= 12 || data == null) {
-      return Future<Uint8List?>.value(null);
-    }
-    final document = data!;
+    final document = data;
     final backend = engine;
-    final future = backend is DocumentImages
-        ? (backend as DocumentImages)
-              .image(document, slide, mediaId)
-              .then<Uint8List?>((bytes) => bytes, onError: (Object _) => null)
-        : Future<Uint8List?>.value(null);
+    if (backend is! DocumentImages || document == null) return Future.value();
+    final key = (slide, mediaId);
+    final future = _pictures.remove(key) ??
+        (backend as DocumentImages)
+            .image(document, slide, mediaId)
+            .then<Uint8List?>((bytes) => bytes, onError: (Object _) => null);
     _pictures[key] = future;
+    if (_pictures.length > 12) _pictures.remove(_pictures.keys.first);
     return future;
   }
 
@@ -760,32 +754,9 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
             fit: StackFit.expand,
             children: [
               if (shape['imageId'] case final int id)
-                FutureBuilder<Uint8List?>(
-                  future: _picture(slide, id),
-                  builder: (context, snapshot) {
-                    final pixels = snapshot.data;
-                    if (pixels == null) {
-                      return const Center(
-                        child: Icon(
-                          Icons.image_outlined,
-                          color: Colors.black26,
-                          size: 18,
-                        ),
-                      );
-                    }
-                    return Image.memory(
-                      pixels,
-                      fit: BoxFit.cover,
-                      cacheWidth: 1200,
-                      gaplessPlayback: false,
-                      errorBuilder: (_, _, _) => const Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: Colors.black26,
-                        ),
-                      ),
-                    );
-                  },
+                _DeckPicture(
+                  source: (slides, slide, id),
+                  load: () => _picture(slide, id),
                 ),
               if (text.isNotEmpty)
                 Align(
@@ -1277,4 +1248,61 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       },
     );
   }
+}
+
+
+// Keep mounted images stable even as thumbnails evict older cache entries.
+class _DeckPicture extends StatefulWidget {
+  const _DeckPicture({required this.source, required this.load});
+
+  final (List<Map<String, dynamic>>, int, int) source;
+  final Future<Uint8List?> Function() load;
+
+  @override
+  State<_DeckPicture> createState() => _DeckPictureState();
+}
+
+class _DeckPictureState extends State<_DeckPicture> {
+  late Future<Uint8List?> image = widget.load();
+
+  @override
+  void didUpdateWidget(_DeckPicture oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.source != oldWidget.source) image = widget.load();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    // A different file or slide must not show the previous image while loading.
+    key: ObjectKey(image),
+    future: image,
+    builder: (context, snapshot) {
+      final bytes = snapshot.data;
+      if (bytes == null) {
+        return const Center(
+          child: Icon(Icons.image_outlined, color: Colors.black26, size: 18),
+        );
+      }
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final ratio = MediaQuery.devicePixelRatioOf(context);
+          // Round up to avoid a fresh decode for every pixel during object resize.
+          int pixels(double extent) => ((extent * ratio / 64).ceil() * 64)
+              .clamp(64, 1200);
+          return Image(
+            image: ResizeImage(
+              MemoryImage(bytes),
+              width: pixels(constraints.maxWidth),
+              height: pixels(constraints.maxHeight),
+              policy: ResizeImagePolicy.fit,
+            ),
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const Center(
+              child: Icon(Icons.broken_image_outlined, color: Colors.black26),
+            ),
+          );
+        },
+      );
+    },
+  );
 }

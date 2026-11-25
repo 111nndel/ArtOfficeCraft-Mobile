@@ -7,6 +7,32 @@ import 'package:artofficecraft_mobile/workspace/workspace_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('Reopening restores a recent entry without replacing the working file', () async {
+    final root = await Directory.systemTemp.createTemp('aoc-reopen-');
+    addTearDown(() => root.delete(recursive: true));
+    final store = WorkspaceStore(directory: root);
+    await store.load();
+    final file = await store.remember(EditorKind.pdf, Uint8List.fromList([1, 2, 3]), 'Document.pdf');
+    await store.toggleFavorite(file);
+    await store.setRecent([file.id], false);
+    final copy = File('${root.path}/${file.id}.pdf');
+    final timestamp = DateTime.utc(2005);
+    await copy.setLastModified(timestamp);
+
+    await store.markOpened(file);
+
+    final reloaded = WorkspaceStore(directory: root);
+    await reloaded.load();
+    expect(reloaded.files.single.recent, isTrue);
+    expect(reloaded.files.single.favorite, isTrue);
+    expect(reloaded.files.single.id, file.id);
+    expect((await copy.lastModified()).toUtc(), timestamp);
+    expect(await reloaded.read(file), [1, 2, 3]);
+    await store.remember(EditorKind.pdf, Uint8List.fromList([9]), file.name, id: file.id);
+    expect(await store.read(file), [9]);
+  });
+
+
   test('Large legacy indexes keep matching files and skip missing copies and directories', () async {
     final root = await Directory.systemTemp.createTemp('aoc-directory-index-');
     addTearDown(() => root.delete(recursive: true));

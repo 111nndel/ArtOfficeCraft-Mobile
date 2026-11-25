@@ -56,6 +56,8 @@ class _PageJumpState extends State<_PageJump> {
   late final input = TextEditingController(text: '${widget.current + 1}');
   bool invalid = false;
 
+  int get number => int.tryParse(input.text.trim()) ?? widget.current + 1;
+
   @override
   void dispose() {
     input.dispose();
@@ -96,6 +98,23 @@ class _PageJumpState extends State<_PageJump> {
           ),
         ],
       ),
+      if (widget.count > 1)
+        Slider(
+          key: const Key('reader-jump-slider'),
+          min: 1,
+          max: widget.count.toDouble(),
+          divisions: widget.count <= 200 ? widget.count - 1 : null,
+          value: number.clamp(1, widget.count).toDouble(),
+          semanticFormatterCallback: (value) =>
+              '${tr(context, widget.fieldLabel)} ${value.round()}',
+          onChanged: widget.onJump == null
+              ? null
+              : (value) => setState(() {
+                  input.text = '${value.round()}';
+                  invalid = false;
+                }),
+          onChangeEnd: (value) => go(value.round() - 1),
+        ),
       const SizedBox(height: 8),
       TextField(
         key: const Key('reader-jump-number'),
@@ -111,9 +130,7 @@ class _PageJumpState extends State<_PageJump> {
               ? tr(context, 'Введите число от 1 до ${widget.count}')
               : null,
         ),
-        onChanged: (_) {
-          if (invalid) setState(() => invalid = false);
-        },
+        onChanged: (_) => setState(() => invalid = false),
         onSubmitted: (_) => jump(),
       ),
       const SizedBox(height: 12),
