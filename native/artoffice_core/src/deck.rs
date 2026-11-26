@@ -6,6 +6,9 @@ use deckcraft_model::{
 use serde_json::{json, Value as J};
 use super::{AcResult, decode, protect, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
 
+const MAX_SLIDE_TEXT_BYTES: usize = 64 * 1024;
+const NOTES_PREVIEW_BYTES: usize = 2 * 1024 * 1024;
+
 fn load(bytes: &[u8]) -> Result<Presentation, String> {
     deckcraft_pptx::import(bytes).map_err(|e| format!("PPTX read failed: {e}"))
 }
@@ -21,7 +24,7 @@ fn decode_request<'a>(ptr:*const u8, n:usize)->Result<&'a str,String>{
       .map_err(|_|"Invalid edit request UTF-8".to_string())
 }
 fn add_text(p: &mut Presentation, index:usize, text:&str, is_title:bool)->Result<u32,String>{
-    if text.len()>64*1024 {return Err("Text exceeds 64 KiB".into())}
+    if text.len()>MAX_SLIDE_TEXT_BYTES {return Err("Text exceeds 64 KiB".into())}
     if index>=p.slides.len(){return Err("Slide index out of bounds".into())}
     if p.slides[index].shapes.len()>=5000 {return Err("Slide contains too many shapes".into())}
     let id=p.alloc_id().ok_or("No free shape identifier")?;
@@ -62,6 +65,7 @@ pub extern "C" fn ac_pptx_inspect(data:*const u8,n:usize)->AcResult {
         let bytes=decode(data,n,MAX_INPUT_BYTES)?;
         let presentation=load(bytes)?;
         let mut slides=Vec::new();
+        let mut note_budget = NOTES_PREVIEW_BYTES;
         for (i,slide) in presentation.slides.iter().enumerate() {
             let shapes:Vec<J>=slide.shapes.iter().take(120).map(|shape|{
                 let rect=shape.xfrm.as_ref().map(|r|json!({
@@ -112,9 +116,15 @@ pub extern "C" fn ac_pptx_inspect(data:*const u8,n:usize)->AcResult {
                     "editableText":shape.text.is_some() && !shape.locked,
                 })
             }).collect();
+            let notes = slide.notes_text();
+            let notes_editable = notes.len() <= MAX_SLIDE_TEXT_BYTES && notes.len() <= note_budget;
+            if notes_editable {
+                note_budget -= notes.len();
+            }
             slides.push(json!({
                 "index":i, "id":slide.id.0, "title":slide.title(),
                 "name":slide.name, "shapes":shapes,
+                "notes":notes_editable.then_some(notes),
                 "shapeCount":slide.shapes.len(),
                 "truncated":slide.shapes.len()>120,
             }));
@@ -181,7 +191,7 @@ pub extern "C" fn ac_pptx_edit(data:*const u8,n:usize, request:*const u8, req_le
         let action=value.get("action").and_then(J::as_str).ok_or("Missing action")?;
         let index=value.get("slide").and_then(J::as_u64).unwrap_or(0) as usize;
         let text=value.get("text").and_then(J::as_str).unwrap_or_default();
-        if text.len()>64*1024 {return Err("Slide text exceeds 64 KiB".into())}
+        if text.len()>MAX_SLIDE_TEXT_BYTES {return Err("Slide text exceeds 64 KiB".into())}
         let mut p=load(bytes)?;
         match action {
             "add_slide"=>{
@@ -229,6 +239,16 @@ pub extern "C" fn ac_pptx_edit(data:*const u8,n:usize, request:*const u8, req_le
                 rect.y = y;
                 rect.w = w;
                 rect.h = h;
+            },
+            "edit_notes" => {
+                let text = value.get("text").and_then(J::as_str).ok_or("Missing notes text")?;
+                let slide = p.slides.get_mut(index).ok_or("Slide index out of bounds")?;
+                if slide.notes_text().len() > MAX_SLIDE_TEXT_BYTES {
+                    return Err("Existing speaker notes exceed 64 KiB".into());
+                }
+                let slide = Arc::make_mut(slide);
+                deckcraft_model::edit::replace_text(&mut slide.notes, text);
+                slide.has_notes_slide |= !slide.notes.is_empty();
             },
             "move_slide"=>{
                 let source=value.get("slide").and_then(J::as_u64).and_then(|n|usize::try_from(n).ok()).ok_or("Missing slide index")?;

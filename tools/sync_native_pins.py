@@ -28,9 +28,21 @@ def pdf_patch_block(folder, cargo_base):
     manifest = tomllib.loads((folder / 'Cargo.toml').read_text(encoding='utf-8-sig'))
     patches = manifest.get('patch', {}).get('crates-io', {})
     lines = [PATCH_BEGIN, '[patch.crates-io]']
-    for name in ('hayro', 'hayro-interpret', 'hayro-syntax', 'hayro-cmap', 'hayro-postscript', 'hayro-jbig2', 'lopdf', 'vello_common', 'vello_cpu'):
+    hayro = ('hayro', 'hayro-interpret', 'hayro-syntax', 'hayro-cmap', 'hayro-postscript', 'hayro-jbig2')
+    for name in (*hayro, 'lopdf', 'vello_common', 'vello_cpu'):
         entry = patches.get(name)
-        if not isinstance(entry, dict) or set(entry) != {'path'}:
+        if not isinstance(entry, dict):
+            raise RuntimeError(f'{name}: missing upstream patch')
+        if (
+            name in hayro
+            and set(entry) == {'git', 'rev'}
+            and entry['git'] == 'https://github.com/storytold/craft-libs'
+            and isinstance(entry['rev'], str)
+            and re.fullmatch(r'[a-f0-9]{40}', entry['rev'])
+        ):
+            lines.append(f"{name} = {{ git = {json.dumps(entry['git'])}, rev = {json.dumps(entry['rev'])} }}")
+            continue
+        if set(entry) != {'path'}:
             raise RuntimeError(f'{name}: upstream patch changed; review required')
         target = (folder / entry['path']).resolve()
         if not target.is_relative_to(folder.resolve()):

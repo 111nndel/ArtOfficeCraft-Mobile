@@ -793,11 +793,12 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
   }
 
   Future<Uint8List> thumbnailFor(int index) {
-    final old = _thumbnailImages[index];
-    if (old != null) return old;
-    if (_thumbnailImages.length >= 24) _thumbnailImages.clear();
-    final future = _pageRenderer.render(_session!, index, width: 160);
+    final future = _thumbnailImages.remove(index) ??
+        _pageRenderer.render(_session!, index, width: 160);
     _thumbnailImages[index] = future;
+    if (_thumbnailImages.length > 24) {
+      _thumbnailImages.remove(_thumbnailImages.keys.first);
+    }
     return future;
   }
 

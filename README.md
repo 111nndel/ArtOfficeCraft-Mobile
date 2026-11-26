@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.60.0.**
+**Current preview — alpha 0.61.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -24,7 +24,7 @@ undo/redo. Cross-sheet references and scoped names follow the Rust engine comman
 hidden sheets stay out of tabs. The last visible sheet and protected structure are guarded.
 PDF searches document text, including OCR layers, and highlights the matching text area.
 PDF bookmarks are also searchable. PDF and PowerPoint can jump by page or slide number.
-PowerPoint can move and resize supported objects. PDF can save notes, edit
+PowerPoint can move and resize supported objects and edit speaker notes. PDF can save notes, edit
 supported paragraphs, insert text at a touched location and recognize
 Russian and English on a scanned page. The recognized words can be copied or
 added as invisible, searchable text in the exported PDF copy.
@@ -56,7 +56,7 @@ their shared sort order across restarts.
 Reopening a workspace copy updates Recents without rewriting the document.
 PDF and PowerPoint include a slider for jumping to a page or slide.
 PowerPoint loads embedded images as they come into view and decodes smaller thumbnails.
-See the [0.60.0 release notes and limits](docs/release-0.60.0-alpha.1.md).
+See the [0.61.0 release notes and limits](docs/release-0.61.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).
@@ -102,10 +102,10 @@ Android port, rather than a GitHub fork with a single upstream parent:
 
 | Engine | Original source | Pinned version |
 | --- | --- | --- |
-| WordCraft | https://github.com/storytold/wordcraft | v0.18.1 |
+| WordCraft | https://github.com/storytold/wordcraft | v0.19.1 |
 | GridCraft | https://github.com/storytold/gridcraft | v0.19.1 |
-| DeckCraft | https://github.com/storytold/deckcraft | v0.18.1 |
-| PDFCraft | https://github.com/storytold/pdfcraft | v0.21.1 |
+| DeckCraft | https://github.com/storytold/deckcraft | v0.19.1 |
+| PDFCraft | https://github.com/storytold/pdfcraft | v0.22.0 |
 
 Exact commits are recorded in `upstream/engines.lock.json` and embedded in the
 native binary (`ac_engine_info`). The About screen reads those binary values.

@@ -50,9 +50,22 @@ class NativePatchTests(unittest.TestCase):
     def test_changed_patch_kind_requires_review(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / 'Cargo.toml').write_text('[patch.crates-io]\nhayro-jbig2 = {git = "https://invalid.example/repo"}\n')
-            with self.assertRaisesRegex(RuntimeError, 'review required'):
-                pdf_patch_block(root, 'upstream/')
+            self.source(root)
+            cargo = root / 'Cargo.toml'
+            original = cargo.read_text()
+            pin = 'a' * 40
+            patch = f'hayro-jbig2 = {{git = "https://github.com/storytold/craft-libs", rev = "{pin}"}}'
+            manifest = original.replace('hayro-jbig2 = {path = "vendor/hayro-jbig2"}', patch)
+            cargo.write_text(manifest)
+            self.assertIn(f'rev = "{pin}"', pdf_patch_block(root, 'upstream/'))
+            for invalid in (
+                manifest.replace('storytold/craft-libs', 'example/craft-libs'),
+                manifest.replace(pin, 'main'),
+                manifest.replace(pin, pin[:12]),
+            ):
+                cargo.write_text(invalid)
+                with self.assertRaisesRegex(RuntimeError, 'review required'):
+                    pdf_patch_block(root, 'upstream/')
 
     def test_existing_unknown_or_broken_patch_sections_are_preserved_by_rejection(self):
         for cargo in ['[patch.crates-io]\nother = "1"', '# BEGIN ArtOfficeCraft reviewed PDF dependency patches']:
