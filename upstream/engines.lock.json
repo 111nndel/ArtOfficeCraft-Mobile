@@ -4,8 +4,8 @@
   "engines": {
     "wordcraft": {
       "repo": "https://github.com/storytold/wordcraft.git",
-      "tag": "v0.18.1",
-      "commit": "079f478bd85df7bcc567e3bafa7d7219096f9c3c"
+      "tag": "v0.19.1",
+      "commit": "5d658dc033f3139926839bffd6ae0eef558c210c"
     },
     "gridcraft": {
       "repo": "https://github.com/storytold/gridcraft.git",
@@ -14,13 +14,13 @@
     },
     "deckcraft": {
       "repo": "https://github.com/storytold/deckcraft.git",
-      "tag": "v0.18.1",
-      "commit": "7cc73ab1895ed2e30c8afbcada20c70b9ea0a440"
+      "tag": "v0.19.1",
+      "commit": "4a980c33ddf37eb64157777fcaeab6d19baa5878"
     },
     "pdfcraft": {
       "repo": "https://github.com/storytold/pdfcraft.git",
-      "tag": "v0.21.1",
-      "commit": "b503b2e62dfeec5598f344e4e287d9c9cbdb34fa"
+      "tag": "v0.22.0",
+      "commit": "ac140f809d554981a5276d748e6193fcf4d4bdfa"
     }
   }
 }

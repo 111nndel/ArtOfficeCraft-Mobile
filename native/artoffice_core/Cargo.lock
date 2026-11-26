@@ -69,7 +69,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "artoffice_core"
-version = "0.59.0"
+version = "0.61.0"
 dependencies = [
  "deckcraft-model",
  "deckcraft-pptx",
@@ -216,21 +216,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "cfb"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f13298d9178622b7916ec5d01d470425c04273c8ed07e87b1c38b34c4f4612b"
-dependencies = [
- "fnv",
- "uuid",
- "web-time",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+
+[[package]]
+name = "cfg_aliases"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "chacha20"
@@ -286,6 +281,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
+name = "constant_time_eq"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "144e7f1de087984240b7816d47f698b414979faa6f40839c5b86d6bd47db57b7"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -310,6 +314,213 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "craft-cfb"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1#8048f8ef92da80fb3ce5a056d59ca591ee66faf1"
+
+[[package]]
+name = "craft-cfb"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+
+[[package]]
+name = "craft-codepage"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+
+[[package]]
+name = "craft-docx"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "base64",
+ "chrono",
+ "craft-drawingml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "craft-math",
+ "craft-offcrypto",
+ "craft-opc 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "craft-wordmodel",
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "log",
+ "quick-xml",
+ "thiserror 2.0.21",
+ "unicode-bidi",
+ "zeroize",
+]
+
+[[package]]
+name = "craft-drawingml"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1#8048f8ef92da80fb3ce5a056d59ca591ee66faf1"
+dependencies = [
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "kurbo",
+ "log",
+ "serde",
+]
+
+[[package]]
+name = "craft-drawingml"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "kurbo",
+ "log",
+ "serde",
+]
+
+[[package]]
+name = "craft-math"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "serde",
+]
+
+[[package]]
+name = "craft-offcrypto"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "aes",
+ "base64",
+ "craft-cfb 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "getrandom 0.3.4",
+ "hmac",
+ "sha1",
+ "sha2",
+ "thiserror 2.0.21",
+ "zeroize",
+]
+
+[[package]]
+name = "craft-opc"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1#8048f8ef92da80fb3ce5a056d59ca591ee66faf1"
+dependencies = [
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "craft-zip 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "log",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "craft-opc"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "craft-zip 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "log",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "craft-pdf"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=9eb02be84f21898e247daeb2af5827c9fe85a3a0#9eb02be84f21898e247daeb2af5827c9fe85a3a0"
+dependencies = [
+ "aes",
+ "bytemuck",
+ "chrono",
+ "craft-stream-codecs",
+ "flate2",
+ "hayro",
+ "hayro-interpret",
+ "hayro-syntax",
+ "js-sys",
+ "md-5",
+ "sha2",
+ "stringprep",
+ "thiserror 2.0.21",
+ "wasm-bindgen",
+ "zeroize",
+]
+
+[[package]]
+name = "craft-pptx"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1#8048f8ef92da80fb3ce5a056d59ca591ee66faf1"
+dependencies = [
+ "craft-drawingml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "craft-opc 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "kurbo",
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "craft-stream-codecs"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=9eb02be84f21898e247daeb2af5827c9fe85a3a0#9eb02be84f21898e247daeb2af5827c9fe85a3a0"
+dependencies = [
+ "fax",
+ "hayro-ccitt",
+ "hayro-jbig2",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "craft-wordmodel"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "base64",
+ "craft-math",
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "craft-xml"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1#8048f8ef92da80fb3ce5a056d59ca591ee66faf1"
+dependencies = [
+ "quick-xml",
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "craft-xml"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "quick-xml",
+ "serde",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "craft-zip"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1#8048f8ef92da80fb3ce5a056d59ca591ee66faf1"
+dependencies = [
+ "flate2",
+ "thiserror 2.0.21",
+ "zip 9.8.2",
+]
+
+[[package]]
+name = "craft-zip"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a#93dac78c93a7f1fd66e2022edeb089233b1dc45a"
+dependencies = [
+ "flate2",
+ "thiserror 2.0.21",
+ "zip 9.8.2",
 ]
 
 [[package]]
@@ -366,23 +577,25 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-color"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
- "serde",
+ "craft-drawingml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
 ]
 
 [[package]]
 name = "deckcraft-geom"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
+ "craft-drawingml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
  "kurbo",
  "serde",
 ]
 
 [[package]]
 name = "deckcraft-model"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
+ "craft-drawingml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
  "deckcraft-color",
  "deckcraft-geom",
  "serde",
@@ -393,15 +606,17 @@ dependencies = [
 
 [[package]]
 name = "deckcraft-pptx"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
+ "craft-cfb 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "craft-drawingml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "craft-opc 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
+ "craft-pptx",
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=8048f8ef92da80fb3ce5a056d59ca591ee66faf1)",
  "deckcraft-color",
  "deckcraft-geom",
  "deckcraft-model",
- "log",
- "quick-xml",
  "thiserror 2.0.21",
- "zip",
 ]
 
 [[package]]
@@ -536,12 +751,6 @@ dependencies = [
  "miniz_oxide 0.9.1",
  "zlib-rs",
 ]
-
-[[package]]
-name = "fnv"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foldhash"
@@ -764,7 +973,7 @@ dependencies = [
  "sha1",
  "sha2",
  "thiserror 2.0.21",
- "zip",
+ "zip 3.0.0",
 ]
 
 [[package]]
@@ -800,6 +1009,7 @@ dependencies = [
 [[package]]
 name = "hayro"
 version = "0.7.1"
+source = "git+https://github.com/storytold/craft-libs?rev=9eb02be84f21898e247daeb2af5827c9fe85a3a0#9eb02be84f21898e247daeb2af5827c9fe85a3a0"
 dependencies = [
  "bytemuck",
  "hayro-interpret",
@@ -819,6 +1029,7 @@ checksum = "9f4d0e94ddd48749f06bbe4e5389fb9799a0c45bcaf00495042076ef05e3241a"
 [[package]]
 name = "hayro-cmap"
 version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=9eb02be84f21898e247daeb2af5827c9fe85a3a0#9eb02be84f21898e247daeb2af5827c9fe85a3a0"
 dependencies = [
  "brotli",
  "hayro-postscript",
@@ -827,6 +1038,7 @@ dependencies = [
 [[package]]
 name = "hayro-interpret"
 version = "0.7.0"
+source = "git+https://github.com/storytold/craft-libs?rev=9eb02be84f21898e247daeb2af5827c9fe85a3a0#9eb02be84f21898e247daeb2af5827c9fe85a3a0"
 dependencies = [
  "bitflags",
  "hayro-cmap",
@@ -844,10 +1056,10 @@ dependencies = [
 [[package]]
 name = "hayro-jbig2"
 version = "0.3.0"
+source = "git+https://github.com/storytold/craft-libs?rev=9eb02be84f21898e247daeb2af5827c9fe85a3a0#9eb02be84f21898e247daeb2af5827c9fe85a3a0"
 dependencies = [
  "fearless_simd",
  "hayro-ccitt",
- "image",
 ]
 
 [[package]]
@@ -862,10 +1074,12 @@ dependencies = [
 [[package]]
 name = "hayro-postscript"
 version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=e7873217287876f76a045550369c90a541693c33#e7873217287876f76a045550369c90a541693c33"
 
 [[package]]
 name = "hayro-syntax"
 version = "0.7.2"
+source = "git+https://github.com/storytold/craft-libs?rev=9eb02be84f21898e247daeb2af5827c9fe85a3a0#9eb02be84f21898e247daeb2af5827c9fe85a3a0"
 dependencies = [
  "flate2",
  "hayro-ccitt",
@@ -1239,6 +1453,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
+name = "nix"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77730ed34f01f4990cb2ea67fec715ecebc6fab9a6396cf83c5529b13f581bdc"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nom"
 version = "8.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1264,7 +1490,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "pdfcraft-annot"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "pdfcraft-cos",
  "pdfcraft-fonts",
@@ -1275,39 +1501,21 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-content"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
- "hayro-syntax",
- "pdfcraft-cos",
+ "craft-pdf",
 ]
 
 [[package]]
 name = "pdfcraft-cos"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
- "chrono",
- "js-sys",
- "pdfcraft-crypt",
- "pdfcraft-filters",
- "thiserror 2.0.21",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "pdfcraft-crypt"
-version = "0.21.1"
-dependencies = [
- "aes",
- "md-5",
- "sha2",
- "stringprep",
- "thiserror 2.0.21",
- "zeroize",
+ "craft-pdf",
 ]
 
 [[package]]
 name = "pdfcraft-edit"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "icu_segmenter",
  "kurbo",
@@ -1322,20 +1530,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "pdfcraft-filters"
-version = "0.21.1"
-dependencies = [
- "fax",
- "flate2",
- "hayro-ccitt",
- "hayro-jbig2",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "pdfcraft-fonts"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
+ "craft-pdf",
  "harfrust",
  "pdfcraft-cos",
  "skrifa 0.44.0",
@@ -1344,18 +1542,18 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-geom"
-version = "0.21.1"
+version = "0.22.0"
 
 [[package]]
 name = "pdfcraft-model"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "pdfcraft-cos",
 ]
 
 [[package]]
 name = "pdfcraft-organize"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
@@ -1364,12 +1562,11 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-render"
-version = "0.21.1"
+version = "0.22.0"
 dependencies = [
  "bytemuck",
+ "craft-pdf",
  "getrandom 0.4.3",
- "hayro",
- "hayro-syntax",
  "kurbo",
  "log",
  "lopdf",
@@ -2025,6 +2222,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2089,16 +2292,6 @@ name = "utf_types"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a3b425286980a367278453f3b6d28cdcb134b574e5a35824a6ff5eebad50bb6"
-
-[[package]]
-name = "uuid"
-version = "1.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
 
 [[package]]
 name = "vello_common"
@@ -2272,6 +2465,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-sys"
+version = "0.61.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+dependencies = [
+ "windows-link",
+]
+
+[[package]]
 name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2279,9 +2481,11 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wordcraft-doc"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
  "base64",
+ "craft-codepage",
+ "craft-zip 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
  "log",
  "serde",
  "serde_json",
@@ -2292,29 +2496,19 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docx"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
- "aes",
- "base64",
- "cfb",
- "chrono",
- "getrandom 0.3.4",
- "hmac",
- "log",
- "quick-xml",
- "sha1",
- "sha2",
- "thiserror 2.0.21",
- "unicode-bidi",
+ "craft-docx",
+ "craft-wordmodel",
+ "craft-xml 0.1.0 (git+https://github.com/storytold/craft-libs?rev=93dac78c93a7f1fd66e2022edeb089233b1dc45a)",
+ "serde",
+ "serde_json",
  "wordcraft-doc",
- "wordcraft-geom",
- "zeroize",
- "zip",
 ]
 
 [[package]]
 name = "wordcraft-geom"
-version = "0.18.1"
+version = "0.19.1"
 dependencies = [
  "serde",
 ]
@@ -2374,6 +2568,20 @@ name = "zeroize"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "zerotrie"
@@ -2422,6 +2630,25 @@ dependencies = [
  "indexmap",
  "memchr",
  "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "9.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d8dbe089cf6b0448b78f5fc50139ab5aaa40d08ac07cdc1baf2c13add35fcce"
+dependencies = [
+ "constant_time_eq",
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap",
+ "libc",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys",
+ "zeroize",
 ]
 
 [[package]]

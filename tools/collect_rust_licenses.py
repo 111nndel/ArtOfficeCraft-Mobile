@@ -30,7 +30,7 @@ def collect(metadata):
         root=Path(pkg['manifest_path']).parent
         candidates=[]
         if pkg.get('license_file'): candidates.append(Path(pkg['license_file']))
-        if pkg['name']=='hayro-interpret' and pkg.get('source') is None:
+        if pkg['name']=='hayro-interpret':
             # Embedded standard-font substitutes and CMYK profile have their own
             # notices below the crate root; retain the original attribution too.
             for name in ('LICENSE_FOXIT', 'CGATS_LICENSE.txt', 'README.md'):
@@ -47,8 +47,10 @@ def collect(metadata):
             for file in folder.iterdir():
                 if file.is_file() and re.search(r'licen[cs]e|copying|notice|copyright',file.name,re.I):
                     candidates.append(file)
-            # Registry packages carry their own text; never borrow a sibling's license.
-            if pkg.get('source'): break
+            # Registry packages carry their own text. A Git checkout can use
+            # repository-wide notices, but the search stops at its root.
+            if (pkg.get('source') or '').startswith('registry+') or (folder/'.git').exists():
+                break
         texts=[];seen=set()
         for file in candidates:
             if not file.is_file() or file.stat().st_size>2*1024*1024:continue

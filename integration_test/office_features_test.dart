@@ -886,6 +886,49 @@ void main() {
     },
   );
 
+  testWidgets('PowerPoint speaker notes edit, undo and export with embedded media', (
+    tester,
+  ) async {
+    final backend = NativeDocumentBackend(NativeDocumentKind.deck);
+    addTearDown(backend.close);
+    final original = await backend.edit(workerMediaDeck, {
+      'action': 'edit_notes',
+      'slide': 0,
+      'text': 'Первая заметка.\nSecond line.',
+    });
+    await present(
+      tester,
+      NativeDeckScreen(
+        backend: backend,
+        launch: EditorLaunch(bytes: original, name: 'Notes.pptx'),
+      ),
+    );
+    final tools = tester.state<EditorToolPanelState>(find.byType(EditorToolPanel));
+    final show = panel(tester).sections.indexWhere((s) => s.label == 'Показ');
+    tools.openTool(show, []);
+    await tester.pumpAndSettle();
+    await press(tester, 'Заметки');
+    await tester.pumpAndSettle();
+    final input = find.byKey(const Key('deck-text-input'));
+    expect(tester.widget<TextField>(input).controller!.text, 'Первая заметка.\nSecond line.');
+    await tester.enterText(input, 'Первая заметка.\nНовая строка.');
+    await press(tester, 'Применить');
+    await until(tester, () => panel(tester).undo != null, 'speaker notes edited');
+
+    final saved = await save(tester, 'Сохранить копию PPTX');
+    final report = await backend.inspect(saved);
+    expect(report['slides'][0]['notes'], 'Первая заметка.\nНовая строка.');
+    final picture = (report['slides'][1]['shapes'] as List).firstWhere(
+      (s) => s['imageId'] != null,
+    );
+    expect(await backend.image(saved, 1, picture['imageId'] as int), workerMediaPng);
+    await history(tester, true);
+    final undone = await backend.inspect(await save(tester, 'Сохранить копию PPTX'));
+    expect(undone['slides'][0]['notes'], 'Первая заметка.\nSecond line.');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('PDF text notes persist with Unicode and are restored by redo', (
     tester,
   ) async {

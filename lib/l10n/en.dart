@@ -457,6 +457,8 @@ const english = <String, String>{
   "Показ": "Slide show",
   "С начала": "From beginning",
   "С текущего": "From current slide",
+  "Заметки к слайду": "Speaker notes",
+  "Заметки слишком объёмны для редактирования.": "These notes are too large to edit.",
   "Заметки": "Notes",
   "Режим докладчика": "Presenter view",
   "Порядок слайдов": "Slide order",

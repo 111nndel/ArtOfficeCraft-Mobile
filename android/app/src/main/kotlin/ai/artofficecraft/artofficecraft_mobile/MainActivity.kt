@@ -13,15 +13,19 @@ import java.util.concurrent.Executors
 
 /** Android storage, clipboard, incoming URI grants and installer handoff only. */
 class MainActivity : FlutterActivity() {
+    private val workspaceChannel = "artofficecraft/workspace"
+    private val readingChannel = "artofficecraft/reading"
+    private val clipboardChannel = "artofficecraft/grid_clipboard"
     private val worker = Executors.newSingleThreadExecutor()
     private var incomingDocuments: IncomingDocuments? = null
     private var appUpdates: AppUpdates? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        incomingDocuments = IncomingDocuments(this, flutterEngine.dartExecutor.binaryMessenger, worker).also { it.accept(intent) }
-        appUpdates = AppUpdates(this, flutterEngine.dartExecutor.binaryMessenger, worker)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/workspace")
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        incomingDocuments = IncomingDocuments(this, messenger, worker).also { it.accept(intent) }
+        appUpdates = AppUpdates(this, messenger, worker)
+        MethodChannel(messenger, workspaceChannel)
             .setMethodCallHandler { call, result ->
                 if (call.method == "directory") {
                     try {
@@ -32,7 +36,7 @@ class MainActivity : FlutterActivity() {
                 } else result.notImplemented()
             }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/reading")
+        MethodChannel(messenger, readingChannel)
             .setMethodCallHandler { call, result ->
                 val format = call.argument<String>("format")
                 if (format != "pdf" && format != "deck") {
@@ -45,7 +49,7 @@ class MainActivity : FlutterActivity() {
                 else result.notImplemented()
             }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "artofficecraft/grid_clipboard")
+        MethodChannel(messenger, clipboardChannel)
             .setMethodCallHandler { call, result ->
                 try {
                     val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -84,10 +88,20 @@ class MainActivity : FlutterActivity() {
         incomingDocuments?.accept(intent)
     }
 
-    override fun onDestroy() {
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        for (name in listOf(workspaceChannel, readingChannel, clipboardChannel)) {
+            MethodChannel(messenger, name).setMethodCallHandler(null)
+        }
         incomingDocuments?.close()
+        incomingDocuments = null
         appUpdates?.close()
-        worker.shutdown()
+        appUpdates = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    override fun onDestroy() {
         super.onDestroy()
+        worker.shutdown()
     }
 }

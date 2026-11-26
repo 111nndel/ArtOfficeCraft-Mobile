@@ -322,7 +322,19 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       beginText('Заголовок нового слайда', {'action': 'add_slide'});
   void insertText() =>
       beginText('Новый текстовый блок', {'action': 'add_text', 'slide': index});
-  void changeText(Map<String, dynamic> shape) => beginText('Изменить текст', {
+  void editNotes() {
+    final notes = slides[index]['notes'];
+    if (notes is! String) {
+      message('Заметки слишком объёмны для редактирования.');
+      return;
+    }
+    beginText('Заметки к слайду', {
+      'action': 'edit_notes',
+      'slide': index,
+    }, initial: notes);
+  }
+
+  void changeText(Map shape) => beginText('Изменить текст', {
     'action': 'edit_text',
     'slide': index,
     'shape': shape['id'],
@@ -561,9 +573,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final slideNumber = slideIndex ?? index;
     final current = slides[slideNumber];
     final raw = current['shapes'];
-    final shapes = raw is List
-        ? raw.whereType<Map>().map((x) => Map<String, dynamic>.from(x)).toList()
-        : <Map<String, dynamic>>[];
+    final shapes = raw is List ? raw.whereType<Map>() : const <Map>[];
     final interactive = slideIndex == null || allowEdit;
     final editing = interactive && slideNumber == index && objectEditing;
     return AspectRatio(
@@ -613,7 +623,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   }
 
   Widget resizeHandle(
-    Map<String, dynamic> shape,
+    Map shape,
     Rect rect,
     double w,
     double h,
@@ -677,7 +687,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
   }
 
   Widget _paintShape(
-    Map<String, dynamic> shape,
+    Map shape,
     double width,
     double height, {
     required int slide,
@@ -819,7 +829,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
     final edit = state['textEdit'];
     if (edit != null) {
       final request = Map<String, dynamic>.from(edit as Map);
-      if (!['add_text', 'add_slide', 'edit_text'].contains(request['action'])) {
+      if (!const {'add_text', 'add_slide', 'edit_text', 'edit_notes'}.contains(request['action'])) {
         throw const FormatException('Неизвестный текстовый черновик.');
       }
       textEdit = request;
@@ -901,7 +911,12 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   minLines: 2,
                   maxLines: 4,
                   decoration: InputDecoration(
-                    hintText: tr(context, 'Текст на слайде'),
+                    hintText: tr(
+                      context,
+                      textEdit?['action'] == 'edit_notes'
+                          ? 'Заметки к слайду'
+                          : 'Текст на слайде',
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -938,7 +953,7 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
                   onPressed: busy
                       ? null
                       : () =>
-                            changeText(Map<String, dynamic>.from(shape as Map)),
+                            changeText(shape as Map),
                 ),
             ],
           ),
@@ -951,6 +966,11 @@ class _NativeDeckScreenState extends State<NativeDeckScreen> {
       },
       exclude: {'Текст'},
       overrides: {
+        'Заметки': EditorTool(
+          'Заметки',
+          Icons.speaker_notes_outlined,
+          onPressed: busy ? null : editNotes,
+        ),
         'Масштаб': EditorTool(
           'Масштаб',
           Icons.zoom_in,
