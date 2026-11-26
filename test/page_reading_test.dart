@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:artofficecraft_mobile/native/native_deck_screen.dart';
 import 'package:artofficecraft_mobile/native/native_pdf_screen.dart';
+
 import 'pdf_session_lifetime_test.dart' show MemoryPdfRenderer;
+
 import 'package:artofficecraft_mobile/platform/application_storage.dart';
 import 'package:artofficecraft_mobile/ui/page_reading.dart';
 import 'package:artofficecraft_mobile/ui/pdf_viewport.dart';
@@ -100,6 +102,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Страница 2 из 40'), findsOneWidget);
     expect(renders, contains(1));
+
+    await tool(tester, 'Чтение', 'Прокрутка по страницам');
+    final slider = find.byKey(const Key('reader-jump-slider'));
+    tester.widget<Slider>(slider).onChanged!(27);
+    await tester.pump();
+    expect(find.text('27 / 40'), findsOneWidget);
+    expect(find.text('Страница 2 из 40'), findsOneWidget);
+    tester.widget<Slider>(slider).onChangeEnd!(27);
+    await tester.pumpAndSettle();
+    expect(find.text('Страница 27 из 40'), findsOneWidget);
+    expect(renders, contains(26));
     expect(tester.takeException(), isNull);
   });
 

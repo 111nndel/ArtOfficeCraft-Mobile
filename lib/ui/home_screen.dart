@@ -233,14 +233,24 @@ class _HomeScreenState extends State<HomeScreen> {
           'Не удалось записать локальный черновик. Сохраните копию через меню файла.',
         ),
       );
+      // The first callback for a workspace launch reports a successful open.
+      // Later saves, and files picked inside the editor, carry document bytes.
+      var reopened = entry;
       void documentChanged() {
+        reopened = null;
         documentSession.startDocument();
         session?.workspaceId = null;
       }
 
       Future<void> remember(Uint8List bytes, String name) async {
-        await documentSession.remember(bytes, name);
-        session?.workspaceId = documentSession.id;
+        final opened = reopened;
+        reopened = null;
+        if (opened != null) {
+          await store.markOpened(opened);
+        } else {
+          await documentSession.remember(bytes, name);
+          session?.workspaceId = documentSession.id;
+        }
       }
 
       final screen = switch (kind) {

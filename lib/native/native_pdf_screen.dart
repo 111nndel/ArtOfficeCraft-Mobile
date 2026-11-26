@@ -929,6 +929,13 @@ class _NativePdfScreenState extends State<NativePdfScreen> {
             count: pages.length,
             onJump: busy ? null : jumpToPage,
           ),
+          pageSliderTool(
+            label: 'Прокрутка по страницам',
+            fieldLabel: 'Номер страницы',
+            current: selected,
+            count: pages.length,
+            onJump: busy ? null : jumpToPage,
+          ),
           EditorTool(
             'Предыдущая',
             Icons.chevron_left,

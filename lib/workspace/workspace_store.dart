@@ -167,13 +167,32 @@ class WorkspaceStore extends ChangeNotifier {
     final tmp = File('${file.path}.tmp');
     await tmp.writeAsBytes(bytes, flush: true);
     await tmp.rename(file.path);
+    await _saveRecent(root, entry);
+    return entry;
+  });
+
+  /// The editor has validated a copy read from this workspace. Update its
+  /// position in Recents without rewriting the document.
+  Future<void> markOpened(WorkspaceFile file) => _serialize(() async {
+    _requireWritable();
+    final current = _files
+        .where((entry) => entry.id == file.id && entry.kind == file.kind)
+        .firstOrNull;
+    if (current == null) throw StateError('Workspace copy has no index entry');
+    await _saveRecent(
+      await _root(),
+      current.copyWith(modified: DateTime.now(), recent: true),
+    );
+  });
+
+  Future<void> _saveRecent(Directory root, WorkspaceFile entry) async {
     final next = [..._files.where((f) => f.id != entry.id), entry]
       ..sort(_newestFirst);
     await _writeIndex(root, next);
     _files = List.unmodifiable(next);
     notifyListeners();
-    return entry;
-  });
+  }
+
   Future<void> toggleFavorite(WorkspaceFile file) => _serialize(() async {
     _requireWritable();
     final index = _files.indexWhere((entry) => entry.id == file.id);

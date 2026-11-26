@@ -20,13 +20,21 @@ void worker((SendPort, Map<String, Object?>) args) {
     final request = payload as Map;
     switch (request['op']) {
       case 'open':
-        if (ascii.decode(request['bytes'] as Uint8List).contains('reject')) {
+        if (ascii
+            .decode(
+              (request['bytes'] as TransferableTypedData)
+                  .materialize()
+                  .asUint8List(),
+            )
+            .contains('reject')) {
           throw const FormatException('Unsupported PDF document');
         }
         sessions.add(++next);
-        return Uint8List.fromList(
-          utf8.encode(jsonEncode({'session': next, 'pageCount': 4})),
-        );
+        return TransferableTypedData.fromList([
+          Uint8List.fromList(
+            utf8.encode(jsonEncode({'session': next, 'pageCount': 4})),
+          ),
+        ]);
       case 'close':
         if (!sessions.remove(request['session'])) {
           throw StateError('Double close');
@@ -43,7 +51,7 @@ void worker((SendPort, Map<String, Object?>) args) {
         if (request['page'] == 2) {
           await Future<void>.delayed(const Duration(milliseconds: 40));
         }
-        return image();
+        return TransferableTypedData.fromList([image()]);
       default:
         throw StateError('Unexpected operation');
     }

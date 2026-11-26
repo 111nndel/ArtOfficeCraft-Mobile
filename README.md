@@ -2,7 +2,7 @@
 
 An independent, experimental offline Android office app using Flutter/Dart and native Rust engines.
 
-**Current preview — alpha 0.59.0.**
+**Current preview — alpha 0.60.0.**
 
 [Download Android previews](https://github.com/111nndel/ArtOfficeCraft-Mobile/releases)
 · [Contribute or fork this app](CONTRIBUTING.md)
@@ -53,7 +53,10 @@ Formulas menu inserts AVERAGE, COUNT, MIN and MAX for adjacent numbers. PowerPoi
 can search titles and text boxes across slides. PDF and PowerPoint can jump to the
 beginning or end from the page or slide number panel. Files and Favorites remember
 their shared sort order across restarts.
-See the [0.59.0 release notes and limits](docs/release-0.59.0-alpha.1.md).
+Reopening a workspace copy updates Recents without rewriting the document.
+PDF and PowerPoint include a slider for jumping to a page or slide.
+PowerPoint loads embedded images as they come into view and decodes smaller thumbnails.
+See the [0.60.0 release notes and limits](docs/release-0.60.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See
 [Android CI coverage and evidence](docs/android-ci.md).

@@ -126,6 +126,68 @@ class _PageJumpState extends State<_PageJump> {
   );
 }
 
+EditorTool pageSliderTool({
+  required String label,
+  required String fieldLabel,
+  required int current,
+  required int count,
+  required ValueChanged<int>? onJump,
+}) => EditorTool(
+  label,
+  Icons.linear_scale,
+  builder: (_) => _PageSlider(
+    fieldLabel: fieldLabel,
+    current: current,
+    count: count,
+    onJump: onJump,
+  ),
+);
+
+class _PageSlider extends StatefulWidget {
+  const _PageSlider({
+    required this.fieldLabel,
+    required this.current,
+    required this.count,
+    required this.onJump,
+  });
+
+  final String fieldLabel;
+  final int current, count;
+  final ValueChanged<int>? onJump;
+
+  @override
+  State<_PageSlider> createState() => _PageSliderState();
+}
+
+class _PageSliderState extends State<_PageSlider> {
+  int? position;
+
+  @override
+  Widget build(BuildContext context) {
+    final max = math.max(1, widget.count);
+    final page = (position ?? widget.current + 1).clamp(1, max);
+    final jump = widget.onJump;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(child: UiText('$page / ${widget.count}')),
+        Slider(
+          key: const Key('reader-jump-slider'),
+          min: 1,
+          max: max.toDouble(),
+          divisions: max >= 2 && max <= 50 ? max - 1 : null,
+          value: page.toDouble(),
+          semanticFormatterCallback: (value) =>
+              '${tr(context, widget.fieldLabel)} ${value.round()}',
+          onChanged: jump == null || max == 1
+              ? null : (value) => setState(() => position = value.round()),
+          onChangeEnd: jump == null ? null : (value) => jump(value.round() - 1),
+        ),
+      ],
+    );
+  }
+}
+
 enum ReadingMode {
   horizontal,
   vertical,
