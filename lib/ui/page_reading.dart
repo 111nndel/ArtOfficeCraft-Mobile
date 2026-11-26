@@ -56,8 +56,6 @@ class _PageJumpState extends State<_PageJump> {
   late final input = TextEditingController(text: '${widget.current + 1}');
   bool invalid = false;
 
-  int get number => int.tryParse(input.text.trim()) ?? widget.current + 1;
-
   @override
   void dispose() {
     input.dispose();
@@ -98,23 +96,6 @@ class _PageJumpState extends State<_PageJump> {
           ),
         ],
       ),
-      if (widget.count > 1)
-        Slider(
-          key: const Key('reader-jump-slider'),
-          min: 1,
-          max: widget.count.toDouble(),
-          divisions: widget.count <= 200 ? widget.count - 1 : null,
-          value: number.clamp(1, widget.count).toDouble(),
-          semanticFormatterCallback: (value) =>
-              '${tr(context, widget.fieldLabel)} ${value.round()}',
-          onChanged: widget.onJump == null
-              ? null
-              : (value) => setState(() {
-                  input.text = '${value.round()}';
-                  invalid = false;
-                }),
-          onChangeEnd: (value) => go(value.round() - 1),
-        ),
       const SizedBox(height: 8),
       TextField(
         key: const Key('reader-jump-number'),
@@ -130,7 +111,9 @@ class _PageJumpState extends State<_PageJump> {
               ? tr(context, 'Введите число от 1 до ${widget.count}')
               : null,
         ),
-        onChanged: (_) => setState(() => invalid = false),
+        onChanged: (_) {
+          if (invalid) setState(() => invalid = false);
+        },
         onSubmitted: (_) => jump(),
       ),
       const SizedBox(height: 12),
@@ -141,6 +124,68 @@ class _PageJumpState extends State<_PageJump> {
       ),
     ],
   );
+}
+
+EditorTool pageSliderTool({
+  required String label,
+  required String fieldLabel,
+  required int current,
+  required int count,
+  required ValueChanged<int>? onJump,
+}) => EditorTool(
+  label,
+  Icons.linear_scale,
+  builder: (_) => _PageSlider(
+    fieldLabel: fieldLabel,
+    current: current,
+    count: count,
+    onJump: onJump,
+  ),
+);
+
+class _PageSlider extends StatefulWidget {
+  const _PageSlider({
+    required this.fieldLabel,
+    required this.current,
+    required this.count,
+    required this.onJump,
+  });
+
+  final String fieldLabel;
+  final int current, count;
+  final ValueChanged<int>? onJump;
+
+  @override
+  State<_PageSlider> createState() => _PageSliderState();
+}
+
+class _PageSliderState extends State<_PageSlider> {
+  int? position;
+
+  @override
+  Widget build(BuildContext context) {
+    final max = math.max(1, widget.count);
+    final page = (position ?? widget.current + 1).clamp(1, max);
+    final jump = widget.onJump;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(child: UiText('$page / ${widget.count}')),
+        Slider(
+          key: const Key('reader-jump-slider'),
+          min: 1,
+          max: max.toDouble(),
+          divisions: max >= 2 && max <= 50 ? max - 1 : null,
+          value: page.toDouble(),
+          semanticFormatterCallback: (value) =>
+              '${tr(context, widget.fieldLabel)} ${value.round()}',
+          onChanged: jump == null || max == 1
+              ? null : (value) => setState(() => position = value.round()),
+          onChangeEnd: jump == null ? null : (value) => jump(value.round() - 1),
+        ),
+      ],
+    );
+  }
 }
 
 enum ReadingMode {

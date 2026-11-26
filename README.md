@@ -55,7 +55,7 @@ beginning or end from the page or slide number panel. Files and Favorites rememb
 their shared sort order across restarts.
 Reopening a workspace copy updates Recents without rewriting the document.
 PDF and PowerPoint include a slider for jumping to a page or slide.
-PowerPoint loads embedded images as they come into view and sizes thumbnail decodes.
+PowerPoint loads embedded images as they come into view and decodes smaller thumbnails.
 See the [0.60.0 release notes and limits](docs/release-0.60.0-alpha.1.md).
 The workflow also runs the editors on an Android 16 emulator hosted by GitHub;
 future tagged publication requires that job to pass. See

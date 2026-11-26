@@ -1421,7 +1421,7 @@ void main() {
       await press(tester, 'Перейти в начало');
       await tester.pumpAndSettle();
       expect(find.text('Слайд 1 из 5'), findsOneWidget);
-      await tool(tester, 'Вид', 'Перейти к слайду');
+      await tool(tester, 'Вид', 'Прокрутка по слайдам');
       final pageSlider = find.byKey(const Key('reader-jump-slider'));
       await tester.ensureVisible(pageSlider);
       await tester.tap(pageSlider);

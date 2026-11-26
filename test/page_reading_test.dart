@@ -103,11 +103,11 @@ void main() {
     expect(find.text('Страница 2 из 40'), findsOneWidget);
     expect(renders, contains(1));
 
-    await tool(tester, 'Чтение', 'Перейти к странице');
+    await tool(tester, 'Чтение', 'Прокрутка по страницам');
     final slider = find.byKey(const Key('reader-jump-slider'));
     tester.widget<Slider>(slider).onChanged!(27);
     await tester.pump();
-    expect(tester.widget<TextField>(number).controller!.text, '27');
+    expect(find.text('27 / 40'), findsOneWidget);
     expect(find.text('Страница 2 из 40'), findsOneWidget);
     tester.widget<Slider>(slider).onChangeEnd!(27);
     await tester.pumpAndSettle();
