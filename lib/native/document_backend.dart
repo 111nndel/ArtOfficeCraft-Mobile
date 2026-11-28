@@ -524,6 +524,7 @@ void _documentWorkerMain((SendPort, Map<String, Object?>) bootstrap) {
         grid ? 'gridInspect' : 'inspect',
         next,
         grid ? Map<String, dynamic>.from(request['view'] as Map) : const {},
+        cacheDeckImages: false,
       );
       return {
         'bytes': TransferableTypedData.fromList([next]),
@@ -544,12 +545,20 @@ class _NativeEngine {
   Object? _bridge;
   int? _gridReader;
   WeakReference<Uint8List>? _gridInput;
+  int? _deckReader;
+  WeakReference<Uint8List>? _deckInput;
 
   void close() {
     final reader = _gridReader;
     _gridReader = null;
     _gridInput = null;
     if (reader != null) (_bridge as GridCraftBridge).closeReader(reader);
+    final deckReader = _deckReader;
+    _deckReader = null;
+    _deckInput = null;
+    if (deckReader != null) {
+      (_bridge as DeckCraftBridge).closeImageReader(deckReader);
+    }
   }
 
   Map<String, dynamic> _gridView(
@@ -605,8 +614,9 @@ class _NativeEngine {
   Object call(
     String operation,
     Uint8List? bytes,
-    Map<String, dynamic> request,
-  ) {
+    Map<String, dynamic> request, {
+    bool cacheDeckImages = true,
+  }) {
     final bridge = _bridge ??= _open();
     switch (kind) {
       case NativeDocumentKind.word:
@@ -631,15 +641,39 @@ class _NativeEngine {
         return engine.edit(bytes!, request);
       case NativeDocumentKind.deck:
         final engine = bridge as DeckCraftBridge;
-        if (operation == 'create') return engine.create();
-        if (operation == 'inspect') return engine.inspect(bytes!);
         if (operation == 'image') {
-          return engine.image(
-            bytes!,
-            request['slide'] as int,
-            request['media'] as int,
-          );
+          final input = bytes!;
+          final slide = request['slide'] as int;
+          final media = request['media'] as int;
+          if (slide < 0 || media < 0 || !engine.supportsImageReader) {
+            return engine.image(input, slide, media);
+          }
+          if (!identical(_deckInput?.target, input)) {
+            close();
+            _deckReader = engine.openImageReader(input, preview: false).session;
+            _deckInput = WeakReference(input);
+          }
+          final reader = _deckReader;
+          return (reader == null
+                  ? null
+                  : engine.readImage(reader, slide, media)) ??
+              engine.image(input, slide, media);
         }
+        if (operation == 'inspect') {
+          final input = bytes!;
+          if (cacheDeckImages &&
+              engine.supportsImageReader &&
+              !identical(_deckInput?.target, input)) {
+            close();
+            final opened = engine.openImageReader(input, preview: true);
+            _deckReader = opened.session;
+            _deckInput = WeakReference(input);
+            return opened.preview!;
+          }
+          return engine.inspect(input);
+        }
+        close();
+        if (operation == 'create') return engine.create();
         return engine.edit(bytes!, request);
       case NativeDocumentKind.pdf:
         final engine = bridge as PdfCraftBridge;
