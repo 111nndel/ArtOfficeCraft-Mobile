@@ -771,9 +771,30 @@ void main() {
       expect(backend.workerStarts, 1);
       expect(backend.inputTransfers, 1);
       await tester.pumpWidget(const SizedBox.shrink());
+      final moved = await backend.editInspected(file, {
+        'action': 'move_slide',
+        'slide': 1,
+        'to': 0,
+      });
+      final movedShapes = moved.preview['slides'][0]['shapes'] as List;
+      final movedId =
+          movedShapes.firstWhere((shape) => shape['imageId'] is int)['imageId']
+              as int;
+      expect(
+        await backend.image(moved.bytes, 0, movedId),
+        orderedEquals(workerMediaPng),
+      );
+      await expectLater(
+        backend.image(moved.bytes, 1, movedId),
+        throwsFormatException,
+      );
+      expect(
+        await backend.image(file, 1, media),
+        orderedEquals(workerMediaPng),
+      );
       await backend.close();
       debugPrint(
-        'WORKER_MEDIA starts=1 inputTransfers=1 exactPNG=verified authorization=verified',
+        'WORKER_MEDIA starts=1 inputTransfers=1 exactPNG=verified authorization=verified snapshotSwitch=verified',
       );
     },
   );

@@ -18,7 +18,8 @@ class DeckSearchPanel extends StatefulWidget {
 
 class _DeckSearchPanelState extends State<DeckSearchPanel> {
   String query = '';
-  List<({int slide, String text})> matches = const [];
+  bool includeNotes = false;
+  List<({int slide, String text, bool inNotes})> matches = const [];
 
   @override
   void didUpdateWidget(DeckSearchPanel oldWidget) {
@@ -38,15 +39,21 @@ class _DeckSearchPanelState extends State<DeckSearchPanel> {
     for (var i = 0; i < widget.slides.length; i++) {
       final slide = widget.slides[i];
       final parts = [
-        slide['title'],
+        (slide['title'], false),
         for (final shape
             in (slide['shapes'] as List? ?? const []).whereType<Map>())
-          shape['text'],
+          (shape['text'], false),
+        if (includeNotes) (slide['notes'], true),
       ];
-      for (final text in parts.whereType<String>()) {
+      for (final (text, inNotes) in parts) {
+        if (text is! String) continue;
         final hit = pattern.firstMatch(text);
         if (hit == null) continue;
-        matches.add((slide: i, text: text.substring(hit.start)));
+        matches.add((
+          slide: i,
+          text: text.substring(hit.start),
+          inNotes: inNotes,
+        ));
         break;
       }
     }
@@ -61,6 +68,17 @@ class _DeckSearchPanelState extends State<DeckSearchPanel> {
         decoration: InputDecoration(labelText: tr(context, 'Текст для поиска')),
         onChanged: (input) => setState(() => search(input)),
       ),
+      CheckboxListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: const UiText('Искать в заметках докладчика'),
+        value: includeNotes,
+        onChanged: (value) => setState(() {
+          includeNotes = value == true;
+          search(query);
+        }),
+      ),
       if (widget.slides.any((s) => s['truncated'] == true))
         const UiText('Поиск ограничен первыми 120 объектами каждого слайда.'),
       if (query.isNotEmpty && matches.isEmpty) const UiText('Совпадений нет'),
@@ -74,7 +92,15 @@ class _DeckSearchPanelState extends State<DeckSearchPanel> {
               final hit = matches[i];
               return ListTile(
                 key: ValueKey(('slide-match', hit.slide)),
-                title: UiText('Слайд ${hit.slide + 1}'),
+                title: Row(
+                  children: [
+                    UiText('Слайд ${hit.slide + 1}'),
+                    if (hit.inNotes) ...[
+                      const SizedBox(width: 8),
+                      const Flexible(child: UiText('Заметки')),
+                    ],
+                  ],
+                ),
                 subtitle: Text(
                   hit.text,
                   maxLines: 2,

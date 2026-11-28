@@ -19,12 +19,20 @@ final class DeckCraftBridge {
       _image = library.lookupFunction<NativeCoreTwo, DartCoreTwo>(
         'ac_pptx_image',
       ),
+      _imageReader = library.providesSymbol('ac_pptx_image_reader')
+          ? library.lookupFunction<NativeCoreTwo, DartCoreTwo>(
+              'ac_pptx_image_reader',
+            )
+          : null,
       _memory = NativeCoreMemory(library);
   final DartCoreOne _create;
   final DartCoreOne _inspect;
   final DartCoreTwo _edit;
   final DartCoreTwo _image;
+  final DartCoreTwo? _imageReader;
   final NativeCoreMemory _memory;
+
+  static final _empty = Uint8List(0);
 
   static DeckCraftBridge? tryOpen() {
     try {
@@ -38,7 +46,7 @@ final class DeckCraftBridge {
       DeckCraftBridge._(openNativeCore(libraryPath: path));
 
   Uint8List create() {
-    final p = _memory.allocate(Uint8List(0));
+    final p = _memory.allocate(_empty);
     try {
       return _memory.take(_create(p, 0));
     } finally {
@@ -49,13 +57,7 @@ final class DeckCraftBridge {
   Map<String, dynamic> inspect(Uint8List bytes) {
     final p = _memory.allocate(bytes);
     try {
-      final value = jsonDecode(
-        utf8.decode(_memory.take(_inspect(p, bytes.length))),
-      );
-      if (value is! Map<String, dynamic>) {
-        throw const FormatException('Некорректные данные DeckCraft');
-      }
-      return value;
+      return _object(_memory.take(_inspect(p, bytes.length)));
     } finally {
       _memory.release(p);
     }
@@ -67,27 +69,64 @@ final class DeckCraftBridge {
     if (slide < 0 || mediaId < 0) {
       throw RangeError('Invalid picture reference');
     }
-    final p = _memory.allocate(bytes);
-    final payload = Uint8List.fromList(
-      utf8.encode(jsonEncode(<String, int>{'slide': slide, 'media': mediaId})),
-    );
-    final q = _memory.allocate(payload);
-    try {
-      return _memory.take(_image(p, bytes.length, q, payload.length));
-    } finally {
-      _memory.release(q);
-      _memory.release(p);
-    }
+    return _request(_image, bytes, {'slide': slide, 'media': mediaId});
   }
 
-  Uint8List edit(Uint8List bytes, Map<String, dynamic> request) {
-    final p = _memory.allocate(bytes);
+  bool get supportsImageReader => _imageReader != null;
+
+  ({int? session, Map<String, dynamic>? preview}) openImageReader(
+    Uint8List bytes, {
+    required bool preview,
+  }) {
+    final response = _object(
+      _request(_imageReader!, bytes, {'reader': 'open', 'preview': preview}),
+    );
+    return (
+      session: response['session'] as int?,
+      preview: response['preview'] as Map<String, dynamic>?,
+    );
+  }
+
+  Uint8List? readImage(int session, int slide, int mediaId) {
+    final result = _request(_imageReader!, _empty, {
+      'reader': 'read',
+      'session': session,
+      'slide': slide,
+      'media': mediaId,
+    });
+    return result.isEmpty ? null : result;
+  }
+
+  void closeImageReader(int session) {
+    _request(_imageReader!, _empty, {'reader': 'close', 'session': session});
+  }
+
+  Uint8List edit(Uint8List bytes, Map<String, dynamic> request) =>
+      _request(_edit, bytes, request);
+
+  Map<String, dynamic> _object(Uint8List bytes) {
+    final value = jsonDecode(utf8.decode(bytes));
+    if (value is! Map<String, dynamic>) {
+      throw const FormatException('Некорректные данные DeckCraft');
+    }
+    return value;
+  }
+
+  Uint8List _request(
+    DartCoreTwo operation,
+    Uint8List bytes,
+    Map<String, dynamic> request,
+  ) {
     final payload = Uint8List.fromList(utf8.encode(jsonEncode(request)));
-    final q = _memory.allocate(payload);
+    final p = _memory.allocate(bytes);
     try {
-      return _memory.take(_edit(p, bytes.length, q, payload.length));
+      final q = _memory.allocate(payload);
+      try {
+        return _memory.take(operation(p, bytes.length, q, payload.length));
+      } finally {
+        _memory.release(q);
+      }
     } finally {
-      _memory.release(q);
       _memory.release(p);
     }
   }

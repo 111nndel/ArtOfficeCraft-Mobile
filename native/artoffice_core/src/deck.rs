@@ -1,5 +1,7 @@
-//! Minimal Android DeckCraft PPTX integration. No fabricated document operations.
+//! DeckCraft PPTX preview and editing through the native core.
 use std::sync::Arc;
+
+mod media;
 use deckcraft_model::{
     defaults, LayoutType, Presentation, Shape, ShapeId, ShapeKind, TextBody, Xfrm,
 };
@@ -8,6 +10,7 @@ use super::{AcResult, decode, protect, MAX_INPUT_BYTES, MAX_TEXT_BYTES};
 
 const MAX_SLIDE_TEXT_BYTES: usize = 64 * 1024;
 const NOTES_PREVIEW_BYTES: usize = 2 * 1024 * 1024;
+const MAX_PREVIEW_SHAPES: usize = 120;
 
 fn load(bytes: &[u8]) -> Result<Presentation, String> {
     deckcraft_pptx::import(bytes).map_err(|e| format!("PPTX read failed: {e}"))
@@ -61,124 +64,72 @@ fn movable(shape: &Shape) -> bool {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn ac_pptx_inspect(data:*const u8,n:usize)->AcResult {
-    protect(||{
-        let bytes=decode(data,n,MAX_INPUT_BYTES)?;
-        let presentation=load(bytes)?;
-        let mut slides=Vec::new();
-        let mut note_budget = NOTES_PREVIEW_BYTES;
-        for (i,slide) in presentation.slides.iter().enumerate() {
-            let shapes:Vec<J>=slide.shapes.iter().take(120).map(|shape|{
-                let rect=shape.xfrm.as_ref().map(|r|json!({
-                    "x":r.x,"y":r.y,"w":r.w,"h":r.h,
-                }));
-                let fill_rgb=shape.fill.as_ref().and_then(|f|match f {
-                    deckcraft_model::style::Fill::Solid{color}=>match &color.base {
-                        deckcraft_model::style::ColorBase::Rgb{rgb}=>Some(format!("#{}",rgb.hex())),
-                        deckcraft_model::style::ColorBase::System{last,..}=>Some(format!("#{}",last.hex())),
-                        _=>None,
-                    },
-                    _=>None,
-                });
-                let stroke_rgb=shape.line.as_ref().and_then(|line|line.fill.as_ref())
-                    .and_then(|f|match f {
-                        deckcraft_model::style::Fill::Solid{color}=>match &color.base {
-                            deckcraft_model::style::ColorBase::Rgb{rgb}=>Some(format!("#{}",rgb.hex())),
-                            _=>None,
-                        },
-                        _=>None,
-                    });
-                let picture=match &shape.kind {
-                    ShapeKind::Picture{fill}=>Some(fill),
-                    _=>match shape.fill.as_ref(){
-                        Some(deckcraft_model::style::Fill::Picture(fill))=>Some(fill),
-                        _=>None,
-                    },
-                };
-                let image_id=picture.and_then(|f|{
-                    presentation.media(f.media).filter(|media|{
-                        media.link.is_none() && !media.data.is_empty() &&
-                        media.data.len()<=8*1024*1024 &&
-                        matches!(media.content_type.as_str(),"image/png"|"image/jpeg"|"image/jpg"|"image/webp")
-                    }).map(|_|f.media.0)
-                });
-                let geometry=serde_json::to_value(&shape.geom).unwrap_or(J::Null);
-                json!({
-                    "id":shape.id.0,
-                    "name":shape.name,
-                    "kind":shape.kind_name(),
-                    "geometry":geometry,
-                    "imageId":image_id,
-                    "fillRgb":fill_rgb,
-                    "strokeRgb":stroke_rgb,
-                    "text":shape.text.as_ref().map(|t|t.text()).unwrap_or_default(),
-                    "rect":rect,
-                    "movable":movable(shape),
-                    "editableText":shape.text.is_some() && !shape.locked,
-                })
-            }).collect();
-            let notes = slide.notes_text();
-            let notes_editable = notes.len() <= MAX_SLIDE_TEXT_BYTES && notes.len() <= note_budget;
-            if notes_editable {
-                note_budget -= notes.len();
-            }
-            slides.push(json!({
-                "index":i, "id":slide.id.0, "title":slide.title(),
-                "name":slide.name, "shapes":shapes,
-                "notes":notes_editable.then_some(notes),
-                "shapeCount":slide.shapes.len(),
-                "truncated":slide.shapes.len()>120,
-            }));
-        }
-        serde_json::to_vec(&json!({
-            "type":"pptx","engine":"deckcraft",
-            "width":presentation.slide_size.width,"height":presentation.slide_size.height,
-            "slides":slides,
-            "warnings":["Simplified text, rectangular graphics, direct RGB fills/strokes and position preview only. Embedded PNG/JPEG/WebP images are available in the preview; external links, groups, charts, SmartArt, fonts, animations and exact PowerPoint layout are not rendered. DOCX-like round-trip fidelity not guaranteed for complex PPTX files."]
-        })).map_err(|e|e.to_string())
+    protect(|| {
+        let presentation = load(decode(data, n, MAX_INPUT_BYTES)?)?;
+        serde_json::to_vec(&preview(&presentation)).map_err(|e| e.to_string())
     })
 }
-/// Read an embedded PNG/JPEG/WebP referenced by a picture shape on a slide.
-/// FFI request JSON: {"slide":0,"media":123}. External links are never fetched.
-#[unsafe(no_mangle)]
-pub extern "C" fn ac_pptx_image(
-    data:*const u8,n:usize,request:*const u8,request_len:usize,
-)->AcResult{
-    protect(||{
-        let bytes=decode(data,n,MAX_INPUT_BYTES)?;
-        let arg:J=serde_json::from_str(decode_request(request,request_len)?)
-            .map_err(|e|format!("Invalid PPTX image request: {e}"))?;
-        let index=arg.get("slide").and_then(J::as_u64)
-            .and_then(|v|usize::try_from(v).ok())
-            .ok_or("Missing slide index")?;
-        let id=arg.get("media").and_then(J::as_u64)
-            .and_then(|v|u32::try_from(v).ok())
-            .ok_or("Missing media identifier")?;
-        let p=load(bytes)?;
-        let slide=p.slides.get(index).ok_or("PPTX slide out of range")?;
-        let referenced=slide.shapes.iter().any(|shape|{
-            let fill=match &shape.kind{
-                ShapeKind::Picture{fill}=>Some(fill),
-                _=>match shape.fill.as_ref(){
-                    Some(deckcraft_model::style::Fill::Picture(fill))=>Some(fill),
+
+fn preview(presentation: &Presentation) -> J {
+    let mut slides=Vec::new();
+    let mut note_budget = NOTES_PREVIEW_BYTES;
+    for (i,slide) in presentation.slides.iter().enumerate() {
+        let shapes:Vec<J>=slide.shapes.iter().take(MAX_PREVIEW_SHAPES).map(|shape|{
+            let rect=shape.xfrm.as_ref().map(|r|json!({
+                "x":r.x,"y":r.y,"w":r.w,"h":r.h,
+            }));
+            let fill_rgb=shape.fill.as_ref().and_then(|f|match f {
+                deckcraft_model::style::Fill::Solid{color}=>match &color.base {
+                    deckcraft_model::style::ColorBase::Rgb{rgb}=>Some(format!("#{}",rgb.hex())),
+                    deckcraft_model::style::ColorBase::System{last,..}=>Some(format!("#{}",last.hex())),
                     _=>None,
                 },
-            };
-            fill.is_some_and(|f|f.media.0==id)
-        });
-        if !referenced {return Err("Slide does not reference the requested image".into());}
-        let media=p.media(deckcraft_model::MediaId(id))
-            .ok_or("Embedded image is not present")?;
-        if media.link.is_some(){return Err("External images are not fetched".into());}
-        let b=media.data.as_slice();
-        if b.is_empty()||b.len()>8*1024*1024 {return Err("Image exceeds 8 MiB limit".into());}
-        let valid=match media.content_type.as_str(){
-            "image/png"=>b.starts_with(b"\x89PNG\r\n\x1a\n"),
-            "image/jpeg"|"image/jpg"=>b.starts_with(&[0xff,0xd8,0xff]),
-            "image/webp"=>b.len()>12&&b.starts_with(b"RIFF")&&&b[8..12]==b"WEBP",
-            _=>false,
-        };
-        if !valid{return Err("Image format is not a supported embedded raster".into());}
-        Ok(b.to_vec())
+                _=>None,
+            });
+            let stroke_rgb=shape.line.as_ref().and_then(|line|line.fill.as_ref())
+                .and_then(|f|match f {
+                    deckcraft_model::style::Fill::Solid{color}=>match &color.base {
+                        deckcraft_model::style::ColorBase::Rgb{rgb}=>Some(format!("#{}",rgb.hex())),
+                        _=>None,
+                    },
+                    _=>None,
+                });
+            let image_id = media::picture_id(shape)
+                .filter(|&id| presentation.media(id).is_some_and(media::previewable))
+                .map(|id| id.0);
+            let geometry=serde_json::to_value(&shape.geom).unwrap_or(J::Null);
+            json!({
+                "id":shape.id.0,
+                "name":shape.name,
+                "kind":shape.kind_name(),
+                "geometry":geometry,
+                "imageId":image_id,
+                "fillRgb":fill_rgb,
+                "strokeRgb":stroke_rgb,
+                "text":shape.text.as_ref().map(|t|t.text()).unwrap_or_default(),
+                "rect":rect,
+                "movable":movable(shape),
+                "editableText":shape.text.is_some() && !shape.locked,
+            })
+        }).collect();
+        let notes = slide.notes_text();
+        let notes_editable = notes.len() <= MAX_SLIDE_TEXT_BYTES && notes.len() <= note_budget;
+        if notes_editable {
+            note_budget -= notes.len();
+        }
+        slides.push(json!({
+            "index":i, "id":slide.id.0, "title":slide.title(),
+            "name":slide.name, "shapes":shapes,
+            "notes":notes_editable.then_some(notes),
+            "shapeCount":slide.shapes.len(),
+            "truncated":slide.shapes.len()>MAX_PREVIEW_SHAPES,
+        }));
+    }
+    json!({
+        "type":"pptx","engine":"deckcraft",
+        "width":presentation.slide_size.width,"height":presentation.slide_size.height,
+        "slides":slides,
+        "warnings":["Simplified text, rectangular graphics, direct RGB fills/strokes and position preview only. Embedded PNG/JPEG/WebP images are available in the preview; external links, groups, charts, SmartArt, fonts, animations and exact PowerPoint layout are not rendered. DOCX-like round-trip fidelity not guaranteed for complex PPTX files."]
     })
 }
 /// JSON action: add_slide/title, add_text/slide/text, edit_text/slide/shape/text, delete_slide/slide.
@@ -269,7 +220,7 @@ pub extern "C" fn ac_pptx_edit(data:*const u8,n:usize, request:*const u8, req_le
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn bytes(r:AcResult)->Vec<u8>{
+    pub(super) fn bytes(r:AcResult)->Vec<u8>{
         let b=if r.len==0 {Vec::new()} else {unsafe{std::slice::from_raw_parts(r.ptr,r.len).to_vec()}};
         let status=r.status;
         super::super::ac_result_free(r);

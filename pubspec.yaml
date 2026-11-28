@@ -1,7 +1,7 @@
 name: artofficecraft_mobile
 description: "ArtOfficeCraft Mobile - offline office editors powered by Rust engines."
 publish_to: 'none'
-version: 0.61.0+68
+version: 0.62.0+69
 
 environment:
   sdk: ^3.13.7
